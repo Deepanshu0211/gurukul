@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build Tracker — Attendance &amp; Safety App</title>
+<style>
+  :root{
+    --bg: #f3f6f4;
+    --surface: #ffffff;
+    --surface-2: #eaeee9;
+    --text: #16211c;
+    --text-muted: #55635c;
+    --border: #d9e2dc;
+    --accent: #b5710f;
+    --accent-soft: #f2e0c4;
+    --accent-ink: #4a3410;
+    --sev-crit: #a63d2f;
+    --sev-crit-soft: #f6ddd7;
+    --sev-core: #2f6b5e;
+    --sev-core-soft: #dcece6;
+    --sev-admin: #3b5e8a;
+    --sev-admin-soft: #dde6f0;
+    --sev-launch: #7a4fa0;
+    --sev-launch-soft: #ecdff2;
+    --shadow: 0 1px 2px rgba(20,30,25,0.06), 0 4px 14px rgba(20,30,25,0.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: #101512; --surface: #171e1a; --surface-2: #1e2622;
+      --text: #e9efe8; --text-muted: #9fb0a6; --border: #2b3630;
+      --accent: #e0a458; --accent-soft: #3a2c18; --accent-ink: #f3d9a8;
+      --sev-crit: #e2897a; --sev-crit-soft: #3a221e;
+      --sev-core: #7fc7b3; --sev-core-soft: #1c3630;
+      --sev-admin: #8fb3dd; --sev-admin-soft: #1d2c3d;
+      --sev-launch: #c8a2df; --sev-launch-soft: #2c2036;
+      --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 18px rgba(0,0,0,0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg: #101512; --surface: #171e1a; --surface-2: #1e2622;
+    --text: #e9efe8; --text-muted: #9fb0a6; --border: #2b3630;
+    --accent: #e0a458; --accent-soft: #3a2c18; --accent-ink: #f3d9a8;
+    --sev-crit: #e2897a; --sev-crit-soft: #3a221e;
+    --sev-core: #7fc7b3; --sev-core-soft: #1c3630;
+    --sev-admin: #8fb3dd; --sev-admin-soft: #1d2c3d;
+    --sev-launch: #c8a2df; --sev-launch-soft: #2c2036;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"]{
+    --bg: #f3f6f4; --surface: #ffffff; --surface-2: #eaeee9;
+    --text: #16211c; --text-muted: #55635c; --border: #d9e2dc;
+    --accent: #b5710f; --accent-soft: #f2e0c4; --accent-ink: #4a3410;
+    --sev-crit: #a63d2f; --sev-crit-soft: #f6ddd7;
+    --sev-core: #2f6b5e; --sev-core-soft: #dcece6;
+    --sev-admin: #3b5e8a; --sev-admin-soft: #dde6f0;
+    --sev-launch: #7a4fa0; --sev-launch-soft: #ecdff2;
+    color-scheme: light;
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.5;
+  }
+  .wrap{ max-width: 780px; margin:0 auto; padding: 28px 20px 80px; }
+
+  header.top{
+    position: sticky; top:0; z-index:5;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    margin: -28px -20px 28px;
+    padding: 18px 20px 16px;
+  }
+  .eyebrow{
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600; margin: 0 0 4px;
+  }
+  h1{ font-size: 22px; margin: 0 0 12px; letter-spacing: -0.01em; text-wrap: balance; }
+  .progress-row{ display:flex; align-items:center; gap:12px; }
+  .progress-track{
+    flex:1; height:8px; border-radius:99px; background:var(--surface-2);
+    overflow:hidden; border:1px solid var(--border);
+  }
+  .progress-fill{ height:100%; width:0%; background: var(--accent); transition: width .3s ease; }
+  .progress-label{
+    font-variant-numeric: tabular-nums; font-size:13px; color:var(--text-muted);
+    white-space:nowrap; min-width:64px; text-align:right;
+  }
+  .legend{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .chip{ font-size:11px; font-weight:600; padding:3px 9px; border-radius:99px; letter-spacing:.02em; }
+  .chip.crit{ background:var(--sev-crit-soft); color:var(--sev-crit); }
+  .chip.core{ background:var(--sev-core-soft); color:var(--sev-core); }
+  .chip.admin{ background:var(--sev-admin-soft); color:var(--sev-admin); }
+  .chip.launch{ background:var(--sev-launch-soft); color:var(--sev-launch); }
+
+  .phase-head{
+    margin: 30px 0 12px; display:flex; align-items:baseline; gap:10px;
+  }
+  .phase-head:first-of-type{ margin-top: 4px; }
+  .phase-head h2{
+    font-size:13px; text-transform:uppercase; letter-spacing:.07em;
+    margin:0; color: var(--text);
+  }
+  .phase-head .phase-note{ font-size:12px; color:var(--text-muted); }
+  .phase-rule{ flex:1; height:1px; background:var(--border); }
+
+  ol.list{ list-style:none; margin:0 0 10px; padding:0; display:flex; flex-direction:column; gap:10px; }
+
+  .item{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    box-shadow: var(--shadow); overflow:hidden;
+  }
+  .item.done{ opacity:.62; }
+  .item-row{ display:flex; align-items:flex-start; gap:12px; padding:14px 16px; }
+  .item-row summary{ list-style:none; cursor:pointer; }
+  .item-row summary::-webkit-details-marker{ display:none; }
+
+  input[type="checkbox"]{
+    appearance:none; -webkit-appearance:none;
+    width:20px; height:20px; min-width:20px; margin-top:2px;
+    border:2px solid var(--border); border-radius:6px;
+    background:var(--surface); cursor:pointer; position:relative;
+    transition: background .15s, border-color .15s;
+  }
+  input[type="checkbox"]:checked{ background:var(--accent); border-color:var(--accent); }
+  input[type="checkbox"]:checked::after{
+    content:""; position:absolute; left:5px; top:1px; width:6px; height:11px;
+    border-right:2px solid var(--surface); border-bottom:2px solid var(--surface);
+    transform: rotate(40deg);
+  }
+  input[type="checkbox"]:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  .item-main{ flex:1; min-width:0; }
+  .item-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .step-no{ font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-muted); min-width: 20px; }
+  .item-title{ font-size:15px; font-weight:600; text-decoration:none; }
+  .item.done .item-title{ text-decoration: line-through; text-decoration-color: var(--text-muted); }
+  .caret{ margin-left:auto; color:var(--text-muted); font-size:12px; transition: transform .15s ease; flex-shrink:0; }
+  details[open] .caret{ transform: rotate(90deg); }
+  .item-sub{ font-size:13px; color:var(--text-muted); margin:4px 0 0 30px; }
+
+  .detail{
+    border-top:1px solid var(--border); background:var(--surface-2);
+    padding:16px 16px 18px 46px; font-size:13.5px; color: var(--text);
+  }
+  .detail h4{
+    margin: 14px 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+    color: var(--accent-ink); font-weight:700;
+  }
+  .detail h4:first-child{ margin-top:0; }
+  .detail p{ margin: 0 0 10px; max-width: 64ch; }
+  .detail ul{ margin: 0 0 12px; padding-left:18px; }
+  .detail li{ margin-bottom:4px; }
+  .detail code{
+    font: 500 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--surface); border:1px solid var(--border);
+    padding: 1px 5px; border-radius:5px;
+  }
+  .name-tags{ display:flex; flex-wrap:wrap; gap:6px; margin: 0 0 12px; }
+  .name-tag{
+    font: 500 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--accent-soft); color: var(--accent-ink);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    padding: 3px 8px; border-radius:6px;
+  }
+  .source{ margin-top: 10px; font-size:11.5px; color:var(--text-muted); border-left: 2px solid var(--border); padding-left:8px; }
+
+  .glossary{
+    margin-top: 36px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; box-shadow: var(--shadow); padding: 4px 0;
+  }
+  .glossary-head{ padding: 16px 18px 4px; }
+  .glossary-head h2{ font-size:15px; margin:0 0 4px; }
+  .glossary-head p{ font-size:13px; color:var(--text-muted); margin:0; max-width:60ch; }
+  .gwrap{ overflow-x:auto; padding: 8px 18px 18px; }
+  table.gtable{ border-collapse:collapse; width:100%; min-width:520px; font-size:13px; }
+  table.gtable th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--text-muted); border-bottom:1px solid var(--border); padding: 6px 10px 8px 0;
+  }
+  table.gtable td{ border-bottom:1px solid var(--border); padding: 9px 10px 9px 0; vertical-align:top; }
+  table.gtable tr:last-child td{ border-bottom:none; }
+  table.gtable code{
+    font: 500 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--surface-2); border:1px solid var(--border);
+    padding: 1px 5px; border-radius:5px; white-space:nowrap;
+  }
+  table.gtable .col-concept{ color:var(--text-muted); font-size:12.5px; min-width:120px; }
+
+  footer{ margin-top: 32px; padding-top:16px; border-top:1px solid var(--border); font-size:12px; color:var(--text-muted); }
+
+  @media (prefers-reduced-motion: reduce){ .progress-fill, .caret{ transition:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow">Bhaktivedanta Gurukula &middot; Attendance &amp; Safety App</p>
+    <h1>Build Tracker — UI first, then Backend</h1>
+    <div class="progress-row">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="progress-label" id="progressLabel">0 / 15</span>
+    </div>
+    <div class="legend">
+      <span class="chip crit">UI / UX</span>
+      <span class="chip core">Backend</span>
+      <span class="chip admin">Connect &amp; harden</span>
+      <span class="chip launch">Launch</span>
+    </div>
+  </header>
+
+  <!-- PHASE 1 — UI/UX -->
+  <div class="phase-head"><h2>Phase 1 &middot; UI / UX first</h2><div class="phase-rule"></div><span class="phase-note">dummy data only, no backend yet</span></div>
+  <ol class="list" id="list">
+
+    <li class="item" data-id="s1">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s1" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">01</span>
+              <span class="item-title">Set up the frontend project</span>
+              <span class="chip crit">UI / UX</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">React + Vite, built as a PWA — no backend calls yet, just the project shell.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>Start purely on the frontend. Get a blank app running and installable to a phone home screen before touching any data. The existing prototype (<code>gurukula-attendance-prototype.jsx</code>) is the visual reference for layout, spacing and tone — port its look, not necessarily its file structure.</p>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">gurukula-attendance/app/</span>
+            <span class="name-tag">src/screens/</span>
+            <span class="name-tag">src/components/</span>
+            <span class="name-tag">src/lib/</span>
+            <span class="name-tag">main.jsx</span>
+          </div>
+          <div class="source">Source: self-build-guide.md &sect;2 (project structure).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s2">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s2" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">02</span>
+              <span class="item-title">Build the main screen shell — 3 options</span>
+              <span class="chip crit">UI / UX</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">The role switch can be a fake dropdown for now — just prove the layout works for all three.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>One shell component that shows/hides three sections depending on a (fake, hardcoded for now) role value. Don't wire real auth yet — just prove a teacher's view genuinely never renders the other two tabs.</p>
+          <ul>
+            <li><strong>Mark Attendance</strong> — every role sees this</li>
+            <li><strong>Roster &amp; People</strong> — Coordinator/Admin only</li>
+            <li><strong>Reports &amp; Alerts</strong> — Management/Coordinator/Admin only</li>
+          </ul>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">App.jsx</span>
+            <span class="name-tag">AppShell.jsx</span>
+            <span class="name-tag">screens/MarkAttendance.jsx</span>
+            <span class="name-tag">screens/RosterPeople.jsx</span>
+            <span class="name-tag">screens/ReportsAlerts.jsx</span>
+            <span class="name-tag">currentRole</span>
+          </div>
+          <div class="source">Source: gurukula-attendance-prototype.jsx (nav pattern, simplified from its 4 tabs to 3).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s3">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s3" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">03</span>
+              <span class="item-title">Build the Mark Attendance screen (dummy data)</span>
+              <span class="chip crit">UI / UX</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">The most important screen in the app — get this feeling fast before it's ever real.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <ul>
+            <li>A duty list: "My duties today," each tagged with a status chip &mdash; <strong>Upcoming / Due now / Submitted / Overdue</strong></li>
+            <li>Tapping a duty opens a student list grouped by class, everyone defaulting to <strong>Present</strong></li>
+            <li>Tap a name to toggle Absent; a small per-row menu for Home / Sick / Activity / Outing / Self study</li>
+            <li>A running counter at the bottom: "Present 46 &middot; Absent 1 &middot; Home 2"</li>
+            <li>Use a small hardcoded array of fake students/duties for now &mdash; wire real data in Phase 3</li>
+          </ul>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">screens/MarkAttendance.jsx</span>
+            <span class="name-tag">components/DutyCard.jsx</span>
+            <span class="name-tag">components/StudentRow.jsx</span>
+            <span class="name-tag">components/StatusChip.jsx</span>
+            <span class="name-tag">components/StatusMenu.jsx</span>
+            <span class="name-tag">duty.state</span>
+            <span class="name-tag">pendingStatuses</span>
+          </div>
+          <p style="margin-top:10px;"><strong>Naming trap to avoid:</strong> the four chips (Upcoming/Due now/Submitted/Overdue) are a <em>computed</em> UI label, not a stored value &mdash; keep that separate in your head from the database's own <code>duty_state</code> enum, which only ever stores <code>pending</code> or <code>submitted</code>. Upcoming/Due/Overdue get worked out client-side from the current time.</p>
+          <div class="source">Source: Attendance_System_Requirements_v1.docx &sect;7 (A1-A4); gurukula-attendance-prototype.jsx (TeacherView, dutyStatus()).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s4">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s4" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">04</span>
+              <span class="item-title">Build the Roster &amp; People screen (dummy data)</span>
+              <span class="chip crit">UI / UX</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">Coordinator/Admin view &mdash; layout only, reassignment can just update local state for now.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <ul>
+            <li>A grid/list of today's duties: checkpoint, group, assigned staff, submitted or not</li>
+            <li>Tapping a row opens a simple "reassign to" picker</li>
+            <li>A separate list view for students and staff with add/edit/deactivate buttons (deactivate, never delete)</li>
+          </ul>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">screens/RosterPeople.jsx</span>
+            <span class="name-tag">components/DutyRow.jsx</span>
+            <span class="name-tag">components/ReassignPicker.jsx</span>
+            <span class="name-tag">components/PersonList.jsx</span>
+            <span class="name-tag">components/PersonForm.jsx</span>
+          </div>
+          <div class="source">Source: Attendance_System_Requirements_v1.docx &sect;8 (B1-B2) and &sect;12 (D3); gurukula-attendance-prototype.jsx (RosterView, DataView).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s5">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s5" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">05</span>
+              <span class="item-title">Build the Reports &amp; Alerts screen (dummy data)</span>
+              <span class="chip crit">UI / UX</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">Management's live view &mdash; a status feed and an alerts panel.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <ul>
+            <li>A feed showing every checkpoint's status today (fake data is fine for now)</li>
+            <li>An alerts panel: each open safety flag, with a "close with remark" button (just logs to console for now)</li>
+            <li>A plain "Export CSV" button &mdash; can be non-functional in this phase</li>
+          </ul>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">screens/ReportsAlerts.jsx</span>
+            <span class="name-tag">components/CheckpointFeed.jsx</span>
+            <span class="name-tag">components/AlertCard.jsx</span>
+            <span class="name-tag">components/CloseAlertDialog.jsx</span>
+          </div>
+          <div class="source">Source: Attendance_System_Requirements_v1.docx &sect;10 (F1-F4) and &sect;11 (R1, R6); gurukula-attendance-prototype.jsx (MgmtView).</div>
+        </div>
+      </details>
+    </li>
+
+  </ol>
+
+  <!-- PHASE 2 — BACKEND -->
+  <div class="phase-head"><h2>Phase 2 &middot; Backend</h2><div class="phase-rule"></div><span class="phase-note">once the screens feel right</span></div>
+  <ol class="list">
+
+    <li class="item" data-id="s6">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s6" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">06</span>
+              <span class="item-title">Set up the backend accounts</span>
+              <span class="chip core">Backend</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">Supabase, GitHub, Vercel, and an email-sending service &mdash; nothing else needed.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>No traditional "server" here. Four free accounts cover the entire backend:</p>
+          <ul>
+            <li><strong>Supabase</strong> (region: Mumbai) &mdash; database, login system, security rules, and scheduled jobs, all in one</li>
+            <li><strong>GitHub</strong> (private repo) &mdash; code lives here; pushing can auto-deploy</li>
+            <li><strong>Vercel</strong>, connected to that repo &mdash; hosts the live app with HTTPS</li>
+            <li><strong>Brevo or Resend</strong> &mdash; the email API that sends summaries and alerts (one verified sender address needed, e.g. <code>alerts@yourschooldomain</code>)</li>
+          </ul>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">supabase/</span>
+            <span class="name-tag">supabase/migrations/</span>
+            <span class="name-tag">supabase/functions/</span>
+            <span class="name-tag">.env / .env.local</span>
+          </div>
+          <div class="source">Source: self-build-guide.md &sect;1 (stack rationale) and &sect;5 M0.</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s7">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s7" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">07</span>
+              <span class="item-title">Create the database tables</span>
+              <span class="chip core">Backend</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">Run the schema once as migration 001 &mdash; it's already written.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>The full SQL already exists in <code>self-build-guide.md &sect;3</code> &mdash; copy it in as-is. Keep these exact table names; the UI code from Phase 1 should be re-shaped to match them, not the other way around.</p>
+          <h4>Suggested names (these are fixed &mdash; use exactly these)</h4>
+          <div class="name-tags">
+            <span class="name-tag">students</span>
+            <span class="name-tag">staff</span>
+            <span class="name-tag">checkpoints</span>
+            <span class="name-tag">duty_defaults</span>
+            <span class="name-tag">duties</span>
+            <span class="name-tag">attendance</span>
+            <span class="name-tag">status_types</span>
+            <span class="name-tag">spanning_statuses</span>
+            <span class="name-tag">alerts</span>
+            <span class="name-tag">audit_log</span>
+          </div>
+          <p>Also create the Module F tables now (<code>gate_passes</code>, <code>sickbay_admissions</code>) &mdash; ignore them for this sprint, but creating them now avoids a rebuild later.</p>
+          <div class="source">Source: self-build-guide.md &sect;3 (full SQL); Attendance_System_Requirements_v1.docx &sect;4.</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s8">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s8" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">08</span>
+              <span class="item-title">Import the real student &amp; staff list</span>
+              <span class="chip core">Backend</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">One-time, re-runnable script from the school's existing Excel register.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>Column names should map 1:1 to <code>Student_List_2025-26.xlsx</code> so re-imports never need reformatting. Skip rows whose Admission No. already exists (safe to re-run). Also seed <code>checkpoints</code> and create logins for ~5 pilot staff.</p>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">scripts/import_students.py</span>
+            <span class="name-tag">admission_no</span>
+          </div>
+          <div class="source">Source: self-build-guide.md &sect;5 M1a; Attendance_System_Requirements_v1.docx &sect;12 (D1-D2).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s9">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s9" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">09</span>
+              <span class="item-title">Build login + role-based access</span>
+              <span class="chip core">Backend</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">The database itself blocks cross-role access, not just the UI.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>Every staff member gets one Supabase Auth login. Their <code>staff.role</code> value decides what renders &mdash; this replaces the fake role dropdown from Phase 1, Step 2. Turn on Row-Level Security (RLS) on every table now, not as a later pass: it means the database refuses a teacher's query for another class's data, even from the raw network console.</p>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">lib/supabase.js</span>
+            <span class="name-tag">role: teacher | coordinator | management | admin</span>
+            <span class="name-tag">my_staff()</span>
+            <span class="name-tag">useSession()</span>
+          </div>
+          <div class="source">Source: self-build-guide.md &sect;3 (RLS policies); Attendance_System_Requirements_v1.docx &sect;14 (P1-P2).</div>
+        </div>
+      </details>
+    </li>
+
+  </ol>
+
+  <!-- PHASE 3 — CONNECT & HARDEN -->
+  <div class="phase-head"><h2>Phase 3 &middot; Connect the UI to real data</h2><div class="phase-rule"></div><span class="phase-note">Phase 1 screens, now wired for real</span></div>
+  <ol class="list">
+
+    <li class="item" data-id="s10">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s10" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">10</span>
+              <span class="item-title">Wire Mark Attendance to real data + Submit &rarr; lock &rarr; email</span>
+              <span class="chip admin">Connect &amp; harden</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">Swap the dummy array for live duties; one atomic save on submit.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <ul>
+            <li>A single Postgres function <code>submit_duty(duty_id, rows)</code> saves every mark and locks the duty in one all-or-nothing step</li>
+            <li>Once locked, re-opening shows read-only; corrections go through a Coordinator and get logged</li>
+            <li>An Edge Function <code>send-summary</code> fires right after: emails Coordinator + MOD + Principal, e.g. <code>"Breakfast Senior 138/149 present &middot; 2 ABSENT"</code></li>
+          </ul>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">submit_duty(duty_id, rows)</span>
+            <span class="name-tag">supabase/functions/send-summary/</span>
+          </div>
+          <div class="source">Source: self-build-guide.md &sect;4; Attendance_System_Requirements_v1.docx &sect;9 (N3) and &sect;7 (A6-A7).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s11">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s11" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">11</span>
+              <span class="item-title">Build the safety alert</span>
+              <span class="chip admin">Connect &amp; harden</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">The actual reason this app exists &mdash; catches a child going missing during the day.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>Inside <code>send-summary</code>: for every student marked <strong>Absent</strong>, check whether an earlier checkpoint today already has them Present or accounted-for. If so, insert into <code>alerts</code> and email Coordinator + MOD + Principal immediately with name, class, house, and last-seen checkpoint. Never auto-close &mdash; only a logged remark closes it.</p>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">alerts.kind = 'present_then_absent'</span>
+            <span class="name-tag">alerts.close_remark</span>
+          </div>
+          <div class="source">Source: Attendance_System_Requirements_v1.docx &sect;10 (F1, F4).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s12">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s12" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">12</span>
+              <span class="item-title">Build reminders &amp; escalation</span>
+              <span class="chip admin">Connect &amp; harden</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">A scheduled job checks for missed checkpoints every 5 minutes.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <ul>
+            <li>10 min before window close, still unmarked &rarr; email the assigned teacher</li>
+            <li>At window close &rarr; email Coordinator + MOD; 10 min later &rarr; email Principal</li>
+            <li>Meal and night checkpoints escalate to the Principal immediately on miss</li>
+            <li>A nightly job copies roster defaults into today's actual duty list</li>
+          </ul>
+          <h4>Suggested names</h4>
+          <div class="name-tags">
+            <span class="name-tag">supabase/functions/cron-reminders/</span>
+            <span class="name-tag">supabase/functions/cron-generate-duties/</span>
+            <span class="name-tag">duties.reminder_sent</span>
+            <span class="name-tag">duties.escalated_l1 / escalated_l2</span>
+          </div>
+          <div class="source">Source: self-build-guide.md &sect;4; Attendance_System_Requirements_v1.docx &sect;9 (N1-N2) and &sect;6 (C2).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s13">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s13" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">13</span>
+              <span class="item-title">Wire Roster &amp; People and Reports &amp; Alerts to real data</span>
+              <span class="chip admin">Connect &amp; harden</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">Swap the dummy data in Phase 1's Steps 4 &amp; 5 for live queries.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <ul>
+            <li>Reassign-duty picker now writes to <code>duties.staff_id</code> for a one-day override</li>
+            <li>Add/edit/deactivate now writes to <code>students</code>/<code>staff</code> (deactivate sets a flag + leaving date, never deletes)</li>
+            <li>Reports feed now reads live <code>attendance</code>/<code>alerts</code>; CSV export becomes a real download</li>
+          </ul>
+          <div class="source">Source: Attendance_System_Requirements_v1.docx &sect;8 (B1-B5), &sect;11 (R1, R6), &sect;12 (D3).</div>
+        </div>
+      </details>
+    </li>
+
+    <li class="item" data-id="s14">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s14" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">14</span>
+              <span class="item-title">Security test the access rules by hand</span>
+              <span class="chip admin">Connect &amp; harden</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">Prove a teacher account cannot see another class's data &mdash; before the pilot, not after.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <p>Log in as a real teacher account, open the browser dev console, try to directly query another class's <code>attendance</code> or <code>students</code> rows. Confirm RLS blocks it at the database level. Repeat for each role.</p>
+          <div class="source">Source: self-build-guide.md &sect;3; Attendance_System_Requirements_v1.docx &sect;14 (DPDP Act 2023).</div>
+        </div>
+      </details>
+    </li>
+
+  </ol>
+
+  <!-- PHASE 4 — LAUNCH -->
+  <div class="phase-head"><h2>Phase 4 &middot; Launch</h2><div class="phase-rule"></div></div>
+  <ol class="list">
+
+    <li class="item" data-id="s15">
+      <details>
+        <summary class="item-row">
+          <input type="checkbox" data-check="s15" onclick="event.stopPropagation()" />
+          <div class="item-main">
+            <div class="item-head">
+              <span class="step-no">15</span>
+              <span class="item-title">Run the real pilot</span>
+              <span class="chip launch">Launch</span>
+              <span class="caret">&#9656;</span>
+            </div>
+            <p class="item-sub">2 class-sections + 1 meal band, one week, on paper in parallel.</p>
+          </div>
+        </summary>
+        <div class="detail">
+          <h4>What it means</h4>
+          <ul>
+            <li>2 real class-sections + 1 prasadam band mark digitally for one week</li>
+            <li>Keep paper running in parallel that same week</li>
+            <li>Fix friction daily; don't move to full rollout until teachers stop needing to ask questions</li>
+          </ul>
+          <p><strong>If the 2 weeks run short:</strong> everything through Step 12 (the safety alert) must be solid. Step 13's screens can ship thinner without breaking the pilot.</p>
+          <div class="source">Source: self-build-guide.md &sect;5 M1c; Attendance_System_Requirements_v1.docx &sect;17 (M1 acceptance).</div>
+        </div>
+      </details>
+    </li>
+
+  </ol>
+
+  <!-- GLOSSARY -->
+  <div class="glossary">
+    <div class="glossary-head">
+      <h2>Naming cheat sheet</h2>
+      <p>The same word for the same thing, everywhere &mdash; screens, code, and database. Keep this open in a tab while building.</p>
+    </div>
+    <div class="gwrap">
+      <table class="gtable">
+        <thead><tr><th>Concept</th><th>Call it this</th><th>Where it shows up</th></tr></thead>
+        <tbody>
+          <tr><td class="col-concept">One attendance event</td><td><code>checkpoint</code></td><td>e.g. "Morning attendance", "Breakfast prasadam"</td></tr>
+          <tr><td class="col-concept">Checkpoint + group + marker, for one day</td><td><code>duty</code></td><td>what shows in "My duties today"</td></tr>
+          <tr><td class="col-concept">Stored duty progress</td><td><code>duty.state</code> (pending / submitted)</td><td>database only</td></tr>
+          <tr><td class="col-concept">Displayed duty progress</td><td>Upcoming / Due now / Submitted / Overdue</td><td>UI chip, computed from time &mdash; not stored as-is</td></tr>
+          <tr><td class="col-concept">One student's mark at one duty</td><td><code>attendance</code> row</td><td>database table</td></tr>
+          <tr><td class="col-concept">Present / Absent / Home / etc.</td><td><code>status</code> (code: P, A, H, S, V, O, G, Y)</td><td>status_types table, StatusMenu.jsx</td></tr>
+          <tr><td class="col-concept">Home/Sick/Outing that carries across checkpoints</td><td><code>spanning status</code></td><td>spanning_statuses table</td></tr>
+          <tr><td class="col-concept">A caught safety issue</td><td><code>alert</code></td><td>alerts table, AlertCard.jsx</td></tr>
+          <tr><td class="col-concept">Student's unique ID</td><td><code>admission_no</code></td><td>never call it "student ID" elsewhere &mdash; keep this exact name</td></tr>
+          <tr><td class="col-concept">Class + section, e.g. "7 Krishna"</td><td><code>grade</code> + <code>section</code></td><td>students table</td></tr>
+          <tr><td class="col-concept">Residential / Day Scholar / Vedic / Day Boarding</td><td><code>stype</code> (student_type)</td><td>students table</td></tr>
+          <tr><td class="col-concept">Ashram Coordinator, MOD, etc.</td><td><code>role</code> (teacher / coordinator / management / admin)</td><td>staff table &mdash; drives what UI renders</td></tr>
+          <tr><td class="col-concept">Main screen option 1</td><td>"Mark Attendance"</td><td>MarkAttendance.jsx</td></tr>
+          <tr><td class="col-concept">Main screen option 2</td><td>"Roster &amp; People"</td><td>RosterPeople.jsx</td></tr>
+          <tr><td class="col-concept">Main screen option 3</td><td>"Reports &amp; Alerts"</td><td>ReportsAlerts.jsx</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    Checkbox state saves automatically in this browser (local storage) &mdash; open this file again anytime to pick up where you left off.
+  </footer>
+</div>
+
+<script>
+  const STORAGE_KEY = 'gurukula-dev-tracker-v2';
+  function loadState(){
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+    catch(e){ return {}; }
+  }
+  function saveState(state){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  function updateProgress(){
+    const boxes = document.querySelectorAll('input[type="checkbox"][data-check]');
+    const total = boxes.length;
+    let done = 0;
+    boxes.forEach(b => { if(b.checked) done++; });
+    document.getElementById('progressFill').style.width = (total ? (done/total*100) : 0) + '%';
+    document.getElementById('progressLabel').textContent = done + ' / ' + total;
+  }
+  function applyItemState(box){
+    const li = box.closest('li.item');
+    if(box.checked) li.classList.add('done'); else li.classList.remove('done');
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const state = loadState();
+    document.querySelectorAll('input[type="checkbox"][data-check]').forEach(box => {
+      const id = box.getAttribute('data-check');
+      if(state[id]) box.checked = true;
+      applyItemState(box);
+      box.addEventListener('change', () => {
+        const s = loadState();
+        s[id] = box.checked;
+        saveState(s);
+        applyItemState(box);
+        updateProgress();
+      });
+    });
+    updateProgress();
+  });
+</script>
+</body>
+</html>
