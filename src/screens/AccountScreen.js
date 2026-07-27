@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius } from "../theme/theme";
 import { Card, IconCircle } from "../components/ui";
@@ -7,10 +8,10 @@ import { ROLE_LABELS } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 
 const OPTIONS = [
-  { key: "prefs", label: "View\npreference", icon: "person-outline", bg: "#ECE9FD", fg: colors.primary },
-  { key: "download", label: "Download\noptions", icon: "download-outline", bg: "#E3F6F1", fg: "#1BB7A0" },
-  { key: "playback", label: "Playback\noptions", icon: "play-circle-outline", bg: "#FCE9F3", fg: "#E066A6" },
-  { key: "general", label: "General\noption", icon: "settings-outline", bg: "#ECE9FD", fg: colors.primary },
+  { key: "prefs", label: "View\npreference", icon: "person-outline", bg: colors.cardAlt, fg: colors.text },
+  { key: "download", label: "Download\noptions", icon: "download-outline", bg: colors.cardAlt, fg: colors.text },
+  { key: "playback", label: "Playback\noptions", icon: "play-circle-outline", bg: colors.cardAlt, fg: colors.text },
+  { key: "general", label: "General\noption", icon: "settings-outline", bg: colors.cardAlt, fg: colors.text },
 ];
 
 export default function AccountScreen() {
@@ -18,7 +19,7 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 56 }}>
         <Text style={typography.h1}>Account</Text>
 
         <Card style={styles.profileCard}>
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#ECE9FD",
+    backgroundColor: colors.cardAlt,
     alignItems: "center",
     justifyContent: "center",
   },

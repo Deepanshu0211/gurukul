@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, FlatList, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, FlatList } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing, typography } from "../theme/theme";
 import { Card, Pill } from "../components/ui";
 import { DUTIES, STAFF, fmtTime } from "../data/mockData";

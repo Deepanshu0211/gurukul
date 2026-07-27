@@ -41,13 +41,17 @@ export const STUDENTS = RAW.map((r, i) => ({
 export const isRes = (s) => s.type === "R" || s.type === "V" || s.type === "B";
 
 export const STATUS_META = {
-  A: { label: "Absent", color: "#EB5757" },
-  H: { label: "Home", color: "#8B879C" },
-  S: { label: "Sick", color: "#F5A623" },
-  V: { label: "Activity", color: "#6C5CE7" },
-  O: { label: "Outing", color: "#5B8DEF" },
-  G: { label: "Gita Nagari", color: "#8E5CE7" },
-  Y: { label: "Self study", color: "#2ECC71" },
+  // Absent is the only unaccounted-for state — it stays red and loud on
+  // purpose. Every other status means the school knows where the child is,
+  // so they read as neutral greys in the minimal theme and are told apart
+  // by their label, not their colour.
+  A: { label: "Absent", color: "#B91C1C" },
+  H: { label: "Home", color: "#404040" },
+  S: { label: "Sick", color: "#404040" },
+  V: { label: "Activity", color: "#404040" },
+  O: { label: "Outing", color: "#404040" },
+  G: { label: "Gita Nagari", color: "#404040" },
+  Y: { label: "Self study", color: "#404040" },
 };
 export const SPANNING = ["H", "S", "O", "G"];
 

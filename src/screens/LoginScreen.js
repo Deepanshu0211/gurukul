@@ -1,128 +1,233 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity, Image, Dimensions } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radius, spacing, typography } from "../theme/theme";
-import { STAFF, ROLE_LABELS } from "../data/mockData";
-import { Card, PrimaryButton } from "../components/ui";
+import { colors, radius, spacing, typography, fonts } from "../theme/theme";
+import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 
-const ROLES = Object.keys(ROLE_LABELS);
+// Square source art (1254x1254), shown whole and centered. Sized against BOTH
+// screen dimensions and capped, so the illustration is generous on a big phone
+// but shrinks automatically on a short/old display — the goal is the whole
+// login fitting without scrolling on typical phones. The ScrollView below is
+// the safety net for the smallest screens and for when the keyboard is open.
+const { width: SCREEN_W } = Dimensions.get("window");
+
+// ─────────────────────────────────────────────────────────────
+// ADJUST THIS ONE NUMBER to resize the illustration.
+// It's a multiple of the screen width. The whole square image is
+// always shown intact — nothing is cropped.
+//   0.7 = smaller   1.0 = exactly screen width   1.4 = large
+// ─────────────────────────────────────────────────────────────
+const HERO_SCALE = 1.2;
+const HERO_SIZE = Math.round(SCREEN_W * HERO_SCALE);
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const [role, setRole] = useState("teacher");
-  const [selectedId, setSelectedId] = useState(STAFF.find((s) => s.role === "teacher").id);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [focusedField, setFocusedField] = useState(null);
 
-  const staffForRole = STAFF.filter((s) => s.role === role);
-  const selected = staffForRole.find((s) => s.id === selectedId) || staffForRole[0];
-
-  const handleRole = (r) => {
-    setRole(r);
-    const first = STAFF.find((s) => s.role === r);
-    setSelectedId(first.id);
+  const handleContinue = async () => {
+    setError("");
+    if (!email.trim() || !password) {
+      setError("Enter both your email and password.");
+      return;
+    }
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (authError) {
+      setError("Incorrect email or password.");
+      return;
+    }
+    const { data: staffRow, error: staffError } = await supabase
+      .from("staff")
+      .select("*")
+      .eq("email", email.trim())
+      .single();
+    if (staffError || !staffRow) {
+      setError("Signed in, but no staff record found for this account.");
+      return;
+    }
+    login(staffRow);
   };
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <View style={styles.logoCircle}>
-            <Ionicons name="school-outline" size={30} color={colors.white} />
-          </View>
-          <Text style={styles.heroTitle}>Gurukula</Text>
-          <Text style={styles.heroSubtitle}>Attendance & Student Safety</Text>
-        </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.sheet}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Image
+            source={require("../assets/krishna-login-square.png")}
+            style={styles.heroImage}
+            resizeMode="contain"
+          />
 
-        <View style={styles.body}>
-          <Text style={typography.label}>SIGN IN AS</Text>
-          <View style={styles.roleRow}>
-            {ROLES.map((r) => {
-              const active = r === role;
-              return (
-                <TouchableOpacity
-                  key={r}
-                  onPress={() => handleRole(r)}
-                  style={[styles.roleChip, active && styles.roleChipActive]}
-                >
-                  <Text style={[styles.roleChipText, active && styles.roleChipTextActive]}>{ROLE_LABELS[r]}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <Text style={styles.brandTitle}>Gurukula</Text>
+          <Text style={[styles.brandSubtitle, { marginBottom: spacing.md }]}>
+            Please sign in to continue.
+          </Text>
 
-          <Text style={[typography.label, { marginTop: spacing.lg }]}>ACCOUNT</Text>
-          <View style={{ marginTop: spacing.sm, gap: 10 }}>
-            {staffForRole.map((s) => {
-              const active = s.id === selectedId;
-              return (
-                <TouchableOpacity key={s.id} onPress={() => setSelectedId(s.id)} activeOpacity={0.8}>
-                  <Card style={[styles.staffCard, active && styles.staffCardActive]}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{s.name.charAt(0)}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: spacing.md }}>
-                      <Text style={typography.h3}>{s.name}</Text>
-                      <Text style={typography.caption}>{s.email}</Text>
-                    </View>
-                    {active && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
-                  </Card>
-                </TouchableOpacity>
-              );
-            })}
+          <Text style={typography.label}>EMAIL</Text>
+          <View style={[styles.inputRow, focusedField === "email" && styles.inputRowFocused]}>
+            <Ionicons
+              name="mail-outline"
+              size={18}
+              color={focusedField === "email" ? colors.primary : colors.textMuted}
+              style={{ marginRight: 8 }}
+            />
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              onFocus={() => setFocusedField("email")}
+              onBlur={() => setFocusedField(null)}
+              placeholder="you@gurukula.org"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+            />
           </View>
 
-          <PrimaryButton title="Continue" onPress={() => login(selected)} style={{ marginTop: spacing.xl }} />
-          <Text style={styles.footNote}>Prototype build · pilot data only</Text>
-        </View>
-      </ScrollView>
+          <Text style={[typography.label, { marginTop: spacing.sm }]}>PASSWORD</Text>
+          <View style={[styles.inputRow, focusedField === "password" && styles.inputRowFocused]}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={18}
+              color={focusedField === "password" ? colors.primary : colors.textMuted}
+              style={{ marginRight: 8 }}
+            />
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              onFocus={() => setFocusedField("password")}
+              onBlur={() => setFocusedField(null)}
+              placeholder="••••••••"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry={!showPassword}
+              style={styles.input}
+            />
+            <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={{ alignSelf: "flex-end", marginTop: 10 }}>
+            <Text style={styles.forgotLink}>Forgot password?</Text>
+          </TouchableOpacity>
+
+          {!!error && (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle" size={16} color={colors.danger} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          <PrimaryButton title="Sign in" onPress={handleContinue} style={styles.signInBtn} />
+
+          <Text style={styles.helpText}>
+            Need help? <Text style={styles.helpLink}>Contact the school office</Text>
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  hero: {
-    backgroundColor: colors.primary,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl + 12,
-    alignItems: "center",
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
+
+  heroImage: {
+    width: HERO_SIZE,
+    height: HERO_SIZE, // square source, shown whole
+    alignSelf: "center",
+    // The PNG has empty margin baked in around the figure. These negative
+    // margins pull the layout back over that dead space without cropping the
+    // image itself. Raise the multipliers to tighten further.
+    marginTop: -HERO_SIZE * 0.150,
+    marginBottom: -HERO_SIZE * 0.1,
   },
-  logoCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
+  brandTitle: {
+    fontFamily: fonts.display,
+    fontSize: 30,
+    color: colors.text,
+    letterSpacing: -0.5,
+    textAlign: "center",
+  },
+  brandSubtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.textMuted,
+    marginTop: 4,
+    textAlign: "center",
+  },
+
+  sheet: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: 0,
+    paddingBottom: spacing.md,
+    flexGrow: 1,
+    // Centres the whole block in whatever space is left, so there's no dead
+    // void at the bottom on tall phones. On short phones the content simply
+    // exceeds the space and the ScrollView takes over.
     justifyContent: "center",
-    marginBottom: spacing.sm,
   },
-  heroTitle: { color: colors.white, fontSize: 24, fontWeight: "700" },
-  heroSubtitle: { color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 2 },
-  body: { paddingHorizontal: spacing.md, marginTop: spacing.lg },
-  roleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: spacing.sm },
-  roleChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: radius.pill,
+
+  // Fully rounded pill shapes throughout — inputs and button share the same
+  // soft, even radius so the screen reads as one consistent set of controls.
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.card,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
+    borderRadius: radius.pill,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    marginTop: 6,
   },
-  roleChipActive: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
-  roleChipText: { fontSize: 13, fontWeight: "600", color: colors.textMuted },
-  roleChipTextActive: { color: colors.white },
-  staffCard: { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: "transparent" },
-  staffCardActive: { borderColor: colors.primary },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#ECE9FD",
+  inputRowFocused: { borderColor: colors.primary },
+  input: { flex: 1, fontSize: 15, fontFamily: fonts.medium, color: colors.text, padding: 0 },
+
+  signInBtn: {
+    marginTop: spacing.md,
+    paddingVertical: 15,
+    borderRadius: radius.pill,
+  },
+
+  forgotLink: { fontSize: 12.5, color: colors.text, fontFamily: fonts.semibold },
+
+  helpText: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: spacing.lg,
+  },
+  helpLink: { fontFamily: fonts.bold, color: colors.text },
+
+  errorBox: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.dangerBg,
+    borderRadius: radius.pill,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    marginTop: spacing.md,
   },
-  avatarText: { color: colors.primary, fontWeight: "700", fontSize: 16 },
+  errorText: { color: colors.danger, fontSize: 12.5, fontFamily: fonts.medium, flex: 1 },
+
   footNote: { textAlign: "center", color: colors.textMuted, fontSize: 12, marginTop: spacing.md },
 });

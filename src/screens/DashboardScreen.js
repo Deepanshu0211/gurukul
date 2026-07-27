@@ -1,5 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, SafeAreaView } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius } from "../theme/theme";
 import { Card, Pill, IconCircle } from "../components/ui";
@@ -14,7 +15,7 @@ export default function DashboardScreen() {
   const overdue = DUTIES.filter((d) => dutyStatus(d, records) === "overdue").length;
 
   const stats = [
-    { label: "Students", value: STUDENTS.length, icon: "people-outline", bg: "#ECE9FD", fg: colors.primary },
+    { label: "Students", value: STUDENTS.length, icon: "people-outline", bg: colors.cardAlt, fg: colors.text },
     { label: "Duties submitted", value: `${submitted}/${DUTIES.length}`, icon: "checkmark-done-outline", bg: colors.successBg, fg: colors.success },
     { label: "Overdue", value: overdue, icon: "alert-circle-outline", bg: colors.dangerBg, fg: colors.danger },
   ];

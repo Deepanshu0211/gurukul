@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { colors, radius, spacing, typography, shadow } from "../theme/theme";
+import { colors, radius, spacing, typography, shadow, fonts } from "../theme/theme";
 
 export function Card({ style, children, ...rest }) {
   return (
@@ -17,12 +17,12 @@ export function Pill({ label, tone = "neutral", style }) {
     danger: { bg: colors.dangerBg, fg: colors.danger },
     info: { bg: colors.infoBg, fg: colors.info },
     neutral: { bg: colors.cardAlt, fg: colors.textMuted },
-    primary: { bg: "#ECE9FD", fg: colors.primary },
+    primary: { bg: colors.cardAlt, fg: colors.text },
   };
   const t = tones[tone] || tones.neutral;
   return (
     <View style={[{ backgroundColor: t.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill }, style]}>
-      <Text style={{ color: t.fg, fontSize: 12, fontWeight: "600" }}>{label}</Text>
+      <Text style={{ color: t.fg, fontSize: 12, fontFamily: fonts.semibold }}>{label}</Text>
     </View>
   );
 }
@@ -74,6 +74,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: spacing.md,
+    // White card on a white ground — the hairline border is what defines it.
+    borderWidth: 1,
+    borderColor: colors.border,
     ...shadow.card,
   },
   primaryBtn: {
@@ -86,7 +89,8 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     color: colors.white,
     fontSize: 15,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
+    letterSpacing: 0.3,
   },
   secondaryBtn: {
     backgroundColor: colors.cardAlt,
@@ -98,6 +102,6 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     color: colors.text,
     fontSize: 15,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
   },
 });

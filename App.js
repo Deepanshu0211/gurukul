@@ -1,16 +1,53 @@
-import React from "react";
+import React, { useCallback } from "react";
+import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as SplashScreen from "expo-splash-screen";
+import {
+  useFonts,
+  Fraunces_600SemiBold,
+  Fraunces_700Bold,
+} from "@expo-google-fonts/fraunces";
+import {
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+} from "@expo-google-fonts/manrope";
 import { AuthProvider } from "./src/context/AuthContext";
 import { AttendanceProvider } from "./src/context/AttendanceContext";
 import RootNavigator from "./src/navigation/RootNavigator";
 
+// Hold the native splash until the fonts are ready, so text never flashes
+// in the system font first and then re-render in the real one.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Fraunces_600SemiBold,
+    Fraunces_700Bold,
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+  });
+
+  const onLayoutRootView = useCallback(() => {
+    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) return null;
+
   return (
-    <AuthProvider>
-      <AttendanceProvider>
-        <StatusBar style="dark" />
-        <RootNavigator />
-      </AttendanceProvider>
-    </AuthProvider>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <AttendanceProvider>
+            <StatusBar style="dark" />
+            <RootNavigator />
+          </AttendanceProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </View>
   );
 }
