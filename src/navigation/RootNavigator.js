@@ -3,7 +3,8 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../theme/theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { colors, fonts } from "../theme/theme";
 import { useAuth } from "../context/AuthContext";
 import LoginScreen from "../screens/LoginScreen";
 import DutiesScreen from "../screens/DutiesScreen";
@@ -32,6 +33,9 @@ const TAB_ICONS = {
 };
 
 function RoleTabs({ role }) {
+  // The gesture bar / soft keys vary by device, so the tab bar has to grow by
+  // the real inset instead of a hard-coded height, or labels collide with it.
+  const insets = useSafeAreaInsets();
   const tabsByRole = {
     teacher: [
       { name: "Duties", component: DutiesStack },
@@ -65,8 +69,14 @@ function RoleTabs({ role }) {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { borderTopColor: colors.border, height: 62, paddingBottom: 8, paddingTop: 6 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 6,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontFamily: fonts.semibold, marginTop: 2 },
         tabBarIcon: ({ color, size }) => (
           <Ionicons name={TAB_ICONS[route.name]} size={22} color={color} />
         ),

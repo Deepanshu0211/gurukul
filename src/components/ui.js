@@ -27,7 +27,7 @@ export function Pill({ label, tone = "neutral", style }) {
   );
 }
 
-export function PrimaryButton({ title, onPress, disabled, style }) {
+export function PrimaryButton({ title, onPress, disabled, style, textStyle }) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -35,7 +35,7 @@ export function PrimaryButton({ title, onPress, disabled, style }) {
       activeOpacity={0.85}
       style={[styles.primaryBtn, disabled && { opacity: 0.5 }, style]}
     >
-      <Text style={styles.primaryBtnText}>{title}</Text>
+      <Text style={[styles.primaryBtnText, textStyle]}>{title}</Text>
     </TouchableOpacity>
   );
 }

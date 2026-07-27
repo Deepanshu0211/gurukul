@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity, Image, Dimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radius, spacing, typography, fonts } from "../theme/theme";
+import { colors, radius, spacing, loginFonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -42,7 +42,18 @@ export default function LoginScreen() {
       password,
     });
     if (authError) {
-      setError("Incorrect email or password.");
+      // Distinguish the real causes — a blanket "wrong password" message hides
+      // rate limits and network failures, which need completely different fixes.
+      const msg = (authError.message || "").toLowerCase();
+      if (msg.includes("invalid login") || msg.includes("credentials")) {
+        setError("Incorrect email or password.");
+      } else if (msg.includes("rate") || msg.includes("too many")) {
+        setError("Too many attempts. Wait a minute and try again.");
+      } else if (msg.includes("network") || msg.includes("fetch")) {
+        setError("No connection. Check the device's internet and retry.");
+      } else {
+        setError(authError.message);
+      }
       return;
     }
     const { data: staffRow, error: staffError } = await supabase
@@ -79,7 +90,7 @@ export default function LoginScreen() {
             Please sign in to continue.
           </Text>
 
-          <Text style={typography.label}>EMAIL</Text>
+          <Text style={styles.fieldLabel}>EMAIL</Text>
           <View style={[styles.inputRow, focusedField === "email" && styles.inputRowFocused]}>
             <Ionicons
               name="mail-outline"
@@ -100,7 +111,7 @@ export default function LoginScreen() {
             />
           </View>
 
-          <Text style={[typography.label, { marginTop: spacing.sm }]}>PASSWORD</Text>
+          <Text style={[styles.fieldLabel, { marginTop: spacing.sm }]}>PASSWORD</Text>
           <View style={[styles.inputRow, focusedField === "password" && styles.inputRowFocused]}>
             <Ionicons
               name="lock-closed-outline"
@@ -116,6 +127,9 @@ export default function LoginScreen() {
               placeholder="••••••••"
               placeholderTextColor={colors.textMuted}
               secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="password"
               style={styles.input}
             />
             <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
@@ -134,7 +148,12 @@ export default function LoginScreen() {
             </View>
           )}
 
-          <PrimaryButton title="Sign in" onPress={handleContinue} style={styles.signInBtn} />
+          <PrimaryButton
+            title="Sign in"
+            onPress={handleContinue}
+            style={styles.signInBtn}
+            textStyle={{ fontFamily: loginFonts.bold }}
+          />
 
           <Text style={styles.helpText}>
             Need help? <Text style={styles.helpLink}>Contact the school office</Text>
@@ -158,15 +177,23 @@ const styles = StyleSheet.create({
     marginTop: -HERO_SIZE * 0.150,
     marginBottom: -HERO_SIZE * 0.1,
   },
+  // Login has its own label style so app-wide typography changes can't
+  // alter this screen.
+  fieldLabel: {
+    fontFamily: loginFonts.semibold,
+    fontSize: 11,
+    color: colors.textMuted,
+    letterSpacing: 1.1,
+  },
   brandTitle: {
-    fontFamily: fonts.display,
+    fontFamily: loginFonts.display,
     fontSize: 30,
     color: colors.text,
     letterSpacing: -0.5,
     textAlign: "center",
   },
   brandSubtitle: {
-    fontFamily: fonts.regular,
+    fontFamily: loginFonts.regular,
     fontSize: 14,
     color: colors.textMuted,
     marginTop: 4,
@@ -198,7 +225,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   inputRowFocused: { borderColor: colors.primary },
-  input: { flex: 1, fontSize: 15, fontFamily: fonts.medium, color: colors.text, padding: 0 },
+  input: { flex: 1, fontSize: 15, fontFamily: loginFonts.medium, color: colors.text, padding: 0 },
 
   signInBtn: {
     marginTop: spacing.md,
@@ -206,16 +233,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
 
-  forgotLink: { fontSize: 12.5, color: colors.text, fontFamily: fonts.semibold },
+  forgotLink: { fontSize: 12.5, color: colors.text, fontFamily: loginFonts.semibold },
 
   helpText: {
     fontSize: 13,
-    fontFamily: fonts.regular,
+    fontFamily: loginFonts.regular,
     color: colors.textMuted,
     textAlign: "center",
     marginTop: spacing.lg,
   },
-  helpLink: { fontFamily: fonts.bold, color: colors.text },
+  helpLink: { fontFamily: loginFonts.bold, color: colors.text },
 
   errorBox: {
     flexDirection: "row",
@@ -227,7 +254,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     marginTop: spacing.md,
   },
-  errorText: { color: colors.danger, fontSize: 12.5, fontFamily: fonts.medium, flex: 1 },
+  errorText: { color: colors.danger, fontSize: 12.5, fontFamily: loginFonts.medium, flex: 1 },
 
   footNote: { textAlign: "center", color: colors.textMuted, fontSize: 12, marginTop: spacing.md },
 });

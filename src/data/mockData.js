@@ -81,14 +81,28 @@ export const fmtTime = (m) => {
   return `${((h24 + 11) % 12) + 1}:${mm} ${h24 < 12 ? "AM" : "PM"}`;
 };
 
+// `mandatoryEscalation` mirrors checkpoints.mandatory_escalation in the real
+// schema (SRS C2): meal and night checkpoints escalate straight to the
+// Principal on a miss, skipping the usual Coordinator step.
 export const DUTIES = [
   { id: "mang", checkpoint: "Mangalarati", group: "All residential students", start: 270, end: 300, staffId: "c1", scope: "res" },
   { id: "morn-4A", checkpoint: "Morning attendance", group: "Class 4 A", start: 450, end: 470, staffId: "t1", classKey: "4|A" },
   { id: "morn-9B", checkpoint: "Morning attendance", group: "Class 9 Balram", start: 450, end: 470, staffId: "t2", classKey: "9|BALRAM" },
-  { id: "bfast-sr", checkpoint: "Breakfast prasadam", group: "Senior · residential", start: 405, end: 450, staffId: "t2" },
+  { id: "bfast-sr", checkpoint: "Breakfast prasadam", group: "Senior · residential", start: 405, end: 450, staffId: "t2", mandatoryEscalation: true },
   { id: "lunch-mid", checkpoint: "Lunch prasadam", group: "Middle · all students", start: 750, end: 790, staffId: "c1" },
-  { id: "night-sr", checkpoint: "Night attendance", group: "Senior · residential", start: 1275, end: 1300, staffId: "t2" },
+  { id: "night-sr", checkpoint: "Night attendance", group: "Senior · residential", start: 1275, end: 1300, staffId: "t2", mandatoryEscalation: true },
 ];
+
+// Who has been notified about a missed duty, per the escalation ladder in
+// SRS N1–N2. Frontend-only for now — the real timing lives in cron-reminders.
+export const escalationStage = (duty) => {
+  const late = NOW - duty.end;
+  if (late < -10) return null;
+  if (late < 0) return { level: "reminded", text: "Reminder sent to you" };
+  if (duty.mandatoryEscalation) return { level: "principal", text: "Escalated to Principal" };
+  if (late < 10) return { level: "coordinator", text: "Coordinator & MOD notified" };
+  return { level: "principal", text: "Escalated to Principal" };
+};
 
 export const dutyStatus = (duty, records) => {
   if (records[duty.id]) return "done";

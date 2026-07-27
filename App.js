@@ -5,9 +5,14 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import {
   useFonts,
-  Fraunces_600SemiBold,
-  Fraunces_700Bold,
-} from "@expo-google-fonts/fraunces";
+  GoogleSans_400Regular,
+  GoogleSans_500Medium,
+  GoogleSans_600SemiBold,
+  GoogleSans_700Bold,
+} from "@expo-google-fonts/google-sans";
+// Fraunces + Manrope are used by the login screen only — its design was
+// signed off before the rest of the app moved to Google Sans.
+import { Fraunces_700Bold } from "@expo-google-fonts/fraunces";
 import {
   Manrope_400Regular,
   Manrope_500Medium,
@@ -24,7 +29,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const [fontsLoaded] = useFonts({
-    Fraunces_600SemiBold,
+    GoogleSans_400Regular,
+    GoogleSans_500Medium,
+    GoogleSans_600SemiBold,
+    GoogleSans_700Bold,
     Fraunces_700Bold,
     Manrope_400Regular,
     Manrope_500Medium,

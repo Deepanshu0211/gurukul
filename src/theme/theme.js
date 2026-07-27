@@ -41,14 +41,24 @@ export const spacing = {
   xl: 32,
 };
 
-// Fraunces — a soft, characterful serif — carries headings and the brand.
-// Manrope handles everything functional: UI labels, body copy, and numbers
-// (it has even, legible digits, which matters on the attendance counts).
+// Google Sans throughout — one typeface, four weights. Clean, highly legible
+// at small sizes, and neutral enough for a data-dense attendance screen.
 // Note: with custom fonts you pick the weight via fontFamily, NOT fontWeight —
 // setting fontWeight on top of a static font file does nothing on Android.
 export const fonts = {
+  display: "GoogleSans_700Bold",
+  displayMedium: "GoogleSans_600SemiBold",
+  regular: "GoogleSans_400Regular",
+  medium: "GoogleSans_500Medium",
+  semibold: "GoogleSans_600SemiBold",
+  bold: "GoogleSans_700Bold",
+};
+
+// Login screen only. Its design was finalised on Fraunces + Manrope before
+// the rest of the app standardised on Google Sans — kept deliberately
+// separate so app-wide font changes never touch that screen again.
+export const loginFonts = {
   display: "Fraunces_700Bold",
-  displayMedium: "Fraunces_600SemiBold",
   regular: "Manrope_400Regular",
   medium: "Manrope_500Medium",
   semibold: "Manrope_600SemiBold",
