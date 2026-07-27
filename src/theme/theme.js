@@ -33,12 +33,15 @@ export const radius = {
   pill: 999,
 };
 
+// Tightened one step from the usual 4/8/16/24/32 scale. The app is dense,
+// data-first, and read at arm's length in a hurry — generous whitespace was
+// pushing content off the fold rather than aiding legibility.
 export const spacing = {
   xs: 4,
   sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
+  md: 14,
+  lg: 20,
+  xl: 26,
 };
 
 // Google Sans throughout — one typeface, four weights. Clean, highly legible

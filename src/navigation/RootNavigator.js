@@ -1,4 +1,5 @@
 import React from "react";
+import { View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -12,6 +13,7 @@ import DutyMarkingScreen from "../screens/DutyMarkingScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import RosterScreen from "../screens/RosterScreen";
 import AccountScreen from "../screens/AccountScreen";
+import ClassDayScreen from "../screens/ClassDayScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -27,18 +29,22 @@ function DutiesStack() {
 
 const TAB_ICONS = {
   Duties: "checkbox-outline",
+  "My Class": "school-outline",
   Dashboard: "grid-outline",
   Roster: "people-outline",
   Account: "person-circle-outline",
 };
 
-function RoleTabs({ role }) {
+function RoleTabs({ role, hasClass }) {
   // The gesture bar / soft keys vary by device, so the tab bar has to grow by
   // the real inset instead of a hard-coded height, or labels collide with it.
   const insets = useSafeAreaInsets();
   const tabsByRole = {
+    // "My Class" is the SRS A8 view — only meaningful for a class teacher,
+    // so it's hidden from duty staff who have no class of their own.
     teacher: [
       { name: "Duties", component: DutiesStack },
+      ...(hasClass ? [{ name: "My Class", component: ClassDayScreen }] : []),
       { name: "Account", component: AccountScreen },
     ],
     coordinator: [
@@ -90,11 +96,17 @@ function RoleTabs({ role }) {
 }
 
 export default function RootNavigator() {
-  const { user } = useAuth();
+  const { user, restoring } = useAuth();
+
+  // Blank while a stored session is being checked — brief, and avoids showing
+  // the login screen to someone who is already signed in.
+  if (restoring) {
+    return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  }
 
   return (
     <NavigationContainer>
-      {user ? <RoleTabs role={user.role} /> : <LoginScreen />}
+      {user ? <RoleTabs role={user.role} hasClass={!!user.classKey} /> : <LoginScreen />}
     </NavigationContainer>
   );
 }

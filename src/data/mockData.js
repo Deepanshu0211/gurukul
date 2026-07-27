@@ -123,8 +123,41 @@ export const SEED_RECORDS = {
   "bfast-sr": { statuses: {}, at: 448, markedBy: "t2" },
 };
 
+// Alerts mirror the `alerts` table. `kind` matches the schema's alert kinds.
+// Per SRS F4 an alert is never auto-resolved — a person closes it with a
+// written remark, which is why `closedAt`/`closeRemark` exist here.
 export const ALERTS = [
-  { id: "al1", kind: "OVERDUE", text: "Breakfast prasadam · Senior residential not submitted", time: "7:50 AM" },
-  { id: "al2", kind: "ALERT", text: "R. Sharma (7 K) present at mangalarati, ABSENT at breakfast", time: "8:05 AM" },
-  { id: "al3", kind: "OK", text: "Morning attendance 4 A · 24/24 present", time: "7:50 AM" },
+  {
+    id: "al2",
+    kind: "present_then_absent",
+    severity: "critical",
+    student: "Rahul Sharma",
+    detail: "Class 7 Krishna · Barsana house",
+    text: "Present at Mangalarati (4:56 AM), marked ABSENT at Breakfast prasadam",
+    time: "7:28 AM",
+    closedAt: null,
+    closeRemark: null,
+  },
+  {
+    id: "al1",
+    kind: "overdue_duty",
+    severity: "warning",
+    student: null,
+    detail: "Ajay Solanki Pr · Senior residential",
+    text: "Breakfast prasadam not submitted within its window",
+    time: "7:50 AM",
+    closedAt: null,
+    closeRemark: null,
+  },
+  {
+    id: "al0",
+    kind: "present_then_absent",
+    severity: "critical",
+    student: "Devansh Yadav",
+    detail: "Class 7 Krishna · Nandgaon house",
+    text: "Present at Mangalarati, marked ABSENT at Morning attendance",
+    time: "Yesterday, 7:44 AM",
+    closedAt: "Yesterday, 8:10 AM",
+    closeRemark: "Found in the library — had gone early for exam revision.",
+  },
 ];

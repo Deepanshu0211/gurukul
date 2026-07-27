@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   // sitting flush against it.
   content: { paddingHorizontal: spacing.md, paddingBottom: 48 },
 
-  header: { paddingTop: spacing.md, paddingBottom: spacing.xs },
+  header: { paddingTop: spacing.sm, paddingBottom: 2 },
   greetLabel: {
     fontFamily: fonts.semibold,
     fontSize: 10.5,
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
 
-  progressBlock: { marginTop: spacing.md },
+  progressBlock: { marginTop: spacing.sm + 2 },
   progressTop: {
     flexDirection: "row",
     alignItems: "center",
