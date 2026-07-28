@@ -3,10 +3,10 @@ import { View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, fonts } from "../theme/theme";
+import { getFocusedRouteNameFromRoute } from "@react-navigation/native";
+import { colors } from "../theme/theme";
 import { useAuth } from "../context/AuthContext";
+import AppTabBar from "./AppTabBar";
 import LoginScreen from "../screens/LoginScreen";
 import DutiesScreen from "../screens/DutiesScreen";
 import DutyMarkingScreen from "../screens/DutyMarkingScreen";
@@ -27,18 +27,13 @@ function DutiesStack() {
   );
 }
 
-const TAB_ICONS = {
-  Duties: "checkbox-outline",
-  "My Class": "school-outline",
-  Dashboard: "grid-outline",
-  Roster: "people-outline",
-  Account: "person-circle-outline",
-};
+/**
+ * Marking is a focused task with its own sticky footer, so the tab bar is
+ * hidden there — it would otherwise sit on top of the Submit button.
+ */
+const hideTabBarOn = ["DutyMarking"];
 
 function RoleTabs({ role, hasClass }) {
-  // The gesture bar / soft keys vary by device, so the tab bar has to grow by
-  // the real inset instead of a hard-coded height, or labels collide with it.
-  const insets = useSafeAreaInsets();
   const tabsByRole = {
     // "My Class" is the SRS A8 view — only meaningful for a class teacher,
     // so it's hidden from duty staff who have no class of their own.
@@ -71,25 +66,21 @@ function RoleTabs({ role, hasClass }) {
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom + 6,
-          paddingTop: 8,
-        },
-        tabBarLabelStyle: { fontSize: 11, fontFamily: fonts.semibold, marginTop: 2 },
-        tabBarIcon: ({ color, size }) => (
-          <Ionicons name={TAB_ICONS[route.name]} size={22} color={color} />
-        ),
-      })}
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => <AppTabBar {...props} />}
     >
       {tabs.map((t) => (
-        <Tab.Screen key={t.name} name={t.name} component={t.component} />
+        <Tab.Screen
+          key={t.name}
+          name={t.name}
+          component={t.component}
+          options={({ route }) => {
+            const child = getFocusedRouteNameFromRoute(route);
+            return child && hideTabBarOn.includes(child)
+              ? { tabBarStyle: { display: "none" }, tabBarVisible: false }
+              : {};
+          }}
+        />
       ))}
     </Tab.Navigator>
   );

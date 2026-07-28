@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity } from "
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
+import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
 import { DUTIES, STUDENTS, STATUS_META, NOW, studentsForDuty } from "../data/mockData";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime } from "../utils/format";
@@ -98,7 +99,7 @@ export default function ClassDayScreen({ navigation }) {
             <FlatList
               data={myStudents}
               keyExtractor={(s) => s.id}
-              contentContainerStyle={{ paddingBottom: 48 }}
+              contentContainerStyle={{ paddingBottom: TAB_CONTENT_INSET }}
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <View style={styles.gridRow}>

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
+import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
 import { DUTIES, STUDENTS, ALERTS, NOW, studentsForDuty } from "../data/mockData";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { fmtTime } from "../utils/format";
@@ -227,7 +228,7 @@ const DOT = {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 44 },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: TAB_CONTENT_INSET },
   pageTitle: { fontFamily: fonts.bold, fontSize: 28, color: colors.text, letterSpacing: -0.4 },
 
   hero: {

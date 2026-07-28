@@ -29,7 +29,8 @@ Data  (data/mockData.js  →  lib/*.js Supabase queries)
 | `data/` | Mock data only. **Temporary.** | Being replaced by `lib/`. Don't add logic here. |
 | `lib/` | Supabase client and real data access. | One file per table/concern. Returns app-shaped objects. |
 | `context/` | Cross-screen React state (auth, attendance). | Only for state genuinely needed app-wide. |
-| `navigation/` | Navigator and role→tabs mapping. | |
+| `navigation/` | Navigator, role→tabs mapping, and the tab bar. | |
+| `../supabase/` | Migrations, seed, and rebuild instructions. | Never edit an applied migration — add the next numbered file. |
 | `theme/` | Colours, spacing, fonts, type scale. | **Every** colour and font comes from here. |
 | `assets/` | Images bundled into the app. | Everything here ships in the APK — keep it lean. |
 
@@ -72,6 +73,9 @@ dividing by a count gets a zero check (see `utils/format.js → percent`).
 | Duties greeting card | `components/GreetingHeader.js` |
 | Page header used by other tabs | `components/ScreenHeader.js` |
 | Which roles see which tabs | `navigation/RootNavigator.js` |
+| The tab bar itself | `navigation/AppTabBar.js` |
+| Bottom padding so content clears the tab bar | `navigation/tabBarInset.js` |
+| Database schema, policies, seed | `../supabase/` (see its README) |
 | Colours, spacing, fonts | `theme/theme.js` |
 
 ## Two things that will bite you
@@ -100,11 +104,10 @@ the student lists inside the marking flow. `context/AttendanceContext.js`
 
 The backend work remaining is listed in `CLAUDE.md` §5.
 
-## Supabase setup that lives outside this repo
+## Supabase setup
 
-Schema and policies were applied through the Supabase SQL editor and are not
-yet captured as migration files — worth doing before the pilot so the setup is
-reproducible.
+Captured as migrations in `supabase/` — see `supabase/README.md` for how to
+rebuild a project from scratch and how to make schema changes safely.
 
 - `staff` — added `auth_user_id`, `phone`, `photo_url`. RLS lets a user update
   their **own** row, with a `WITH CHECK` clause pinning `role` and `email` to

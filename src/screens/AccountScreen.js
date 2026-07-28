@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
+import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
 import { ROLE_LABELS, DUTIES } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useAttendance } from "../context/AttendanceContext";
@@ -344,7 +345,7 @@ const Divider = () => <View style={styles.divider} />;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 44 },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: TAB_CONTENT_INSET },
   pageTitle: { fontFamily: fonts.bold, fontSize: 28, color: colors.text, letterSpacing: -0.4 },
 
   profileCard: { alignItems: "center", paddingVertical: spacing.md, gap: 5 },

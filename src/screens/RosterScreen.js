@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
+import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
 import { DUTIES, STAFF, ROLE_LABELS, NOW, studentsForDuty } from "../data/mockData";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime, plural, initial } from "../utils/format";
@@ -425,7 +426,7 @@ const styles = StyleSheet.create({
   tabText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.textMuted },
   tabTextActive: { color: colors.text },
 
-  list: { paddingHorizontal: spacing.md, paddingBottom: 48 },
+  list: { paddingHorizontal: spacing.md, paddingBottom: TAB_CONTENT_INSET },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, SectionList, TouchableOpacity } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
+import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
 import GreetingHeader from "../components/GreetingHeader";
 import { DUTIES, NOW, studentsForDuty } from "../data/mockData";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
@@ -210,7 +211,7 @@ function EmptyState() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 44 },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: TAB_CONTENT_INSET },
 
 
 
