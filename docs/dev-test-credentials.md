@@ -1,7 +1,14 @@
-# Dev test credentials — DO NOT use in production
+# Dev test credentials
 
-These are throwaway Supabase Auth accounts created for testing the login flow
-during development. Shared password for all of them since it's dummy data.
+Throwaway Supabase Auth accounts for testing the login flow during
+development. They share one password because the accounts themselves are
+disposable.
+
+> **These accounts open the real student register.** The passwords are
+> made up; the 415 student records behind them are the school's actual
+> 2025–26 list — real names, admission numbers and residential status.
+> Rotate these before the repository or the Supabase project is shared any
+> wider, and delete them entirely before rollout.
 
 | Email | Password | Role |
 |---|---|---|

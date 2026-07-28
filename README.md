@@ -132,8 +132,9 @@ Detail and ordering in [`CLAUDE.md`](CLAUDE.md) §5.
 
 ## Notes for the team
 
-Test accounts live in `docs/dev-test-credentials.md`, which is gitignored —
-ask rather than looking for it here.
+Test accounts are in [`docs/dev-test-credentials.md`](docs/dev-test-credentials.md).
+They are disposable, but they open the real student register — rotate them
+before sharing this repository more widely, and delete them before rollout.
 
 `supabase/reset-test-data.sql` clears attendance and returns every duty to
 pending, for a clean run-through.
