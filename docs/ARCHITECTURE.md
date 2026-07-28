@@ -58,6 +58,14 @@ not `"done"` — a typo in a string is silent, a typo in a constant is an error.
 and error states, text that can be long gets `numberOfLines`, and anything
 dividing by a count gets a zero check (see `utils/format.js → percent`).
 
+**Haptics go through `lib/haptics.js`, never `expo-haptics` directly.** The
+wrapper respects the user's on/off preference and swallows failures on devices
+without a vibration motor. Keep them on meaningful moments — marking absent,
+submitting, changing tab — not on every interaction, or the taps that matter
+stop standing out. The preference exists because Mangalarati (4:30 AM) and
+night attendance (9:15 PM) happen in dormitories, where 40 buzzes near
+sleeping children is a real problem.
+
 ## Where things live
 
 | Looking for | File |
@@ -65,6 +73,7 @@ dividing by a count gets a zero check (see `utils/format.js → percent`).
 | Duty status / escalation / tallies | `domain/duties.js` |
 | Time, pluralisation, name formatting | `utils/format.js` |
 | Supabase client and session config | `lib/supabase.js` |
+| Haptic feedback + its on/off preference | `lib/haptics.js` |
 | Student register queries | `lib/students.js` |
 | Staff row mapping + profile updates | `lib/staff.js` |
 | Profile photo pick / upload / remove | `lib/avatars.js` |

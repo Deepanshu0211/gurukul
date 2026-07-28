@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts } from "../theme/theme";
+import { haptics } from "../lib/haptics";
 
 /**
  * Bottom tab bar.
@@ -54,7 +55,12 @@ export default function AppTabBar({ state, descriptors, navigation }) {
             target: route.key,
             canPreventDefault: true,
           });
-          if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+          if (!focused && !event.defaultPrevented) {
+            // Only on an actual change — re-tapping the current tab should
+            // not buzz, or the feedback stops meaning "you moved".
+            haptics.select();
+            navigation.navigate(route.name);
+          }
         };
 
         return (

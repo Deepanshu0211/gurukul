@@ -19,6 +19,7 @@ import {
   Manrope_600SemiBold,
   Manrope_700Bold,
 } from "@expo-google-fonts/manrope";
+import { loadHapticsPreference } from "./src/lib/haptics";
 import { AuthProvider } from "./src/context/AuthContext";
 import { AttendanceProvider } from "./src/context/AttendanceContext";
 import { DialogProvider } from "./src/components/Dialog";
@@ -27,6 +28,10 @@ import RootNavigator from "./src/navigation/RootNavigator";
 // Hold the native splash until the fonts are ready, so text never flashes
 // in the system font first and then re-render in the real one.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Read the saved haptics preference once at startup so the marking screen
+// never has to await storage in the middle of a tap.
+loadHapticsPreference();
 
 export default function App() {
   const [fontsLoaded] = useFonts({

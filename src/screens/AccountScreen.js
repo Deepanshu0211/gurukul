@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,7 @@ import { useDialog } from "../components/Dialog";
 import Avatar from "../components/Avatar";
 import { pickImage, uploadAvatar, removeAvatar } from "../lib/avatars";
 import { updateOwnPhone } from "../lib/staff";
+import { haptics, isHapticsEnabled, setHapticsEnabled } from "../lib/haptics";
 
 export default function AccountScreen() {
   const { user, logout, updateUser } = useAuth();
@@ -32,6 +34,14 @@ export default function AccountScreen() {
   const [savingPhone, setSavingPhone] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoSheet, setPhotoSheet] = useState(false);
+  const [hapticsOn, setHapticsOn] = useState(isHapticsEnabled());
+
+  const toggleHaptics = (value) => {
+    setHapticsOn(value);
+    setHapticsEnabled(value);
+    // Fire once when switching on, so the setting demonstrates itself.
+    if (value) haptics.select();
+  };
 
   const phone = user.phone || "";
   const myDuties = DUTIES.filter((d) => d.staffId === user.id);
@@ -171,6 +181,26 @@ export default function AccountScreen() {
           Name, email and role are managed by the school office. Ask an administrator to change
           them.
         </Text>
+
+        <Text style={styles.sectionLabel}>PREFERENCES</Text>
+        <View style={styles.group}>
+          <View style={styles.row}>
+            <Ionicons name="phone-portrait-outline" size={18} color={colors.textMuted} />
+            <View style={{ flex: 1, marginLeft: spacing.sm, marginRight: spacing.sm }}>
+              <Text style={styles.rowValue}>Vibration feedback</Text>
+              <Text style={styles.rowHint}>
+                A short buzz when you mark a student absent or submit. Turn off for night and
+                early-morning checkpoints in the dormitories.
+              </Text>
+            </View>
+            <Switch
+              value={hapticsOn}
+              onValueChange={toggleHaptics}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.white}
+            />
+          </View>
+        </View>
 
         <Text style={styles.sectionLabel}>SECURITY</Text>
         <View style={styles.group}>
@@ -412,6 +442,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 13, paddingHorizontal: 14 },
   rowLabel: { fontFamily: fonts.regular, fontSize: 11.5, color: colors.textMuted },
   rowValue: { fontFamily: fonts.medium, fontSize: 14.5, color: colors.text },
+  rowHint: {
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    color: colors.textMuted,
+    lineHeight: 16,
+    marginTop: 2,
+  },
   editLink: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: 46 },
   note: {

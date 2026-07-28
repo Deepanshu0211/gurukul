@@ -16,6 +16,7 @@ import { DUTIES, STATUS_META, studentsForDuty } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useAttendance } from "../context/AttendanceContext";
 import { useDialog } from "../components/Dialog";
+import { haptics } from "../lib/haptics";
 
 export default function DutyMarkingScreen({ route, navigation }) {
   const { dutyId } = route.params;
@@ -33,6 +34,11 @@ export default function DutyMarkingScreen({ route, navigation }) {
 
   const toggleAbsent = (studentId) => {
     if (readOnly) return;
+    // Distinct feels for marking vs undoing, so a teacher going down a line of
+    // students can tell what happened without looking at the screen.
+    if (statuses[studentId] === "A") haptics.undoAbsent();
+    else haptics.markAbsent();
+
     setStatuses((prev) => {
       const next = { ...prev };
       if (next[studentId] === "A") delete next[studentId];
@@ -42,6 +48,9 @@ export default function DutyMarkingScreen({ route, navigation }) {
   };
 
   const setStatus = (studentId, code) => {
+    if (code === "A") haptics.markAbsent();
+    else haptics.select();
+
     setStatuses((prev) => {
       const next = { ...prev };
       if (code === "P") delete next[studentId];
@@ -57,6 +66,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const elsewhere = marked - absent;
 
   const handleSubmit = () => {
+    haptics.success();
     submitDuty(dutyId, statuses, user.id);
     dialog.alert({
       icon: "checkmark-circle-outline",
@@ -68,6 +78,9 @@ export default function DutyMarkingScreen({ route, navigation }) {
 
   const confirmSubmit = () => {
     if (absent > 0) {
+      // This dialog exists because someone may be about to submit a mis-tap;
+      // a physical interruption reinforces "stop and read".
+      haptics.warn();
       dialog.confirm({
         icon: "warning-outline",
         title: `${absent} student${absent === 1 ? "" : "s"} marked absent`,
