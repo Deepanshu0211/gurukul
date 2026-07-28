@@ -73,13 +73,11 @@ export const ROLE_LABELS = {
   nurse: "Nurse",
 };
 
-// Today's duties (simplified — one duty per section/checkpoint most relevant to demo)
-export const NOW = 7 * 60 + 42; // 7:42 AM simulated clock
-export const fmtTime = (m) => {
-  const h24 = Math.floor(m / 60);
-  const mm = String(m % 60).padStart(2, "0");
-  return `${((h24 + 11) % 12) + 1}:${mm} ${h24 < 12 ? "AM" : "PM"}`;
-};
+// Simulated clock, so the demo always shows a mid-morning state with some
+// duties done, one due and one overdue. Replace with real time when the
+// backend lands. Formatting helpers live in utils/format.js; duty rules live
+// in domain/duties.js — this file holds DATA only.
+export const NOW = 7 * 60 + 42; // 7:42 AM
 
 // `mandatoryEscalation` mirrors checkpoints.mandatory_escalation in the real
 // schema (SRS C2): meal and night checkpoints escalate straight to the
@@ -93,25 +91,13 @@ export const DUTIES = [
   { id: "night-sr", checkpoint: "Night attendance", group: "Senior · residential", start: 1275, end: 1300, staffId: "t2", mandatoryEscalation: true },
 ];
 
-// Who has been notified about a missed duty, per the escalation ladder in
-// SRS N1–N2. Frontend-only for now — the real timing lives in cron-reminders.
-export const escalationStage = (duty) => {
-  const late = NOW - duty.end;
-  if (late < -10) return null;
-  if (late < 0) return { level: "reminded", text: "Reminder sent to you" };
-  if (duty.mandatoryEscalation) return { level: "principal", text: "Escalated to Principal" };
-  if (late < 10) return { level: "coordinator", text: "Coordinator & MOD notified" };
-  return { level: "principal", text: "Escalated to Principal" };
-};
-
-export const dutyStatus = (duty, records) => {
-  if (records[duty.id]) return "done";
-  if (NOW > duty.end) return "overdue";
-  if (NOW >= duty.start - 15) return "due";
-  return "upcoming";
-};
-
+/**
+ * Resolves a duty's group definition to its students. Mirrors the real
+ * grouping rules (class-section, residential-only, whole school) so the
+ * Supabase version can drop in with the same signature.
+ */
 export const studentsForDuty = (duty) => {
+  if (!duty) return [];
   if (duty.classKey) return STUDENTS.filter((s) => s.key === duty.classKey);
   if (duty.scope === "res") return STUDENTS.filter(isRes);
   return STUDENTS;

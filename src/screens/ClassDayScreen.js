@@ -3,15 +3,9 @@ import { View, Text, StyleSheet, FlatList, ScrollView, TouchableOpacity } from "
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import {
-  DUTIES,
-  STUDENTS,
-  STATUS_META,
-  NOW,
-  fmtTime,
-  dutyStatus,
-  studentsForDuty,
-} from "../data/mockData";
+import { DUTIES, STUDENTS, STATUS_META, NOW, studentsForDuty } from "../data/mockData";
+import { dutyStatus, DUTY_STATUS } from "../domain/duties";
+import { fmtTime } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useAttendance } from "../context/AttendanceContext";
 
@@ -26,7 +20,7 @@ export default function ClassDayScreen({ navigation }) {
   const myStudents = STUDENTS.filter((s) => s.key === classKey);
 
   // Only checkpoints already submitted have anything to show.
-  const submitted = DUTIES.filter((d) => dutyStatus(d, records) === "done").sort(
+  const submitted = DUTIES.filter((d) => dutyStatus(d, records, NOW) === DUTY_STATUS.DONE).sort(
     (a, b) => a.start - b.start
   );
 

@@ -21,6 +21,7 @@ import {
 } from "@expo-google-fonts/manrope";
 import { AuthProvider } from "./src/context/AuthContext";
 import { AttendanceProvider } from "./src/context/AttendanceContext";
+import { DialogProvider } from "./src/components/Dialog";
 import RootNavigator from "./src/navigation/RootNavigator";
 
 // Hold the native splash until the fonts are ready, so text never flashes
@@ -51,8 +52,10 @@ export default function App() {
       <SafeAreaProvider>
         <AuthProvider>
           <AttendanceProvider>
-            <StatusBar style="dark" />
-            <RootNavigator />
+            <DialogProvider>
+              <StatusBar style="dark" />
+              <RootNavigator />
+            </DialogProvider>
           </AttendanceProvider>
         </AuthProvider>
       </SafeAreaProvider>

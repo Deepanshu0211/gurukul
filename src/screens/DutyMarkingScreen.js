@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Modal,
   Pressable,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,6 +15,7 @@ import { PrimaryButton } from "../components/ui";
 import { DUTIES, STATUS_META, studentsForDuty } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useAttendance } from "../context/AttendanceContext";
+import { useDialog } from "../components/Dialog";
 
 export default function DutyMarkingScreen({ route, navigation }) {
   const { dutyId } = route.params;
@@ -23,6 +23,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const students = useMemo(() => studentsForDuty(duty), [duty]);
   const { user } = useAuth();
   const { records, submitDuty } = useAttendance();
+  const dialog = useDialog();
   const existing = records[dutyId];
   const readOnly = !!existing;
 
@@ -57,23 +58,26 @@ export default function DutyMarkingScreen({ route, navigation }) {
 
   const handleSubmit = () => {
     submitDuty(dutyId, statuses, user.id);
-    Alert.alert(
-      "Submitted",
-      `${duty.checkpoint} · ${present}/${students.length} present, ${absent} absent. Summary sent to Coordinator, MOD & Principal.`
-    );
+    dialog.alert({
+      icon: "checkmark-circle-outline",
+      title: "Submitted",
+      message: `${duty.checkpoint} · ${present}/${students.length} present, ${absent} absent.\n\nSummary sent to Coordinator, MOD & Principal.`,
+    });
     navigation.goBack();
   };
 
   const confirmSubmit = () => {
     if (absent > 0) {
-      Alert.alert(
-        `${absent} student${absent === 1 ? "" : "s"} marked absent`,
-        "Absent means the child is unaccounted for and will raise a safety alert. Submit anyway?",
-        [
-          { text: "Review", style: "cancel" },
-          { text: "Submit", style: "destructive", onPress: handleSubmit },
-        ]
-      );
+      dialog.confirm({
+        icon: "warning-outline",
+        title: `${absent} student${absent === 1 ? "" : "s"} marked absent`,
+        message:
+          "Absent means the child is unaccounted for, and this will raise a safety alert to the Principal. Submit anyway?",
+        cancelLabel: "Review",
+        confirmLabel: "Submit",
+        destructive: true,
+        onConfirm: handleSubmit,
+      });
     } else {
       handleSubmit();
     }

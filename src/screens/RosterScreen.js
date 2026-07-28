@@ -9,22 +9,16 @@ import {
   Modal,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import {
-  DUTIES,
-  STAFF,
-  ROLE_LABELS,
-  NOW,
-  fmtTime,
-  dutyStatus,
-  studentsForDuty,
-} from "../data/mockData";
+import { DUTIES, STAFF, ROLE_LABELS, NOW, studentsForDuty } from "../data/mockData";
+import { dutyStatus, DUTY_STATUS } from "../domain/duties";
+import { fmtTime, plural, initial } from "../utils/format";
 import { useAttendance } from "../context/AttendanceContext";
 import { useStudents } from "../lib/students";
+import { useDialog } from "../components/Dialog";
 
 const TABS = [
   { key: "duties", label: "Duties" },
@@ -106,9 +100,9 @@ export default function RosterScreen() {
 }
 
 function DutiesTab({ assignments, records, staffName, onReassign }) {
-  const withStatus = DUTIES.map((d) => ({ ...d, _status: dutyStatus(d, records) }));
-  const pending = withStatus.filter((d) => d._status !== "done");
-  const done = withStatus.filter((d) => d._status === "done");
+  const withStatus = DUTIES.map((d) => ({ ...d, _status: dutyStatus(d, records, NOW) }));
+  const pending = withStatus.filter((d) => d._status !== DUTY_STATUS.DONE);
+  const done = withStatus.filter((d) => d._status === DUTY_STATUS.DONE);
 
   const sections = [
     { title: "Not yet submitted", data: pending },
@@ -129,8 +123,8 @@ function DutiesTab({ assignments, records, staffName, onReassign }) {
         </View>
       )}
       renderItem={({ item }) => {
-        const overdue = item._status === "overdue";
-        const submitted = item._status === "done";
+        const overdue = item._status === DUTY_STATUS.OVERDUE;
+        const submitted = item._status === DUTY_STATUS.DONE;
         const total = studentsForDuty(item).length;
         return (
           <View style={[styles.card, overdue && styles.cardOverdue]}>
@@ -184,6 +178,7 @@ function DutiesTab({ assignments, records, staffName, onReassign }) {
 }
 
 function StaffTab({ assignments }) {
+  const dialog = useDialog();
   const dutiesFor = (id) => Object.values(assignments).filter((v) => v === id).length;
   return (
     <SectionList
@@ -195,7 +190,13 @@ function StaffTab({ assignments }) {
         <View style={styles.listHeaderRow}>
           <Text style={styles.sectionLabel}>{STAFF.length} STAFF</Text>
           <TouchableOpacity
-            onPress={() => Alert.alert("Add staff", "Adding staff is an administrator action.")}
+            onPress={() =>
+              dialog.alert({
+                icon: "person-add-outline",
+                title: "Add staff",
+                message: "Adding a staff member is an administrator action.",
+              })
+            }
             hitSlop={8}
           >
             <Text style={styles.addLink}>+ Add</Text>
@@ -209,14 +210,14 @@ function StaffTab({ assignments }) {
             style={styles.personRow}
             activeOpacity={0.6}
             onPress={() =>
-              Alert.alert(
-                item.name,
-                `${ROLE_LABELS[item.role]}\n${item.email}\n\nDeactivating a staff member flags their pending duties for reassignment.`,
-                [
-                  { text: "Close", style: "cancel" },
-                  { text: "Deactivate", style: "destructive" },
-                ]
-              )
+              dialog.confirm({
+                icon: "person-outline",
+                title: item.name,
+                message: `${ROLE_LABELS[item.role]} · ${item.email}\n\nDeactivating flags their pending duties for reassignment.`,
+                cancelLabel: "Close",
+                confirmLabel: "Deactivate",
+                destructive: true,
+              })
             }
           >
             <View style={styles.personAvatar}>
@@ -245,6 +246,7 @@ const TYPE_LABEL = {
 };
 
 function StudentsTab() {
+  const dialog = useDialog();
   const { students, loading, error, reload } = useStudents();
   const [query, setQuery] = useState("");
 
@@ -308,7 +310,11 @@ function StudentsTab() {
             </Text>
             <TouchableOpacity
               onPress={() =>
-                Alert.alert("Add student", "Add individually, or bulk-import the Excel register.")
+                dialog.alert({
+                  icon: "person-add-outline",
+                  title: "Add student",
+                  message: "Add individually, or bulk-import the Excel register.",
+                })
               }
               hitSlop={8}
             >
@@ -349,12 +355,13 @@ function StudentsTab() {
           style={styles.personRow}
           activeOpacity={0.6}
           onPress={() =>
-            Alert.alert(
-              item.name,
-              `Admission no. ${item.adm}\nClass ${item.label} · Roll ${item.roll || "—"}\n${
+            dialog.alert({
+              icon: "school-outline",
+              title: item.name,
+              message: `Admission no. ${item.adm}\nClass ${item.label} · Roll ${item.roll || "—"}\n${
                 TYPE_LABEL[item.type]
-              }${item.remedial ? "\nRemedial batch" : ""}`
-            )
+              }${item.remedial ? "\nRemedial batch" : ""}`,
+            })
           }
         >
           <View style={styles.rollBadge}>

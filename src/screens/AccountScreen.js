@@ -8,7 +8,6 @@ import {
   TextInput,
   Modal,
   Pressable,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,10 +15,12 @@ import { colors, spacing, typography, radius, fonts } from "../theme/theme";
 import { ROLE_LABELS, DUTIES } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useAttendance } from "../context/AttendanceContext";
+import { useDialog } from "../components/Dialog";
 
 export default function AccountScreen() {
   const { user, logout } = useAuth();
   const { records } = useAttendance();
+  const dialog = useDialog();
 
   // Editable locally for now; wiring to Supabase is a backend task.
   const [phone, setPhone] = useState(user.phone || "");
@@ -35,10 +36,14 @@ export default function AccountScreen() {
   };
 
   const confirmLogout = () =>
-    Alert.alert("Sign out", "You'll need your password to sign back in.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign out", style: "destructive", onPress: logout },
-    ]);
+    dialog.confirm({
+      icon: "log-out-outline",
+      title: "Sign out?",
+      message: "You'll need your email and password to sign back in.",
+      confirmLabel: "Sign out",
+      destructive: true,
+      onConfirm: logout,
+    });
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -93,7 +98,11 @@ export default function AccountScreen() {
             icon="key-outline"
             label="Change password"
             onPress={() =>
-              Alert.alert("Change password", "A reset link will be sent to your email address.")
+              dialog.alert({
+                icon: "key-outline",
+                title: "Change password",
+                message: "A reset link will be sent to your school email address.",
+              })
             }
           />
         </View>
@@ -103,17 +112,24 @@ export default function AccountScreen() {
           <ActionRow
             icon="help-circle-outline"
             label="Help & contact office"
-            onPress={() => Alert.alert("School office", "Contact the office for account help.")}
+            onPress={() =>
+              dialog.alert({
+                icon: "help-circle-outline",
+                title: "School office",
+                message: "Contact the office for help with your account or duties.",
+              })
+            }
           />
           <Divider />
           <ActionRow
             icon="document-text-outline"
             label="About this app"
             onPress={() =>
-              Alert.alert(
-                "Gurukula Attendance",
-                "Attendance & Student Safety\nPilot build\n\nBhaktivedanta Gurukula & International School"
-              )
+              dialog.alert({
+                title: "Gurukula Attendance",
+                message:
+                  "Attendance & Student Safety · Pilot build\n\nBhaktivedanta Gurukula & International School",
+              })
             }
           />
         </View>

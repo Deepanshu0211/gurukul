@@ -29,6 +29,24 @@ a set of extensions (gate pass, sick bay, emergency muster, kitchen headcount) a
 **explicitly out of scope for now**. Don't build them. They're documented in
 `docs/reference/combined-platform-requirements.md` for later.
 
+## 1a. Code structure — read `docs/ARCHITECTURE.md` before adding code
+
+The short version: **data, rules and presentation live in separate folders**,
+so the move from mock data to Supabase means swapping one folder rather than
+rewriting every screen.
+
+- `domain/` — business rules from the SRS (duty status, escalation, tallies).
+  Pure functions, no React, no data-source imports.
+- `utils/` — generic formatting (time, pluralisation, names).
+- `data/mockData.js` — mock data ONLY, no logic. Temporary.
+- `lib/` — Supabase client and real queries.
+- `screens/`, `components/`, `theme/` — presentation.
+
+Conventions that matter: colours and fonts always come from `theme/`; weights
+are set with `fontFamily` (not `fontWeight`, which is a no-op on Android with
+custom fonts); status values are compared against constants like
+`DUTY_STATUS.DONE`, never raw strings.
+
 ## 2. Current state of this repo — read before touching anything
 
 This repo already has a working **Expo (React Native + react-native-web) scaffold**

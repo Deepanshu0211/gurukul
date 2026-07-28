@@ -12,15 +12,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import {
-  DUTIES,
-  STUDENTS,
-  ALERTS,
-  NOW,
-  fmtTime,
-  dutyStatus,
-  studentsForDuty,
-} from "../data/mockData";
+import { DUTIES, STUDENTS, ALERTS, NOW, studentsForDuty } from "../data/mockData";
+import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
+import { fmtTime } from "../utils/format";
 import { useAttendance } from "../context/AttendanceContext";
 
 export default function DashboardScreen() {
@@ -33,8 +27,8 @@ export default function DashboardScreen() {
   const closed = alerts.filter((a) => a.closedAt);
   const critical = open.filter((a) => a.severity === "critical");
 
-  const submitted = DUTIES.filter((d) => dutyStatus(d, records) === "done");
-  const overdue = DUTIES.filter((d) => dutyStatus(d, records) === "overdue");
+  const submitted = DUTIES.filter((d) => dutyStatus(d, records, NOW) === DUTY_STATUS.DONE);
+  const overdue = DUTIES.filter((d) => dutyStatus(d, records, NOW) === DUTY_STATUS.OVERDUE);
 
   // Across every submitted duty today: how many student-checks were absent?
   let checks = 0;
@@ -103,7 +97,7 @@ export default function DashboardScreen() {
         <SectionTitle text="CHECKPOINTS TODAY" />
         <View style={styles.group}>
           {DUTIES.map((d, i) => {
-            const status = dutyStatus(d, records);
+            const status = dutyStatus(d, records, NOW);
             const rec = records[d.id];
             const total = studentsForDuty(d).length;
             const marked = rec ? Object.keys(rec.statuses).length : 0;
@@ -117,9 +111,9 @@ export default function DashboardScreen() {
                     <Text style={typography.caption}>{d.group}</Text>
                   </View>
                   <Text style={styles.feedMeta}>
-                    {status === "done"
+                    {status === DUTY_STATUS.DONE
                       ? `${total - marked}/${total}`
-                      : status === "overdue"
+                      : status === DUTY_STATUS.OVERDUE
                       ? "Overdue"
                       : fmtTime(d.start)}
                   </Text>
