@@ -68,10 +68,14 @@ project — build on it, don't replace it.
 | Colors, spacing, type scale | `src/theme/theme.js` |
 | Card/Pill/IconCircle building blocks | `src/components/ui.js` |
 
-**Everything above is mock data and in-memory state — there is no backend yet.**
+**Attendance is still mock data and in-memory state.**
 `AttendanceContext.submitDuty()` just updates local React state; nothing is saved
 anywhere real, no email goes out, no safety check runs. That's the entire job of
 Section 5 below.
+
+Already on Supabase, though: authentication with session persistence, staff
+records, profile phone editing, profile photo upload/remove (bucket `avatars`),
+and the 415-student register on the Roster screen.
 
 Note the stack diverged from an earlier plan (a Vite web PWA) to Expo instead —
 that's fine and already decided by the existing scaffold. Don't switch it back.
@@ -113,10 +117,17 @@ existing screen names above; don't rename them to match that 3-option phrasing.
 
 ## 5. What's actually left to build — in order
 
-### 5.1 Backend accounts (nothing coded yet)
-- [ ] Supabase project (region: Mumbai) — Postgres + Auth + Row-Level Security + Edge Functions + cron, all in one
+### 5.1 Backend accounts
+- [x] Supabase project — schema, RLS, auth and the `avatars` storage bucket are live
 - [ ] Brevo or Resend account (email API) — one verified sender address
 - [ ] Vercel (if/when a web build is deployed via `expo start --web` / `expo export`)
+
+**Verify every policy you write.** Two RLS bugs reached the running app because
+the SQL read correctly and was never exercised: a missing `WITH CHECK` would
+have let a user change their own role, and dropping a SELECT policy broke all
+uploads because `upsert` must read before it writes. After running policy SQL,
+call the REST/Storage API with a real user token and confirm both that the
+allowed action succeeds and that the forbidden one fails.
 
 ### 5.2 Database schema
 Full SQL is already written in `docs/reference/self-build-guide.md` §3 — run it as

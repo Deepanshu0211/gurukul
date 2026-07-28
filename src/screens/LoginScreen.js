@@ -6,6 +6,7 @@ import { colors, radius, spacing, loginFonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { fetchStaffByEmail } from "../lib/staff";
 
 // Square source art (1254x1254), shown whole and centered. Sized against BOTH
 // screen dimensions and capped, so the illustration is generous on a big phone
@@ -56,16 +57,16 @@ export default function LoginScreen() {
       }
       return;
     }
-    const { data: staffRow, error: staffError } = await supabase
-      .from("staff")
-      .select("*")
-      .eq("email", email.trim())
-      .single();
-    if (staffError || !staffRow) {
+    try {
+      const staff = await fetchStaffByEmail(email.trim());
+      if (!staff) {
+        setError("Signed in, but no staff record found for this account.");
+        return;
+      }
+      login(staff);
+    } catch {
       setError("Signed in, but no staff record found for this account.");
-      return;
     }
-    login(staffRow);
   };
 
   return (

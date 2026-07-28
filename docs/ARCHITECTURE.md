@@ -65,21 +65,56 @@ dividing by a count gets a zero check (see `utils/format.js → percent`).
 | Time, pluralisation, name formatting | `utils/format.js` |
 | Supabase client and session config | `lib/supabase.js` |
 | Student register queries | `lib/students.js` |
+| Staff row mapping + profile updates | `lib/staff.js` |
+| Profile photo pick / upload / remove | `lib/avatars.js` |
 | Styled dialogs (replaces `Alert.alert`) | `components/Dialog.js` |
-| Page header used by all tabs | `components/ScreenHeader.js` |
+| Avatar with photo + initial fallback | `components/Avatar.js` |
+| Duties greeting card | `components/GreetingHeader.js` |
+| Page header used by other tabs | `components/ScreenHeader.js` |
 | Which roles see which tabs | `navigation/RootNavigator.js` |
 | Colours, spacing, fonts | `theme/theme.js` |
 
+## Two things that will bite you
+
+**React Native's `fetch()` returns an EMPTY ArrayBuffer for `file://` URIs.**
+Uploading that way appears to succeed and silently writes a 0-byte object to
+storage. Read the bytes as base64 and decode them instead — see
+`lib/avatars.js`. Any future file upload must do the same.
+
+**Supabase `upsert` needs a SELECT policy.** It compiles to
+`INSERT ... ON CONFLICT`, which has to read whether a conflicting row exists.
+Dropping the SELECT policy on `storage.objects` makes every upload fail with
+"new row violates row-level security policy", even when the bucket is empty.
+The policy is scoped to the user's own folder so it satisfies upsert without
+letting anyone enumerate the bucket.
+
 ## Current state
 
-Real (Supabase): authentication, session persistence, staff records, the
-415-student register on the Roster screen.
+**Real (Supabase):** authentication and session persistence, staff records,
+profile phone editing, profile photo upload/remove, and the 415-student
+register on the Roster screen.
 
-Still mock (`data/mockData.js`): duties, attendance records, alerts, and the
-student lists inside the marking flow. `context/AttendanceContext.js`
+**Still mock (`data/mockData.js`):** duties, attendance records, alerts, and
+the student lists inside the marking flow. `context/AttendanceContext.js`
 `submitDuty()` only updates local React state — nothing is saved.
 
 The backend work remaining is listed in `CLAUDE.md` §5.
+
+## Supabase setup that lives outside this repo
+
+Schema and policies were applied through the Supabase SQL editor and are not
+yet captured as migration files — worth doing before the pilot so the setup is
+reproducible.
+
+- `staff` — added `auth_user_id`, `phone`, `photo_url`. RLS lets a user update
+  their **own** row, with a `WITH CHECK` clause pinning `role` and `email` to
+  their current values. Without that clause a teacher could set themselves to
+  `admin` in the same statement that changes their phone number.
+- `students`, `duties`, `attendance`, `checkpoints` — read for any signed-in
+  user; writes scoped by role (see `CLAUDE.md` §5.2).
+- Storage bucket `avatars` — public, 2 MB limit, images only. Four policies,
+  each scoped to `(storage.foldername(name))[1] = auth.uid()::text`, so a user
+  can only read, write, update and delete inside their own folder.
 
 ## Adding a screen
 

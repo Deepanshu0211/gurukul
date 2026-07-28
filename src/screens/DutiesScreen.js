@@ -3,11 +3,10 @@ import { View, Text, StyleSheet, SectionList, TouchableOpacity } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import ScreenHeader from "../components/ScreenHeader";
-import ProgressBar from "../components/ProgressBar";
+import GreetingHeader from "../components/GreetingHeader";
 import { DUTIES, NOW, studentsForDuty } from "../data/mockData";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
-import { plural, fmtTime, fmtDuration, givenName } from "../utils/format";
+import { plural, fmtTime, fmtDuration } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useAttendance } from "../context/AttendanceContext";
 
@@ -91,45 +90,21 @@ export default function DutiesScreen({ navigation }) {
 function DutiesHeader({ user, scopeNote, done, total, pending }) {
   const allDone = total > 0 && done === total;
 
-  return (
-    <ScreenHeader
-      eyebrow="RADHE RADHE"
-      title={givenName(user?.name)}
-      subtitle={`${scopeNote} · Friday, ${fmtTime(NOW)}`}
-      right={
-        pending > 0 ? (
-          <Badge tone="warning" text={`${pending} pending`} />
-        ) : allDone ? (
-          <Badge tone="success" text="All clear" icon="checkmark" />
-        ) : null
-      }
-    >
-      {total > 0 && (
-        <View style={styles.progressBlock}>
-          <ProgressBar done={done} total={total} />
-          <Text style={styles.progressText}>
-            <Text style={styles.progressCount}>{done}</Text> of {total} submitted
-          </Text>
-        </View>
-      )}
-    </ScreenHeader>
-  );
-}
+  const badge =
+    pending > 0
+      ? { text: `${pending} pending`, tone: "warning" }
+      : allDone
+      ? { text: "All clear", tone: "success", icon: "checkmark" }
+      : null;
 
-function Badge({ tone, text, icon }) {
-  const toneStyle = tone === "success" ? styles.badgeSuccess : styles.badgeWarning;
-  const textStyle = tone === "success" ? styles.badgeTextSuccess : styles.badgeTextWarning;
   return (
-    <View style={[styles.badge, toneStyle]}>
-      {!!icon && (
-        <Ionicons
-          name={icon}
-          size={11}
-          color={tone === "success" ? colors.success : colors.warning}
-        />
-      )}
-      <Text style={[styles.badgeText, textStyle]}>{text}</Text>
-    </View>
+    <GreetingHeader
+      user={user}
+      meta={`${scopeNote} · Friday, ${fmtTime(NOW)}`}
+      done={done}
+      total={total}
+      badge={badge}
+    />
   );
 }
 
@@ -235,25 +210,9 @@ function EmptyState() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingBottom: 44 },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 44 },
 
-  progressBlock: { marginTop: spacing.md },
-  progressText: { fontFamily: fonts.regular, fontSize: 12.5, color: colors.textMuted, marginTop: 6 },
-  progressCount: { fontFamily: fonts.bold, color: colors.text },
 
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    borderRadius: radius.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  badgeWarning: { backgroundColor: colors.warningBg },
-  badgeSuccess: { backgroundColor: colors.successBg },
-  badgeText: { fontFamily: fonts.semibold, fontSize: 11 },
-  badgeTextWarning: { color: colors.warning },
-  badgeTextSuccess: { color: colors.success },
 
   sectionHeader: {
     flexDirection: "row",

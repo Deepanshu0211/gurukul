@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { fetchStaffByEmail } from "../lib/staff";
 
 const AuthContext = createContext(null);
 
@@ -14,8 +15,8 @@ export function AuthProvider({ children }) {
 
     const loadStaffFor = async (email) => {
       try {
-        const { data } = await supabase.from("staff").select("*").eq("email", email).single();
-        if (!cancelled && data) setUser(data);
+        const staff = await fetchStaffByEmail(email);
+        if (!cancelled && staff) setUser(staff);
       } catch (e) {
         // A failed staff lookup just means we show the login screen.
         console.warn("Could not restore staff record:", e?.message);
@@ -62,6 +63,9 @@ export function AuthProvider({ children }) {
       user,
       restoring,
       login: (staff) => setUser(staff),
+      /** Merge a partial profile update so the UI reflects it immediately,
+       *  without a round trip to re-read the row. */
+      updateUser: (patch) => setUser((prev) => (prev ? { ...prev, ...patch } : prev)),
       logout: async () => {
         // Clear locally even if the network call fails, so the user is never
         // stuck signed in on the device.

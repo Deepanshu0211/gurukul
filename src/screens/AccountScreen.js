@@ -8,6 +8,7 @@ import {
   TextInput,
   Modal,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,23 +17,89 @@ import { ROLE_LABELS, DUTIES } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useAttendance } from "../context/AttendanceContext";
 import { useDialog } from "../components/Dialog";
+import Avatar from "../components/Avatar";
+import { pickImage, uploadAvatar, removeAvatar } from "../lib/avatars";
+import { updateOwnPhone } from "../lib/staff";
 
 export default function AccountScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { records } = useAttendance();
   const dialog = useDialog();
 
-  // Editable locally for now; wiring to Supabase is a backend task.
-  const [phone, setPhone] = useState(user.phone || "");
   const [editing, setEditing] = useState(false);
-  const [draftPhone, setDraftPhone] = useState(phone);
+  const [draftPhone, setDraftPhone] = useState(user.phone || "");
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoSheet, setPhotoSheet] = useState(false);
 
+  const phone = user.phone || "";
   const myDuties = DUTIES.filter((d) => d.staffId === user.id);
   const submitted = myDuties.filter((d) => records[d.id]).length;
 
-  const savePhone = () => {
-    setPhone(draftPhone.trim());
-    setEditing(false);
+  const savePhone = async () => {
+    const next = draftPhone.trim();
+    setSavingPhone(true);
+    try {
+      const updated = await updateOwnPhone(user.id, next);
+      updateUser({ phone: updated?.phone ?? next });
+      setEditing(false);
+    } catch (e) {
+      dialog.alert({
+        icon: "alert-circle-outline",
+        title: "Could not save",
+        message: e.message || "Your phone number wasn't updated. Try again.",
+        destructive: true,
+      });
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
+  const changePhoto = async (source) => {
+    setPhotoSheet(false);
+    try {
+      const uri = await pickImage(source);
+      if (!uri) return; // user backed out
+      setPhotoBusy(true);
+      const url = await uploadAvatar(uri, user.id);
+      updateUser({ photoUrl: url });
+    } catch (e) {
+      dialog.alert({
+        icon: "alert-circle-outline",
+        title: "Photo not updated",
+        message: e.message || "Something went wrong uploading your photo.",
+        destructive: true,
+      });
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const confirmRemovePhoto = () => {
+    setPhotoSheet(false);
+    dialog.confirm({
+      icon: "trash-outline",
+      title: "Remove photo?",
+      message: "Your initial will be shown instead.",
+      confirmLabel: "Remove",
+      destructive: true,
+      onConfirm: async () => {
+        setPhotoBusy(true);
+        try {
+          await removeAvatar(user.id);
+          updateUser({ photoUrl: null });
+        } catch (e) {
+          dialog.alert({
+            icon: "alert-circle-outline",
+            title: "Could not remove",
+            message: e.message || "Your photo wasn't removed. Try again.",
+            destructive: true,
+          });
+        } finally {
+          setPhotoBusy(false);
+        }
+      },
+    });
   };
 
   const confirmLogout = () =>
@@ -51,9 +118,21 @@ export default function AccountScreen() {
         <Text style={styles.pageTitle}>Account</Text>
 
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{(user.name || "?").charAt(0)}</Text>
-          </View>
+          <TouchableOpacity
+            onPress={() => setPhotoSheet(true)}
+            disabled={photoBusy}
+            activeOpacity={0.8}
+            accessibilityLabel="Change profile photo"
+          >
+            <Avatar name={user.name} src={user.photoUrl} size={84} bordered />
+            <View style={styles.cameraBadge}>
+              {photoBusy ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Ionicons name="camera" size={14} color={colors.white} />
+              )}
+            </View>
+          </TouchableOpacity>
           <Text style={styles.profileName}>{user.name}</Text>
           <View style={styles.rolePill}>
             <Text style={styles.rolePillText}>{ROLE_LABELS[user.role]}</Text>
@@ -159,9 +238,53 @@ export default function AccountScreen() {
             autoFocus
             style={styles.sheetInput}
           />
-          <TouchableOpacity style={styles.saveBtn} onPress={savePhone} activeOpacity={0.85}>
-            <Text style={styles.saveBtnText}>Save</Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, savingPhone && { opacity: 0.6 }]}
+            onPress={savePhone}
+            disabled={savingPhone}
+            activeOpacity={0.85}
+          >
+            {savingPhone ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={styles.saveBtnText}>Save</Text>
+            )}
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={photoSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPhotoSheet(false)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setPhotoSheet(false)} />
+        <View style={styles.sheet}>
+          <View style={styles.sheetGrip} />
+          <Text style={styles.sheetTitle}>Profile photo</Text>
+          <Text style={[typography.caption, { marginBottom: spacing.md }]}>
+            Shown to coordinators and on your marked records.
+          </Text>
+
+          <PhotoOption
+            icon="camera-outline"
+            label="Take a photo"
+            onPress={() => changePhoto("camera")}
+          />
+          <PhotoOption
+            icon="images-outline"
+            label="Choose from gallery"
+            onPress={() => changePhoto("library")}
+          />
+          {!!user.photoUrl && (
+            <PhotoOption
+              icon="trash-outline"
+              label="Remove photo"
+              destructive
+              onPress={confirmRemovePhoto}
+            />
+          )}
         </View>
       </Modal>
     </SafeAreaView>
@@ -206,6 +329,17 @@ function ActionRow({ icon, label, onPress }) {
   );
 }
 
+function PhotoOption({ icon, label, destructive, onPress }) {
+  return (
+    <TouchableOpacity style={styles.photoOption} onPress={onPress} activeOpacity={0.7}>
+      <Ionicons name={icon} size={19} color={destructive ? colors.danger : colors.text} />
+      <Text style={[styles.photoOptionLabel, destructive && { color: colors.danger }]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 const Divider = () => <View style={styles.divider} />;
 
 const styles = StyleSheet.create({
@@ -214,15 +348,29 @@ const styles = StyleSheet.create({
   pageTitle: { fontFamily: fonts.bold, fontSize: 28, color: colors.text, letterSpacing: -0.4 },
 
   profileCard: { alignItems: "center", paddingVertical: spacing.md, gap: 5 },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.cardAlt,
+  cameraBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    borderWidth: 2.5,
+    borderColor: colors.bg,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { fontFamily: fonts.bold, fontSize: 28, color: colors.text },
+  photoOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    marginBottom: 4,
+  },
+  photoOptionLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
   profileName: { fontFamily: fonts.bold, fontSize: 20, color: colors.text, marginTop: 4 },
   rolePill: {
     backgroundColor: colors.cardAlt,
