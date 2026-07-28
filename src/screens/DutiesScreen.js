@@ -1,15 +1,24 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, SectionList, TouchableOpacity } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  SectionList,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
 import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
 import GreetingHeader from "../components/GreetingHeader";
-import { DUTIES, NOW, studentsForDuty } from "../data/mockData";
+import { NOW } from "../data/mockData";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
 import { plural, fmtTime, fmtDuration } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
-import { useAttendance } from "../context/AttendanceContext";
+import { useSchoolData } from "../context/SchoolDataContext";
 
 const SECTIONS = {
   URGENT: "urgent",
@@ -19,13 +28,28 @@ const SECTIONS = {
 
 export default function DutiesScreen({ navigation }) {
   const { user } = useAuth();
-  const { records } = useAttendance();
+  const { duties: allDuties, records, loading, error, refresh, studentsForDuty } = useSchoolData();
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Reload on focus so a coordinator's reassignment shows up when a teacher
+  // returns to this tab, rather than only after an app restart.
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  };
 
   const isTeacher = user?.role === "teacher";
 
   const duties = useMemo(
-    () => (isTeacher ? DUTIES.filter((d) => d.staffId === user.id) : DUTIES),
-    [isTeacher, user?.id]
+    () => (isTeacher ? allDuties.filter((d) => d.staffId === user.id) : allDuties),
+    [isTeacher, allDuties, user?.id]
   );
 
   const { urgent, later, done } = useMemo(
@@ -45,6 +69,27 @@ export default function DutiesScreen({ navigation }) {
 
   const openDuty = (id) => navigation.navigate("DutyMarking", { dutyId: id });
 
+  if (loading && duties.length === 0) {
+    return (
+      <SafeAreaView style={[styles.screen, styles.centered]} edges={["top", "left", "right"]}>
+        <ActivityIndicator color={colors.text} />
+        <Text style={styles.centeredText}>Loading today's duties…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && duties.length === 0) {
+    return (
+      <SafeAreaView style={[styles.screen, styles.centered]} edges={["top", "left", "right"]}>
+        <Ionicons name="cloud-offline-outline" size={26} color={colors.textMuted} />
+        <Text style={styles.centeredText}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={refresh} activeOpacity={0.8}>
+          <Text style={styles.retryText}>Try again</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
       <SectionList
@@ -53,6 +98,7 @@ export default function DutiesScreen({ navigation }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
           <DutiesHeader
             user={user}
@@ -296,6 +342,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
+  centered: { alignItems: "center", justifyContent: "center", gap: 10, padding: spacing.xl },
+  centeredText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+    maxWidth: 260,
+  },
+  retryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.text,
+  },
+  retryText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
 
   empty: { alignItems: "center", paddingVertical: 56, gap: 6 },
   emptyTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginTop: 4 },

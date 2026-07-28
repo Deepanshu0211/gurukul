@@ -71,6 +71,9 @@ sleeping children is a real problem.
 | Looking for | File |
 |---|---|
 | Duty status / escalation / tallies | `domain/duties.js` |
+| Safety alerts (SRS F1) | `domain/alerts.js` |
+| Duties, group resolution, submission | `lib/duties.js` |
+| Shared students/duties/attendance state | `context/SchoolDataContext.js` |
 | Time, pluralisation, name formatting | `utils/format.js` |
 | Supabase client and session config | `lib/supabase.js` |
 | Haptic feedback + its on/off preference | `lib/haptics.js` |
@@ -104,14 +107,42 @@ letting anyone enumerate the bucket.
 ## Current state
 
 **Real (Supabase):** authentication and session persistence, staff records,
-profile phone editing, profile photo upload/remove, and the 415-student
-register on the Roster screen.
+profile phone and photo, the 415-student register, duties, and attendance.
+Marking a duty writes to the `attendance` table and locks the duty;
+reassigning writes to `duties`. Every screen reads through
+`SchoolDataContext`, so a coordinator's change is visible to the teacher.
 
-**Still mock (`data/mockData.js`):** duties, attendance records, alerts, and
-the student lists inside the marking flow. `context/AttendanceContext.js`
-`submitDuty()` only updates local React state — nothing is saved.
+**Derived, not stored:** safety alerts. `domain/alerts.js` walks the day's
+submitted attendance and reports each absent student, separating "was seen
+earlier today" from "not seen at all yet". Deriving them means an alert can
+never disagree with the attendance it came from.
+
+**Still mock (`data/mockData.js`):** `NOW` (a simulated 7:42 AM clock),
+`STATUS_META`, `STAFF` and `ROLE_LABELS`. Alert *resolutions* are local React
+state and are lost on restart — there is no `alerts` table yet, and SRS F4
+requires the remark to persist and be audit-logged before the pilot.
 
 The backend work remaining is listed in `CLAUDE.md` §5.
+
+## Data flow
+
+```
+Supabase ──> lib/*.js (queries, row mapping)
+                ↓
+       SchoolDataContext (one copy, shared)
+                ↓
+   domain/*.js (rules applied to plain objects)
+                ↓
+            screens
+```
+
+Screens never query Supabase directly. Anything fetching or writing goes in
+`lib/`, so a schema change touches one file rather than five screens.
+
+Lists reload on focus (`useFocusEffect`) and support pull-to-refresh. That is
+enough for changes to propagate between roles within a session; live push
+across two devices at once would need Supabase Realtime, which is not wired
+up yet.
 
 ## Supabase setup
 

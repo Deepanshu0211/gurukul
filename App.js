@@ -21,7 +21,7 @@ import {
 } from "@expo-google-fonts/manrope";
 import { loadHapticsPreference } from "./src/lib/haptics";
 import { AuthProvider } from "./src/context/AuthContext";
-import { AttendanceProvider } from "./src/context/AttendanceContext";
+import { SchoolDataProvider } from "./src/context/SchoolDataContext";
 import { DialogProvider } from "./src/components/Dialog";
 import RootNavigator from "./src/navigation/RootNavigator";
 
@@ -56,12 +56,12 @@ export default function App() {
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
       <SafeAreaProvider>
         <AuthProvider>
-          <AttendanceProvider>
+          <SchoolDataProvider>
             <DialogProvider>
               <StatusBar style="dark" />
               <RootNavigator />
             </DialogProvider>
-          </AttendanceProvider>
+          </SchoolDataProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </View>

@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -14,10 +15,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
 import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
-import { DUTIES, STAFF, ROLE_LABELS, NOW, studentsForDuty } from "../data/mockData";
+import { STAFF, ROLE_LABELS, NOW } from "../data/mockData";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime, plural, initial } from "../utils/format";
-import { useAttendance } from "../context/AttendanceContext";
+import { useSchoolData } from "../context/SchoolDataContext";
 import { useStudents } from "../lib/students";
 import { useDialog } from "../components/Dialog";
 
@@ -28,21 +29,37 @@ const TABS = [
 ];
 
 export default function RosterScreen() {
-  const { records } = useAttendance();
+  const { duties: DUTIES, records, studentsForDuty, reassignDuty, refresh } = useSchoolData();
+  const dialog = useDialog();
   const [tab, setTab] = useState("duties");
-
-  // Per-day overrides live here for now; defaults stay untouched (SRS B2).
-  const [assignments, setAssignments] = useState(
-    Object.fromEntries(DUTIES.map((d) => [d.id, d.staffId]))
-  );
   const [reassigning, setReassigning] = useState(null);
+
+  // Reload on focus so a submission made by a teacher shows here without an
+  // app restart.
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
   const staffById = (id) => STAFF.find((s) => s.id === id);
   const staffName = (id) => staffById(id)?.name || "Unassigned";
 
-  const applyReassign = (staffId) => {
-    setAssignments((prev) => ({ ...prev, [reassigning.id]: staffId }));
+  // Writes to Supabase, so the teacher losing or gaining the duty sees it
+  // too — this is a today-only override; the recurring default is untouched.
+  const applyReassign = async (staffId) => {
+    const duty = reassigning;
     setReassigning(null);
+    try {
+      await reassignDuty(duty.id, staffId);
+    } catch (e) {
+      dialog.alert({
+        icon: "alert-circle-outline",
+        title: "Could not reassign",
+        message: e.message || "The duty was not reassigned. Try again.",
+        destructive: true,
+      });
+    }
   };
 
   return (
@@ -67,13 +84,14 @@ export default function RosterScreen() {
 
       {tab === "duties" && (
         <DutiesTab
-          assignments={assignments}
+          duties={DUTIES}
           records={records}
           staffName={staffName}
+          studentsForDuty={studentsForDuty}
           onReassign={setReassigning}
         />
       )}
-      {tab === "staff" && <StaffTab assignments={assignments} />}
+      {tab === "staff" && <StaffTab duties={DUTIES} />}
       {tab === "students" && <StudentsTab />}
 
       <Modal
@@ -91,7 +109,7 @@ export default function RosterScreen() {
             default is unchanged.
           </Text>
           <ScrollableStaff
-            current={reassigning ? assignments[reassigning.id] : null}
+            current={reassigning ? reassigning.staffId : null}
             onPick={applyReassign}
           />
         </View>
@@ -100,8 +118,8 @@ export default function RosterScreen() {
   );
 }
 
-function DutiesTab({ assignments, records, staffName, onReassign }) {
-  const withStatus = DUTIES.map((d) => ({ ...d, _status: dutyStatus(d, records, NOW) }));
+function DutiesTab({ duties, records, staffName, studentsForDuty, onReassign }) {
+  const withStatus = duties.map((d) => ({ ...d, _status: dutyStatus(d, records, NOW) }));
   const pending = withStatus.filter((d) => d._status !== DUTY_STATUS.DONE);
   const done = withStatus.filter((d) => d._status === DUTY_STATUS.DONE);
 
@@ -147,7 +165,7 @@ function DutiesTab({ assignments, records, staffName, onReassign }) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.assignLabel}>ASSIGNED TO</Text>
-                <Text style={styles.assignName}>{staffName(assignments[item.id])}</Text>
+                <Text style={styles.assignName}>{staffName(item.staffId)}</Text>
               </View>
               {submitted ? (
                 <View style={styles.doneTag}>
@@ -178,9 +196,9 @@ function DutiesTab({ assignments, records, staffName, onReassign }) {
   );
 }
 
-function StaffTab({ assignments }) {
+function StaffTab({ duties }) {
   const dialog = useDialog();
-  const dutiesFor = (id) => Object.values(assignments).filter((v) => v === id).length;
+  const dutiesFor = (id) => duties.filter((d) => d.staffId === id).length;
   return (
     <SectionList
       sections={[{ title: "", data: STAFF }]}

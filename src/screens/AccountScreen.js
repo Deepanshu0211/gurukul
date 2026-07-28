@@ -15,9 +15,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
 import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
-import { ROLE_LABELS, DUTIES } from "../data/mockData";
+import { ROLE_LABELS } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
-import { useAttendance } from "../context/AttendanceContext";
+import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
 import Avatar from "../components/Avatar";
 import { pickImage, uploadAvatar, removeAvatar } from "../lib/avatars";
@@ -26,7 +26,7 @@ import { haptics, isHapticsEnabled, setHapticsEnabled } from "../lib/haptics";
 
 export default function AccountScreen() {
   const { user, logout, updateUser } = useAuth();
-  const { records } = useAttendance();
+  const { duties, records } = useSchoolData();
   const dialog = useDialog();
 
   const [editing, setEditing] = useState(false);
@@ -44,7 +44,7 @@ export default function AccountScreen() {
   };
 
   const phone = user.phone || "";
-  const myDuties = DUTIES.filter((d) => d.staffId === user.id);
+  const myDuties = duties.filter((d) => d.staffId === user.id);
   const submitted = myDuties.filter((d) => records[d.id]).length;
 
   const savePhone = async () => {

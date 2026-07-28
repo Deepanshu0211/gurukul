@@ -63,15 +63,17 @@ project — build on it, don't replace it.
 | Profile / logout | `src/screens/AccountScreen.js` |
 | Role → which tabs render | `src/navigation/RootNavigator.js` |
 | Fake session state | `src/context/AuthContext.js` |
-| In-memory attendance records | `src/context/AttendanceContext.js` |
-| Hardcoded students/duties/alerts | `src/data/mockData.js` |
+| Shared students/duties/attendance | `src/context/SchoolDataContext.js` |
+| Simulated clock, status types, staff | `src/data/mockData.js` |
 | Colors, spacing, type scale | `src/theme/theme.js` |
 | Card/Pill/IconCircle building blocks | `src/components/ui.js` |
 
-**Attendance is still mock data and in-memory state.**
-`AttendanceContext.submitDuty()` just updates local React state; nothing is saved
-anywhere real, no email goes out, no safety check runs. That's the entire job of
-Section 5 below.
+**Attendance now saves to Supabase.** `SchoolDataContext.submitDuty()` writes
+every student's mark to the `attendance` table and locks the duty. Safety
+alerts are derived from that data in `domain/alerts.js` (SRS F1).
+
+Still missing: no email goes out, alert resolutions are not persisted (no
+`alerts` table yet), and duties are not generated nightly — see Section 5.
 
 Already on Supabase, though: authentication with session persistence, staff
 records, profile phone editing, profile photo upload/remove (bucket `avatars`),
@@ -89,16 +91,16 @@ duplicate them under a different name.
 
 | Concept | Exact name in code | Notes |
 |---|---|---|
-| Student record | `STUDENTS` (mock) → will become Supabase `students` table | field `adm` = admission number, `key` = `"{grade}\|{section}"`, `label` = e.g. `"4 A"` |
-| A checkpoint+group+staff for one day | `DUTIES` (mock) → Supabase `duties` table | fields: `id`, `checkpoint`, `group`, `start`, `end`, `staffId` |
+| Student record | Supabase `students`, mapped by `lib/students.js` | field `adm` = admission number, `key` = `"{grade}\|{section}"`, `label` = e.g. `"4 A"` |
+| A checkpoint+group+staff for one day | Supabase `duties`, mapped by `lib/duties.js` | fields: `id`, `checkpoint`, `group`, `start`, `end`, `staffId` |
 | Computed duty progress (not stored) | `dutyStatus(duty, records)` → returns `"upcoming" \| "due" \| "overdue" \| "done"` | UI label mapping: `STATUS_LABEL` in `DutiesScreen.js` (Upcoming / Due now / Overdue / Submitted) |
-| One student's mark | `records[dutyId].statuses[studentId]` (mock) → Supabase `attendance` table | |
+| One student's mark | `records[dutyId].statuses[admissionNo]` → Supabase `attendance` | null status = Present |
 | Present/Absent/Home/etc. codes | `STATUS_META` = `{ A, H, S, V, O, G, Y }` | Present has no code — it's the default/absence-of-an-entry |
 | Statuses that carry to later checkpoints | `SPANNING` = `["H","S","O","G"]` | matches `spanning_statuses` table in the schema |
 | Logged-in person | `useAuth().user` → `{ id, name, role, email, ... }` | `role` is one of `teacher \| coordinator \| management \| admin \| nurse` |
-| Attendance state/actions | `useAttendance()` → `{ records, submitDuty }` | `submitDuty(dutyId, statuses, markedBy)` — this is the function to make real |
-| Safety flags | `ALERTS` (mock) → Supabase `alerts` table | kinds used so far: `OK`, `ALERT`, `OVERDUE` |
-| Get a duty's student list | `studentsForDuty(duty)` | keep this helper, back it with a real query later |
+| Shared data + actions | `useSchoolData()` → `{ students, duties, records, studentsForDuty, submitDuty, reassignDuty, refresh }` | reads/writes Supabase; every screen uses this rather than fetching its own copy |
+| Safety alerts | `deriveAlerts()` in `domain/alerts.js` | DERIVED from attendance, not stored. Kinds: `went_missing`, `not_seen`. Resolutions are not yet persisted |
+| Get a duty's student list | `studentsForDuty(duty)` from `useSchoolData()` | resolves the group against the real register (`resolveGroup` in lib/duties.js) |
 
 ## 4. Roles and navigation (already wired — don't restructure without reason)
 
