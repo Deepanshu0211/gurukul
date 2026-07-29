@@ -10,7 +10,7 @@ import { givenName } from "../utils/format";
 // so no interface element is ever laid over the deity. Transparent PNG, so
 // it can sit at a higher opacity than the illustration could.
 const MOTIF = require("../assets/peacock-feather.png");
-const MOTIF_OPACITY = 0.5;
+const MOTIF_OPACITY = 0.6;
 
 const AVATAR_SIZE = 52;
 // Strip reserved on the right for the motif; content is padded clear of it.
