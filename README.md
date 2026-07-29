@@ -133,8 +133,13 @@ Detail and ordering in [`CLAUDE.md`](CLAUDE.md) §5.
 ## Notes for the team
 
 Test accounts are in [`docs/dev-test-credentials.md`](docs/dev-test-credentials.md).
-They are disposable, but they open the real student register — rotate them
-before sharing this repository more widely, and delete them before rollout.
+Disposable — delete them and issue real staff logins before rollout.
+
+**The 415 student names in this repository are generated, not the school's
+real roll.** Structure is real — admission numbers, all 23 class-sections, the
+residential/day-scholar split — so everything behaves as it will in
+production. See [`docs/data/README.md`](docs/data/README.md). When the real
+register is imported, this repository must stop being public.
 
 `supabase/reset-test-data.sql` clears attendance and returns every duty to
 pending, for a clean run-through.

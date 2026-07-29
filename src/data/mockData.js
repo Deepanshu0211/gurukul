@@ -1,25 +1,30 @@
 // Mock data ported from gurukula-attendance-prototype.jsx, trimmed for the RN app.
 // Replace with Supabase-backed queries later (see self-build-guide.md).
 
+// Generated names, matching docs/data/students_415.csv. Nothing here is a real
+// student — see docs/data/README.md.
+//
+// Screens read students from Supabase via SchoolDataContext; this small set
+// only exists so components can be rendered in isolation.
 const RAW = [
-  ["S2401021", "Ankur", 2, "A", "R", 201],
-  ["S2401020", "Kartik Kumar", 2, "A", "R", 211],
-  ["S2401011", "Krishna Yadav", 2, "A", "R", 212],
-  ["S2402002", "Advik Vyas", 3, "A", "R", 301],
-  ["S2403003", "Abhilash Sahu", 4, "A", "R", 401],
-  ["S2504016", "Agastya Walia", 4, "Vedic", "V", 0],
-  ["S2505013", "Aarjyansh Pratap Chauchan", 5, "A", "R", 501],
-  ["S2506009", "Aaron Mukherjee", 6, "KRISHNA", "R", 601],
-  ["S2102008", "Abhinandan Kumar", 6, "BALRAM", "D", 651],
-  ["S2103009", "Aarsh Goswami", 7, "BALRAM", "D", 751],
-  ["S2204008", "Adarsh Kumar", 7, "KRISHNA", "R", 701],
-  ["S2508001", "Aayansh Agrawal", 8, "BALRAM", "R", 851],
-  ["S2306003", "Aarav Behera", 8, "KRISHNA", "R", 801],
-  ["S2408022", "Aadarsh Arvind Sahu", 9, "BALRAM", "D", 951],
-  ["S2408008", "Aarav Gupta", 9, "KRISHNA", "R", 901],
-  ["S2207019", "Adarsh Patidar", 10, "BALRAM", "R", 1051],
-  ["S2006082", "Adityavardhana Kashyap", 11, "BALRAM", "R", 1151],
-  ["S2209002", "Abhinav Verma", 12, "BALRAM", "R", 1251],
+  ["S2401021", "Aarav Sharma", 2, "A", "R", 201],
+  ["S2401020", "Vihaan Patel", 2, "A", "R", 211],
+  ["S2401011", "Rohan Mehta", 2, "A", "R", 212],
+  ["S2402002", "Kabir Singh", 3, "A", "R", 301],
+  ["S2403003", "Damodar Rathore", 4, "A", "R", 401],
+  ["S2504016", "Nimai Joshi", 4, "Vedic", "V", 0],
+  ["S2505013", "Advait Kulkarni", 5, "A", "R", 501],
+  ["S2506009", "Keshav Nair", 6, "KRISHNA", "R", 601],
+  ["S2102008", "Anirudh Verma", 6, "BALRAM", "D", 651],
+  ["S2103009", "Tejas Pandey", 7, "BALRAM", "D", 751],
+  ["S2204008", "Madhav Reddy", 7, "KRISHNA", "R", 701],
+  ["S2508001", "Shaurya Gupta", 8, "BALRAM", "R", 851],
+  ["S2306003", "Vedant Iyer", 8, "KRISHNA", "R", 801],
+  ["S2408022", "Pranav Chauhan", 9, "BALRAM", "D", 951],
+  ["S2408008", "Arjun Malhotra", 9, "KRISHNA", "R", 901],
+  ["S2207019", "Yash Tiwari", 10, "BALRAM", "R", 1051],
+  ["S2006082", "Siddharth Rao", 11, "BALRAM", "R", 1151],
+  ["S2209002", "Ishaan Bansal", 12, "BALRAM", "R", 1251],
 ];
 
 const secShort = (sec) => (sec === "A" ? "A" : sec === "Vedic" ? "Vedic" : sec[0]);
@@ -109,41 +114,6 @@ export const SEED_RECORDS = {
   "bfast-sr": { statuses: {}, at: 448, markedBy: "t2" },
 };
 
-// Alerts mirror the `alerts` table. `kind` matches the schema's alert kinds.
-// Per SRS F4 an alert is never auto-resolved — a person closes it with a
-// written remark, which is why `closedAt`/`closeRemark` exist here.
-export const ALERTS = [
-  {
-    id: "al2",
-    kind: "present_then_absent",
-    severity: "critical",
-    student: "Rahul Sharma",
-    detail: "Class 7 Krishna · Barsana house",
-    text: "Present at Mangalarati (4:56 AM), marked ABSENT at Breakfast prasadam",
-    time: "7:28 AM",
-    closedAt: null,
-    closeRemark: null,
-  },
-  {
-    id: "al1",
-    kind: "overdue_duty",
-    severity: "warning",
-    student: null,
-    detail: "Ajay Solanki Pr · Senior residential",
-    text: "Breakfast prasadam not submitted within its window",
-    time: "7:50 AM",
-    closedAt: null,
-    closeRemark: null,
-  },
-  {
-    id: "al0",
-    kind: "present_then_absent",
-    severity: "critical",
-    student: "Devansh Yadav",
-    detail: "Class 7 Krishna · Nandgaon house",
-    text: "Present at Mangalarati, marked ABSENT at Morning attendance",
-    time: "Yesterday, 7:44 AM",
-    closedAt: "Yesterday, 8:10 AM",
-    closeRemark: "Found in the library — had gone early for exam revision.",
-  },
-];
+// Alerts are no longer mock data — they are derived from real attendance in
+// domain/alerts.js (SRS F1), so they can never disagree with the marks.
+

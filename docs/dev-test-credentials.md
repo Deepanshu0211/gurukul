@@ -4,11 +4,11 @@ Throwaway Supabase Auth accounts for testing the login flow during
 development. They share one password because the accounts themselves are
 disposable.
 
-> **These accounts open the real student register.** The passwords are
-> made up; the 415 student records behind them are the school's actual
-> 2025–26 list — real names, admission numbers and residential status.
-> Rotate these before the repository or the Supabase project is shared any
-> wider, and delete them entirely before rollout.
+> The 415 student records behind these accounts use **generated names**, not
+> the school's real roll — see [`docs/data/README.md`](data/README.md).
+> Delete these accounts and issue real staff logins before rollout, and note
+> that once the real register is imported this repository must not stay
+> public.
 
 | Email | Password | Role |
 |---|---|---|
