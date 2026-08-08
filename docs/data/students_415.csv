@@ -1,416 +1,416 @@
-Admission No,Student Name,Grade,Section,Student Type,House,Roll No
-S2401021,"Ankur",2,A,Residential,GOVARDHAN,201
-S2502008,"Charit Sengar",2,A,Day Scholar,Assign,202
-S2401008,"Damodar Sikder",2,A,Day Scholar,VRINDAVAN,203
-S2401009,"Deeptanshu Vhanmane",2,A,Residential,BARSANA,204
-S2502004,"Divyansh Chaudhry",2,A,Day Scholar,Assign,205
-S2502005,"Edhas Singh",2,A,Day Scholar,Assign,206
-S2502013,"Gobindo Sigha Roy",2,A,Day Scholar,Assign,207
-S2502009,"Govindram Chaudhary",2,A,Residential,Assign,208
-S2502012,"Harshit Singh",2,A,Residential,Assign,209
-S2401019,"Kanan Arora",2,A,Residential,NANDGAON,210
-S2401020,"Kartik Kumar",2,A,Residential,VRINDAVAN,211
-S2401011,"Krishna Yadav",2,A,Residential,BARSANA,212
-S2401016,"Madhav Chaudhary",2,A,Residential,GOVARDHAN,213
-S2502007,"Madhav Siwach",2,A,Residential,Assign,214
-S2502011,"Madhavan Patra",2,A,Day Scholar,Assign,215
-S2401013,"Mayank Rajput",2,A,Day Scholar,NANDGAON,216
-S2401004,"Parth Mishra",2,A,Day Scholar,VRINDAVAN,217
-S2502002,"Pawan Kumar Sunil Yadav",2,A,Day Scholar,Assign,218
-S2401017,"Purnima Agnihotri",2,A,Day Boarding,BARSANA,218
-S2401022,"Raghav Sharma",2,A,Day Scholar,GOVARDHAN,219
-S2401014,"Rajteelak Yadav",2,A,Residential,NANDGAON,220
-S2502010,"Rudraksh Baswala",2,A,Day Scholar,Assign,221
-S2502001,"Satvik",2,A,Residential,Assign,222
-S2502006,"Shivaay Bansal",2,A,Residential,Assign,223
-S2401003,"Yogit Mishra",2,A,Day Scholar,GOVARDHAN,224
-S2402002,"Advik Vyas",3,A,Residential,BARSANA,301
-S2402003,"Arnav Patidar",3,A,Residential,NANDGAON,302
-S2402001,"Avyan Aadit",3,A,Residential,VRINDAVAN,303
-S2402004,"Banshi Pandey",3,A,Residential,BARSANA,304
-S2503005,"Daksh",3,A,Day Scholar,Assign,305
-S2301001,"Dev Upadhyay",3,A,Day Scholar,GOVARDHAN,306
-S2402005,"Divyansh Dhiraj Sharma",3,A,Residential,NANDGAON,307
-S2301009,"Gaurang Sharma",3,A,Day Scholar,VRINDAVAN,308
-S2402006,"Ghanashyam Saha",3,A,Residential,BARSANA,309
-S2503007,"Govind Yadav",3,A,Residential,Assign,310
-S2503003,"Krishnam Garg",3,A,Day Scholar,Assign,311
-S2503004,"Mukund Bairagi",3,A,Residential,Assign,312
-S2301006,"Namish Thakur",3,A,Day Scholar,VRINDAVAN,313
-S2301022,"Prasiddha Pokhrel",3,A,Day Scholar,BARSANA,314
-S2301010,"Preyas Dubey",3,A,Day Scholar,GOVARDHAN,315
-S2503001,"Swaroop Choudhary",3,A,Residential,Assign,316
-S2301025,"Vaman Dasrapuria",3,A,Day Scholar,GOVARDHAN,317
-S2503002,"Vivan Shaurya",3,A,Residential,Assign,318
-S2403003,"Abhilash Sahu",4,A,Residential,NANDGAON,401
-S2504002,"Abhinandan",4,A,Residential,Assign,402
-S2403010,"Abhyudaya Tyagi",4,A,Residential,VRINDAVAN,403
-S2504001,"Anant Hooda",4,A,Day Scholar,Assign,404
-S2201007,"Chaitanya",4,A,Day Scholar,GOVARDHAN,405
-S2504006,"Devansh",4,A,Residential,Assign,406
-S2504012,"Devesh",4,A,Day Scholar,Assign,407
-S2403011,"Giridhari Mandal",4,A,Residential,GOVARDHAN,408
-S2504004,"Hemant Kumar",4,A,Residential,Assign,409
-S2302006,"Kartikey Bisht",4,A,Residential,NANDGAON,410
-S2403008,"Karunamayi",4,A,Day Scholar,VRINDAVAN,411
-S2403005,"Krishn Chaitanya",4,A,Day Scholar,NANDGAON,412
-S2403009,"Krishna Sreerama",4,A,Day Scholar,VRINDAVAN,413
-S2504003,"Kunj Agnihotri",4,A,Day Scholar,Assign,414
-S2504009,"Narayan Sahu",4,A,Residential,Assign,415
-S2302013,"Nitai",4,A,Day Scholar,GOVARDHAN,416
-S2504005,"Prabhas Saraswat",4,A,Residential,Assign,417
-S2201013,"Radha",4,A,Day Scholar,NANDGAON,418
-S2504008,"Rudra Shankar Tiwari",4,A,Day Scholar,Assign,419
-S2302008,"Rudrasingh Chauhan",4,A,Residential,VRINDAVAN,420
-S2504011,"Sarthak Das",4,A,Residential,Assign,421
-S2504007,"Shaurya Shukla",4,A,Residential,Assign,422
-S2403007,"Shubhankar Singhal",4,A,Residential,BARSANA,423
-S2504010,"Spandan Kiran Ambre",4,A,Residential,Assign,424
-S2201003,"Viraj",4,A,Day Scholar,GOVARDHAN,425
-S2504016,"Agastya Walia",4,Vedic,Vedic School,NANDGAON,0
-S2504014,"Harsh Solanki",4,Vedic,Vedic School,BARSANA,0
-S2504017,"Nimai D. Rana",4,Vedic,Vedic School,VRINDAVAN,0
-S2504013,"Nimish Upmanyu",4,Vedic,Vedic School,GOVARDHAN,0
-S2504015,"Nitai Kalaskar",4,Vedic,Vedic School,NANDGAON,0
-S2504018,"Shiva Verma",4,Vedic,Vedic School,BARSANA,0
-S2505013,"Aarjyansh Pratap Chauchan",5,A,Residential,Assign,501
-S2505012,"Abhay Pratap Singh",5,A,Day Scholar,Assign,502
-S2101006,"Aditya Tiwari",5,A,Residential,GOVARDHAN,503
-S2101007,"Advik Munde",5,A,Residential,NANDGAON,504
-S2505014,"Atharv Tyagi",5,A,Residential,Assign,505
-S2404004,"Bhuvan Sundar",5,A,Day Scholar,BARSANA,506
-S2505002,"Darshit Meena",5,A,Residential,Assign,507
-S2505001,"Divyansh Modi",5,A,Day Scholar,Assign,508
-S2101016,"Gaur Govind Raghunath",5,A,Day Scholar,BARSANA,509
-S2404013,"Gopal Krishna Jagannath",5,A,Residential,VRINDAVAN,510
-S2505016,"Gopalchandra Nedungadi",5,A,Day Scholar,Assign,511
-S2505006,"Gouransh Porwal",5,A,Residential,Assign,512
-S2202005,"Jayansh Chadha",5,A,Residential,NANDGAON,513
-S2505015,"Karlakunta Churna Chandrahass Naidu",5,A,Residential,Assign,514
-S2404012,"Krishna Dhamija",5,A,Day Scholar,VRINDAVAN,515
-S2303015,"Laksh Choudhary",5,A,Residential,BARSANA,516
-S2202003,"Lakshay Patidar",5,A,Residential,GOVARDHAN,517
-S2505011,"Madhav Sandu",5,A,Day Scholar,Assign,518
-S2202009,"Madhav Shrivastava",5,A,Residential,NANDGAON,519
-S2303009,"Navtej Singh Raghuwanshi",5,A,Residential,VRINDAVAN,520
-S2303016,"Nikhil Pachori",5,A,Day Scholar,BARSANA,521
-S2303003,"Nikunj Singh Raghuwanshi",5,A,Residential,GOVARDHAN,522
-S2505010,"Nitai",5,A,Residential,Assign,523
-S2505019,"Ojas Omer",5,A,Residential,Assign,524
-S2404003,"Parikshit Rajkumar Chaudhari",5,A,Residential,NANDGAON,525
-S2505008,"Parikshit Verma",5,A,Residential,Assign,526
-S2505017,"Parmjeet Singh",5,A,Residential,Assign,527
-S2101010,"Parth Biswas",5,A,Day Scholar,VRINDAVAN,528
-S2505007,"Reyansh Sameer Mestry",5,A,Residential,Assign,529
-S2505018,"Rudra Kumar Chaudhary",5,A,Residential,Assign,530
-S2404011,"Shivam",5,A,Residential,NANDGAON,531
-S2404010,"Shobhit Lohkana",5,A,Residential,VRINDAVAN,532
-S2404008,"Shyam Krishna Yadav",5,A,Residential,BARSANA,533
-S2202010,"Suryansh",5,A,Day Scholar,GOVARDHAN,534
-S2505003,"Trinabh Gaur",5,A,Day Scholar,Assign,535
-S2505009,"Vinayak Bansal",5,A,Day Scholar,Assign,536
-S2101013,"Vishwambhar Dasrapuria",5,A,Day Scholar,NANDGAON,537
-S2404007,"Yaksh Pandey",5,A,Residential,VRINDAVAN,538
-S2505004,"Yathvik Gowda",5,A,Residential,Assign,539
-S2303020,"Yadu Vanshi Saine",5,Vedic,Vedic School,VRINDAVAN,1302
-S2102008,"Abhinandan Kumar",6,BALRAM,Day Scholar,GOVARDHAN,651
-S2506014,"Adarsh Raj",6,BALRAM,Residential,Assign,652
-S2506026,"Aditya Tiwari",6,BALRAM,Day Scholar,Assign,653
-S2203011,"Arpit Chaudhary",6,BALRAM,Day Scholar,NANDGAON,654
-S2506021,"Arpit Sharma",6,BALRAM,Day Scholar,Assign,655
-S2506004,"Atharv Kumar Agrawal",6,BALRAM,Residential,Assign,656
-S2506007,"Atul Mazhi",6,BALRAM,Residential,Assign,657
-S2203008,"Balaram Das",6,BALRAM,Residential,VRINDAVAN,658
-S2304002,"Dhananjay Sardar",6,BALRAM,Residential,GOVARDHAN,659
-S2405009,"Dhruvansh Gupta",6,BALRAM,Residential,VRINDAVAN,660
-S2506029,"Harish Upadhyay",6,BALRAM,Residential,Assign,0
-S2405010,"Harshit Arora",6,BALRAM,Residential,NANDGAON,661
-S2506024,"Harshwardhan",6,BALRAM,Residential,Assign,662
-S2506016,"Kartikmani Sharma",6,BALRAM,Day Scholar,Assign,663
-S2405012,"Kunal Nirmal",6,BALRAM,Residential,BARSANA,664
-S2506011,"Medhansh Goyal",6,BALRAM,Residential,Assign,665
-S2203001,"Parikshit Singh",6,BALRAM,Residential,NANDGAON,666
-S2304008,"Pradyumn Kadam",6,BALRAM,Day Scholar,BARSANA,667
-S2405015,"Raghav Sreerama",6,BALRAM,Day Scholar,GOVARDHAN,668
-S2506027,"Raj Pratap Singh",6,BALRAM,Day Scholar,Assign,669
-S2506022,"Rishab Yadav",6,BALRAM,Residential,Assign,670
-S2506013,"Rohan Sharma",6,BALRAM,Residential,Assign,671
-S2304011,"Shreyas Dubey",6,BALRAM,Day Scholar,GOVARDHAN,672
-S2405008,"Soham G.",6,BALRAM,Residential,VRINDAVAN,673
-S2506028,"Ved Veekshit Dudam",6,BALRAM,Day Scholar,Assign,674
-S2203015,"Vrindavan Chandra Das",6,BALRAM,Day Scholar,GOVARDHAN,675
-S2506018,"Yatharth Sharma",6,BALRAM,Residential,Assign,676
-S2506009,"Aaron Mukherjee",6,KRISHNA,Residential,Assign,601
-S2506019,"Agastya Bhardwaj",6,KRISHNA,Residential,Assign,602
-S2304015,"Akhil Pachori",6,KRISHNA,Day Scholar,NANDGAON,603
-S2304013,"Akshaj Singh",6,KRISHNA,Residential,VRINDAVAN,604
-S2405019,"Akshat Mishra",6,KRISHNA,Day Scholar,GOVARDHAN,605
-S2304006,"Ansh Singh",6,KRISHNA,Residential,BARSANA,606
-S2506023,"Arnav Chaudhary",6,KRISHNA,Residential,Assign,607
-S2405002,"Aryan Raj Patel",6,KRISHNA,Residential,BARSANA,608
-S2304014,"Atharv Choudhary",6,KRISHNA,Residential,GOVARDHAN,609
-S2506006,"Atharv Kumar",6,KRISHNA,Residential,Assign,610
-S2506008,"Atharva Sharma",6,KRISHNA,Day Scholar,Assign,611
-S2304022,"Harshit Raj Mishra",6,KRISHNA,Residential,VRINDAVAN,612
-S2102009,"Jayaditya Chauhan",6,KRISHNA,Day Scholar,BARSANA,613
-S2203007,"Jayant Patidar",6,KRISHNA,Residential,GOVARDHAN,614
-S2506017,"Kavy Gupta",6,KRISHNA,Residential,Assign,615
-S2304012,"Keertivardhan Singh Bhadouriya",6,KRISHNA,Residential,NANDGAON,616
-S2203012,"Krishna",6,KRISHNA,Day Scholar,VRINDAVAN,617
-S2405016,"Mayank Rajput",6,KRISHNA,Day Scholar,GOVARDHAN,618
-S2506002,"Naitik Bansal",6,KRISHNA,Day Scholar,Assign,619
-S2506015,"Pratyaksh",6,KRISHNA,Residential,Assign,620
-S2506001,"Rajvansh Verma",6,KRISHNA,Residential,Assign,621
-S2203004,"Rhythm Ranjan",6,KRISHNA,Residential,BARSANA,622
-S2506005,"Rishabh Agrawal",6,KRISHNA,Residential,Assign,623
-S2506012,"Siddharth Choudhary",6,KRISHNA,Residential,Assign,624
-S2405018,"Srivas Sadhukhan",6,KRISHNA,Residential,NANDGAON,625
-S2506020,"Vedansh Tyagi",6,KRISHNA,Residential,Assign,626
-202102150,"Vishal",6,KRISHNA,Residential,BARSANA,627
-S2304021,"Krishna Jadhav",6,Vedic,Vedic School,GOVARDHAN,1303
-S2304018,"Rohan Bhopale",6,Vedic,Vedic School,BARSANA,1304
-S2304019,"Srinivas Nayak",6,Vedic,Vedic School,NANDGAON,1305
-S2103009,"Aarsh Goswami",7,BALRAM,Day Scholar,VRINDAVAN,751
-S2103001,"Amber Agnihotri",7,BALRAM,Residential,GOVARDHAN,752
-S2406028,"Aryan Amit",7,BALRAM,Residential,NANDGAON,753
-S2204010,"Aryan Ask",7,BALRAM,Day Scholar,GOVARDHAN,754
-S2406001,"Aviral Sharma",7,BALRAM,Residential,BARSANA,755
-S2507006,"Daksh Bainsla",7,BALRAM,Residential,Assign,756
-S2507005,"Daman Kaushal",7,BALRAM,Residential,Assign,757
-S2406013,"Hardik G.",7,BALRAM,Residential,VRINDAVAN,758
-S2507018,"Hariom Upahyay",7,BALRAM,Residential,Assign,0
-S2507017,"Hridyesh Parashar",7,BALRAM,Residential,Assign,759
-S2406004,"Karmjeet Lakshman Singh",7,BALRAM,Residential,NANDGAON,760
-S2507010,"Kartik Chhonkur",7,BALRAM,Residential,Assign,761
-S2507007,"Krishav Kag",7,BALRAM,Residential,Assign,762
-S2406030,"Madhukar",7,BALRAM,Residential,VRINDAVAN,763
-S2507011,"Mannu Arora",7,BALRAM,Day Scholar,Assign,764
-S2406008,"Nakul Arora",7,BALRAM,Residential,NANDGAON,765
-S2406036,"Narendra Singh",7,BALRAM,Day Scholar,VRINDAVAN,766
-S2305004,"Prabesh Pokhrel",7,BALRAM,Day Scholar,GOVARDHAN,767
-S2406025,"Radhakant Rout",7,BALRAM,Day Scholar,VRINDAVAN,768
-S2507008,"Raj Gupta",7,BALRAM,Residential,Assign,769
-S2507003,"Samarth Shadija",7,BALRAM,Residential,Assign,770
-S2507001,"Sheekhar Kumar Kushwaha",7,BALRAM,Residential,Assign,771
-S2507009,"Sohampreet Singh",7,BALRAM,Residential,Assign,772
-S2507004,"Sojal Ajay Dange",7,BALRAM,Residential,Assign,773
-S2204008,"Adarsh Kumar",7,KRISHNA,Residential,BARSANA,701
-S2406012,"Amrit Singh",7,KRISHNA,Residential,NANDGAON,702
-S2406029,"Aviral Pandey",7,KRISHNA,Residential,VRINDAVAN,703
-S2204009,"Daksh Tanwar",7,KRISHNA,Residential,GOVARDHAN,704
-S2406002,"Devansh Yadav",7,KRISHNA,Residential,VRINDAVAN,705
-S2507016,"Dewank Aggarwal",7,KRISHNA,Residential,Assign,706
-S2406017,"Govind Kumar Verma",7,KRISHNA,Residential,NANDGAON,707
-S2406014,"Harshvardhan Rajpoot",7,KRISHNA,Residential,NANDGAON,708
-S2305005,"Jai Mandal",7,KRISHNA,Residential,VRINDAVAN,709
-S2507012,"Jai Mehta",7,KRISHNA,Residential,Assign,710
-S2406003,"Kapil Sutradhar",7,KRISHNA,Residential,BARSANA,711
-S2507015,"Kripal Raghava Ananthoju",7,KRISHNA,Residential,Assign,712
-S2507002,"Laddu Gopal Prasad",7,KRISHNA,Residential,Assign,713
-S2507013,"Mayank Chandra",7,KRISHNA,Residential,Assign,714
-S2507014,"Pushpendra Rawat",7,KRISHNA,Residential,Assign,715
-S2305001,"Saksham Singh Bhadoriya",7,KRISHNA,Residential,GOVARDHAN,716
-S2406015,"Shivam Kukreti",7,KRISHNA,Residential,BARSANA,717
-S2406026,"Shubh Tewari",7,KRISHNA,Residential,GOVARDHAN,718
-S2406006,"Vashu Yadav",7,KRISHNA,Residential,NANDGAON,719
-S2305015,"Yash Bhardwaj",7,KRISHNA,Residential,VRINDAVAN,720
-S2406020,"Yatin Chaudhary",7,KRISHNA,Residential,BARSANA,721
-S2406019,"Yuvraj Saraswat",7,KRISHNA,Residential,GOVARDHAN,722
-S2305018,"Jagannath Supekar",7,Vedic,Vedic School,BARSANA,1307
-S2305020,"Krishna Shinde",7,Vedic,Vedic School,VRINDAVAN,1308
-S2508001,"Aayansh Agrawal",8,BALRAM,Residential,Assign,851
-S2205027,"Adhiraj Chaturvedi",8,BALRAM,Day Scholar,VRINDAVAN,852
-S2104012,"Aryan Kumar Jha",8,BALRAM,Residential,BARSANA,853
-S2306026,"Atharv Pandey",8,BALRAM,Day Scholar,GOVARDHAN,854
-S2407022,"Chaitanya Sharma",8,BALRAM,Residential,NANDGAON,855
-S2407020,"Damodar Dhamija",8,BALRAM,Day Scholar,VRINDAVAN,856
-S2508004,"Deepak Sharma",8,BALRAM,Residential,Assign,857
-S2306017,"Devyam Singh Jaisawat",8,BALRAM,Residential,BARSANA,858
-S2306029,"Govind Prajapati",8,BALRAM,Residential,NANDGAON,859
-S2508018,"Jigar",8,BALRAM,Residential,Assign,0
-S2306028,"Madhav Pranav Vyas",8,BALRAM,Day Scholar,VRINDAVAN,860
-S2508017,"Naveen",8,BALRAM,Residential,Assign,0
-S2508008,"Parth",8,BALRAM,Residential,Assign,861
-S2003122,"Parth Vashisth",8,BALRAM,Day Scholar,VRINDAVAN,862
-S2306022,"Rajveer Thawait",8,BALRAM,Residential,BARSANA,863
-S2508010,"Ritu Raj",8,BALRAM,Residential,Assign,864
-S2407009,"Shivansh Upreti",8,BALRAM,Residential,GOVARDHAN,865
-S2407005,"Sumedhu Sharma",8,BALRAM,Residential,BARSANA,866
-S2508009,"Tanish Mondal",8,BALRAM,Day Scholar,Assign,867
-S2508014,"Uday Gautam",8,BALRAM,Day Scholar,Assign,868
-S2205001,"Vedansh Verma",8,BALRAM,Residential,GOVARDHAN,869
-S2508003,"Vishvesh Dwivedi",8,BALRAM,Residential,Assign,870
-S2306003,"Aarav Behera",8,KRISHNA,Residential,NANDGAON,801
-S2508015,"Aayushmaan Jadon",8,KRISHNA,Residential,Assign,802
-S2508013,"Arjun Parihar",8,KRISHNA,Residential,Assign,803
-S2205020,"Bhuwan Raj Goswami",8,KRISHNA,Residential,VRINDAVAN,804
-S2003135,"Chaitanya Kedia",8,KRISHNA,Day Scholar,GOVARDHAN,805
-S2508002,"Dabbu",8,KRISHNA,Residential,Assign,806
-S2508006,"Eshansh Agrawal",8,KRISHNA,Day Scholar,Assign,807
-S2104001,"Gauransh Thapar",8,KRISHNA,Residential,GOVARDHAN,808
-S2407023,"Kaushik Karn",8,KRISHNA,Residential,BARSANA,809
-S2205024,"Luv Saini",8,KRISHNA,Residential,NANDGAON,810
-S2407011,"Namish Chaudhary",8,KRISHNA,Residential,GOVARDHAN,811
-S2508016,"Neel Madhav Singha Roy",8,KRISHNA,Day Scholar,Assign,812
-S2003109,"P. Damodar Patra",8,KRISHNA,Residential,NANDGAON,813
-S2306001,"Pradyumna Jhawar",8,KRISHNA,Residential,BARSANA,814
-S2306033,"Rajat Sharma",8,KRISHNA,Day Scholar,VRINDAVAN,815
-S2205007,"Raunak Raj",8,KRISHNA,Residential,GOVARDHAN,816
-S2003071,"Rishikesh Kumar",8,KRISHNA,Residential,NANDGAON,817
-S2306034,"Shivam",8,KRISHNA,Residential,BARSANA,818
-S2205023,"Shubh Keshri",8,KRISHNA,Residential,VRINDAVAN,819
-S2508005,"Soham Ajay Dange",8,KRISHNA,Residential,Assign,820
-S2407014,"Toyash Rajput",8,KRISHNA,Day Scholar,GOVARDHAN,821
-S2407006,"Udish Sharma",8,KRISHNA,Residential,VRINDAVAN,822
-S2407004,"Vandit Thakur",8,KRISHNA,Residential,BARSANA,823
-S2205028,"Devansh Manoj Choubey",8,Vedic,Vedic School,GOVARDHAN,1309
-S2308026,"Haridas Rikshe",8,Vedic,Vedic School,GOVARDHAN,1310
-S2408022,"Aadarsh Arvind Sahu",9,BALRAM,Day Scholar,BARSANA,951
-S2206021,"Anmol",9,BALRAM,Day Scholar,NANDGAON,952
-S2408018,"Anshuman Garg",9,BALRAM,Day Scholar,VRINDAVAN,953
-S2509020,"Bhavishya Golapuri",9,BALRAM,Residential,Assign,954
-S2509018,"Daksh Rajput",9,BALRAM,Residential,Assign,955
-S2105021,"Darsh Pradhan",9,BALRAM,Day Scholar,GOVARDHAN,956
-S2509012,"Ishan Yadav",9,BALRAM,Residential,Assign,957
-S2408024,"Jishnu Bipinsingh Rajput",9,BALRAM,Day Scholar,GOVARDHAN,958
-S2105018,"Kartik Gupta",9,BALRAM,Residential,VRINDAVAN,959
-S2408015,"Kavyansh Singh",9,BALRAM,Residential,BARSANA,960
-S2408013,"Kriday Kushal Sharma",9,BALRAM,Residential,GOVARDHAN,961
-S2105010,"Kripa Sindhu Gain",9,BALRAM,Residential,NANDGAON,962
-S2307017,"Krishna Muppalla",9,BALRAM,Residential,VRINDAVAN,963
-S2509021,"Madhav Gupta",9,BALRAM,Residential,Assign,964
-S2307006,"Naman Kumar Agrawal",9,BALRAM,Residential,GOVARDHAN,965
-S2307004,"Ojas Yadav",9,BALRAM,Residential,NANDGAON,966
-S2509005,"Pritam Das",9,BALRAM,Residential,Assign,967
-S2509014,"Raghuvir Singh",9,BALRAM,Residential,Assign,968
-S1903008,"Ravi Kumar",9,BALRAM,Day Scholar,VRINDAVAN,969
-S2408003,"Saksham Dalal",9,BALRAM,Residential,NANDGAON,970
-S2307020,"Shaurya Pathak",9,BALRAM,Residential,GOVARDHAN,971
-S2509001,"Shivansh Kuldeep Pandey",9,BALRAM,Residential,Assign,972
-S2509019,"Siddharth Kumar",9,BALRAM,Residential,Assign,973
-S2105002,"Sparsh Agarwal",9,BALRAM,Residential,VRINDAVAN,974
-S2509016,"Yagyesh Garg",9,BALRAM,Residential,Assign,975
-S2206020,"Yashvardhan Kumar",9,BALRAM,Residential,NANDGAON,976
-S2408008,"Aarav Gupta",9,KRISHNA,Residential,GOVARDHAN,901
-S1903002,"Aarush Saha",9,KRISHNA,Day Scholar,NANDGAON,902
-S2307023,"Adarsh Kumar",9,KRISHNA,Vedic School,NANDGAON,903
-S2509006,"Aksh Sharma",9,KRISHNA,Residential,Assign,904
-S2307010,"Anant Agarwal",9,KRISHNA,Residential,VRINDAVAN,905
-S2206025,"Aniruddha Kamati",9,KRISHNA,Day Scholar,GOVARDHAN,906
-S2408016,"Atharva Dosar",9,KRISHNA,Day Scholar,GOVARDHAN,907
-S2408007,"Avikalp Pandey",9,KRISHNA,Residential,NANDGAON,908
-S2509017,"Darsh Sivakumar",9,KRISHNA,Day Scholar,Assign,909
-S2408012,"Devin Kamboj",9,KRISHNA,Residential,NANDGAON,910
-S2307012,"Drishya Dangal",9,KRISHNA,Residential,GOVARDHAN,911
-S2206024,"Harshit Chaudhary",9,KRISHNA,Day Scholar,NANDGAON,912
-S2408028,"Kannav Kalita",9,KRISHNA,Residential,BARSANA,913
-S2408002,"Kunal Vishnu Goyal",9,KRISHNA,Residential,GOVARDHAN,915
-S2408027,"Mokshith Nelluri",9,KRISHNA,Residential,VRINDAVAN,916
-S2509009,"Naksh Mandal",9,KRISHNA,Residential,Assign,917
-S2307019,"Om Shukla",9,KRISHNA,Vedic School,BARSANA,918
-S2307005,"Prakhar Sharma",9,KRISHNA,Residential,BARSANA,919
-S2509013,"Pratham Pandey",9,KRISHNA,Residential,Assign,920
-S2509007,"Pratyush Anand",9,KRISHNA,Residential,Assign,921
-S2509008,"Raghuram Reddy Addula",9,KRISHNA,Residential,Assign,922
-S2206016,"Rajvansh Chaudhary",9,KRISHNA,Residential,VRINDAVAN,923
-S2408011,"Rudraksh Mago",9,KRISHNA,Residential,GOVARDHAN,924
-S2004006,"Saksham Raj Parsaik",9,KRISHNA,Residential,BARSANA,925
-S2307016,"Shiva Thakur",9,KRISHNA,Residential,NANDGAON,926
-S2307018,"Shreyansh Tiwari",9,KRISHNA,Vedic School,VRINDAVAN,927
-S2509004,"Tanush Sharma",9,KRISHNA,Residential,Assign,928
-S2509003,"Taran Sharma",9,KRISHNA,Residential,Assign,929
-S2105003,"Tirthraj Pankaj Bakane",9,KRISHNA,Residential,VRINDAVAN,930
-S2408021,"Yogesh",9,KRISHNA,Residential,VRINDAVAN,931
-S2408001,"Yugam Kamboj",9,KRISHNA,Residential,BARSANA,932
-S2207019,"Adarsh Patidar",10,BALRAM,Residential,NANDGAON,1051
-S2207027,"Aditya Sharma",10,BALRAM,Residential,BARSANA,1052
-S2409001,"Dhruv Arora",10,BALRAM,Residential,VRINDAVAN,1053
-S2409002,"Karan Kumar Kumavat",10,BALRAM,Residential,VRINDAVAN,1054
-S2308016,"Krishna Tripathi",10,BALRAM,Residential,GOVARDHAN,1055
-S1904004,"Om Verma",10,BALRAM,Residential,GOVARDHAN,1056
-S2308019,"Pranjal Kesharwani",10,BALRAM,Residential,NANDGAON,1057
-S2409012,"Pratham Rawat",10,BALRAM,Day Scholar,VRINDAVAN,1058
-S2409011,"Shubh Tiwari",10,BALRAM,Residential,NANDGAON,1059
-S2207020,"Subham Kumar Mahato",10,BALRAM,Residential,VRINDAVAN,1060
-S2207010,"Abhinav Sk",10,KRISHNA,Residential,GOVARDHAN,1001
-S2308012,"Aditya Khurana",10,KRISHNA,Residential,VRINDAVAN,1002
-S2207001,"Ansh Banka",10,KRISHNA,Residential,GOVARDHAN,1003
-S2308008,"Apoorv Goel",10,KRISHNA,Day Scholar,NANDGAON,1004
-S2106014,"Arav Aggarwal",10,KRISHNA,Day Scholar,VRINDAVAN,1005
-S2308023,"Archit Sharma",10,KRISHNA,Residential,BARSANA,1006
-S2308002,"Aryan Singh",10,KRISHNA,Residential,GOVARDHAN,1007
-S2308022,"Avilash Krishna Dash Talukdar",10,KRISHNA,Day Scholar,NANDGAON,1008
-S2308006,"Bharat Kapahi",10,KRISHNA,Day Scholar,VRINDAVAN,1009
-S2409010,"Chaitanya Prem",10,KRISHNA,Residential,VRINDAVAN,1010
-S2308020,"Deevyansh Dhingra",10,KRISHNA,Day Scholar,GOVARDHAN,1011
-S2207011,"Dev Sharma",10,KRISHNA,Residential,NANDGAON,1012
-S2207025,"Hari Ram Das",10,KRISHNA,Residential,BARSANA,1013
-S2308011,"Harsh Bharadwaj",10,KRISHNA,Residential,GOVARDHAN,1014
-S2308001,"Kanishq Khandelwal",10,KRISHNA,Residential,NANDGAON,1015
-S2308004,"Ketan Yogesh Gupta",10,KRISHNA,Residential,BARSANA,1016
-S2409008,"Kunal Wadhwa",10,KRISHNA,Day Scholar,NANDGAON,1017
-S2207017,"Madhukar Sharma",10,KRISHNA,Residential,BARSANA,1018
-S2409003,"Manish Kumar Chandra",10,KRISHNA,Residential,GOVARDHAN,1019
-S2409014,"Mayank Singh",10,KRISHNA,Day Scholar,NANDGAON,1020
-S2409013,"Omprakash",10,KRISHNA,Residential,BARSANA,1021
-S2409006,"Raghvinder Sharma",10,KRISHNA,Residential,BARSANA,1022
-S2207004,"Rishav Kankani",10,KRISHNA,Residential,GOVARDHAN,1023
-S2005051,"Sananda Majumder",10,KRISHNA,Residential,NANDGAON,1024
-S2106019,"Shashank Kumar Ray",10,KRISHNA,Residential,VRINDAVAN,1025
-S1702005,"Shaunak Kamati",10,KRISHNA,Residential,BARSANA,1026
-S2207009,"Shlok Tewari",10,KRISHNA,Residential,GOVARDHAN,1027
-S2106012,"Suprit Kumar Awal",10,KRISHNA,Residential,BARSANA,1028
-S2308013,"Tarun Trivedi",10,KRISHNA,Residential,GOVARDHAN,1029
-S2308003,"Tejas Behal",10,KRISHNA,Residential,NANDGAON,1030
-S2207028,"Vishnu Devarayol Akisetty",10,KRISHNA,Residential,VRINDAVAN,1031
-S2207021,"Vivek Patel",10,KRISHNA,Residential,NANDGAON,1032
-S2006082,"Adityavardhana Kashyap",11,BALRAM,Residential,BARSANA,1151
-S2511001,"Arpit Gupta",11,BALRAM,Residential,VRINDAVAN,1152
-S2511003,"Gaurav",11,BALRAM,Residential,VRINDAVAN,0
-S2208014,"Harshit Patidar",11,BALRAM,Residential,BARSANA,1153
-S1905002,"Kartik Bharadwaj",11,BALRAM,Residential,NANDGAON,1154
-S2309025,"Meghavarna Desai",11,BALRAM,Day Scholar,NANDGAON,1155
-S2107015,"Ojas Garg",11,BALRAM,Day Scholar,GOVARDHAN,1156
-S2208013,"Pulkit Sharma",11,BALRAM,Residential,NANDGAON,1157
-S2309020,"Saini Dakshender Singh Mangalpura",11,BALRAM,Residential,BARSANA,1158
-S2309012,"Dhruvdipt Gaur",11,KRISHNA,Residential,NANDGAON,1101
-S1804004,"Jatin Gautam",11,KRISHNA,Day Scholar,BARSANA,1102
-S2309024,"Keshav",11,KRISHNA,Residential,NANDGAON,1103
-S2208017,"Krish Singhal",11,KRISHNA,Day Scholar,GOVARDHAN,1104
-S1703009,"Krishna",11,KRISHNA,Residential,GOVARDHAN,1105
-S2208022,"Neelmadhav Behera",11,KRISHNA,Residential,GOVARDHAN,1106
-S1804009,"Radhesh Bharati",11,KRISHNA,Residential,VRINDAVAN,1107
-S2511002,"Shourya",11,KRISHNA,Residential,VRINDAVAN,1108
-S2209002,"Abhinav Verma",12,BALRAM,Residential,GOVARDHAN,1251
-S2209008,"Agriya Kaicker",12,BALRAM,Residential,NANDGAON,1252
-S2411001,"Dakshveer Singh",12,BALRAM,Residential,VRINDAVAN,1253
-S2411002,"Gopal Sharma",12,BALRAM,Residential,VRINDAVAN,1254
-S1603003,"Govind Aggarwal",12,BALRAM,Day Scholar,NANDGAON,1255
-S1502003,"Kaustubham",12,BALRAM,Day Scholar,NANDGAON,1256
-S1704009,"Narsingh Kumar Singh",12,BALRAM,Residential,NANDGAON,1257
-S1704003,"Parth Sarthi Sinha",12,BALRAM,Residential,VRINDAVAN,1258
-S2007031,"Raghav Chaurasiya",12,BALRAM,Residential,GOVARDHAN,1259
-S1502008,"Rohini Nandan Mandal",12,BALRAM,Residential,BARSANA,1260
-S2007032,"Rudra Kumar",12,BALRAM,Residential,VRINDAVAN,1261
-S2108017,"Sarthak Sharma",12,BALRAM,Day Scholar,GOVARDHAN,1262
-S2108024,"Suryasnatt Malla",12,BALRAM,Residential,NANDGAON,1263
-S1906010,"Tanishq Gupta",12,BALRAM,Residential,NANDGAON,1264
-S2209007,"Vansh Kumar Anand",12,BALRAM,Residential,BARSANA,1265
-S2108025,"Aapar Neupane",12,KRISHNA,Residential,BARSANA,1201
-S2108011,"Aman Aryav",12,KRISHNA,Residential,VRINDAVAN,1202
-S2411005,"Ankit Kumar Sah",12,KRISHNA,Residential,BARSANA,1203
-S2108012,"Ashutosh Rana",12,KRISHNA,Residential,GOVARDHAN,1204
-S2007084,"Dev Verma",12,KRISHNA,Day Scholar,BARSANA,1205
-S2209022,"Dinesh Poswal",12,KRISHNA,Residential,NANDGAON,1206
-S2209005,"Ishmit Saha",12,KRISHNA,Residential,GOVARDHAN,1207
-S2209011,"Lakshya",12,KRISHNA,Residential,VRINDAVAN,1208
-S1603008,"Md. Rakib Hasan (Ram)",12,KRISHNA,Residential,BARSANA,1209
-S2411007,"Mukesh",12,KRISHNA,Residential,VRINDAVAN,1210
-S2411008,"Prayas Kumar Sahu",12,KRISHNA,Day Scholar,BARSANA,1211
-S2209021,"Sagar Prajapati",12,KRISHNA,Residential,BARSANA,1212
-S1603010,"Satwik Upadhyay",12,KRISHNA,Day Scholar,NANDGAON,1213
-S2108010,"Shourya Jain",12,KRISHNA,Residential,GOVARDHAN,1214
-S2209014,"Siddharth Mahalwar",12,KRISHNA,Residential,BARSANA,1215
-S2108009,"Sparsh Rana",12,KRISHNA,Day Scholar,GOVARDHAN,1216
-S2411009,"Su Dan",12,KRISHNA,Day Scholar,BARSANA,1217
-S2209010,"Yash Sharma",12,KRISHNA,Day Scholar,GOVARDHAN,1218
+Admission No,Student Name,Grade,Section,Student Type,Roll No
+202102150,"Om Malhotra",6,KRISHNA,Residential,627
+S1502003,"Ansh Upadhyay",12,BALRAM,Day Scholar,1256
+S1502008,"Kunal Mehta",12,BALRAM,Residential,1260
+S1603003,"Ishita Bhardwaj",12,BALRAM,Day Scholar,1255
+S1603008,"Satvik Upadhyay",12,KRISHNA,Residential,1209
+S1603010,"Sumit Deshmukh",12,KRISHNA,Day Scholar,1213
+S1702005,"Rakesh Sharma",10,KRISHNA,Residential,1026
+S1703009,"Pranav Bansal",11,KRISHNA,Residential,1105
+S1704003,"Sagar Bhardwaj",12,BALRAM,Residential,1258
+S1704009,"Anirudh Saini",12,BALRAM,Residential,1257
+S1804004,"Rakesh Kamble",11,KRISHNA,Day Scholar,1102
+S1804009,"Jatin Kaur",11,KRISHNA,Residential,1107
+S1903002,"Pravin Shah",9,KRISHNA,Day Scholar,902
+S1903008,"Satvik Patel",9,BALRAM,Day Scholar,969
+S1904004,"Yash Iyer",10,BALRAM,Residential,1056
+S1905002,"Ranjan Mehra",11,BALRAM,Residential,1154
+S1906010,"Sumit Shukla",12,BALRAM,Residential,1264
+S2003071,"Vaibhav Yadav",8,KRISHNA,Residential,817
+S2003109,"Jatin Mehta",8,KRISHNA,Residential,813
+S2003122,"Pranav Kaur",8,BALRAM,Day Scholar,862
+S2003135,"Aarav Deshmukh",8,KRISHNA,Day Scholar,805
+S2004006,"Nirav Rana",9,KRISHNA,Residential,925
+S2005051,"Suraj Kadam",10,KRISHNA,Residential,1024
+S2006082,"Amrit Pillai",11,BALRAM,Residential,1151
+S2007031,"Lakshya Shukla",12,BALRAM,Residential,1259
+S2007032,"Narayan Mehta",12,BALRAM,Residential,1261
+S2007084,"Mayank Prasad",12,KRISHNA,Day Scholar,1205
+S2101006,"Akshay Chauhan",5,A,Residential,503
+S2101007,"Daksh Sahu",5,A,Residential,504
+S2101010,"Rohan Pandey",5,A,Day Scholar,528
+S2101013,"Sagar Saini",5,A,Day Scholar,537
+S2101016,"Ayush Thakur",5,A,Day Scholar,509
+S2102008,"Hemant Rathore",6,BALRAM,Day Scholar,651
+S2102009,"Utkarsh Saini",6,KRISHNA,Day Scholar,613
+S2103001,"Rohan Kapoor",7,BALRAM,Residential,752
+S2103009,"Rahul Singh",7,BALRAM,Day Scholar,751
+S2104001,"Ayush Saini",8,KRISHNA,Residential,808
+S2104012,"Madhav Das",8,BALRAM,Residential,853
+S2105002,"Mukund Bansal",9,BALRAM,Residential,974
+S2105003,"Advait Mishra",9,KRISHNA,Residential,930
+S2105010,"Soham Mandal",9,BALRAM,Residential,962
+S2105018,"Kartik Kamble",9,BALRAM,Residential,959
+S2105021,"Utkarsh Rana",9,BALRAM,Day Scholar,956
+S2106012,"Navin Mehta",10,KRISHNA,Residential,1028
+S2106014,"Darsh Upadhyay",10,KRISHNA,Day Scholar,1005
+S2106019,"Hitesh Kumar",10,KRISHNA,Residential,1025
+S2107015,"Sohan Trivedi",11,BALRAM,Day Scholar,1156
+S2108009,"Tanish Vyas",12,KRISHNA,Day Scholar,1216
+S2108010,"Aryan Das",12,KRISHNA,Residential,1214
+S2108011,"Anand Chauhan",12,KRISHNA,Residential,1202
+S2108012,"Shaurya Tiwari",12,KRISHNA,Residential,1204
+S2108017,"Hemant Mehra",12,BALRAM,Day Scholar,1262
+S2108024,"Nikhil Patel",12,BALRAM,Residential,1263
+S2108025,"Vikram Sahu",12,KRISHNA,Residential,1201
+S2201003,"Nimai Nair",4,A,Day Scholar,425
+S2201007,"Vinay Kulkarni",4,A,Day Scholar,405
+S2201013,"Varun Thakur",4,A,Day Scholar,418
+S2202003,"Rishabh Kamble",5,A,Residential,517
+S2202005,"Aarav Thakur",5,A,Residential,513
+S2202009,"Ved Iyer",5,A,Residential,519
+S2202010,"Tarun Saini",5,A,Day Scholar,534
+S2203001,"Rudra Khanna",6,BALRAM,Residential,666
+S2203004,"Nikhil Kamble",6,KRISHNA,Residential,622
+S2203007,"Sanjay Sinha",6,KRISHNA,Residential,614
+S2203008,"Samarth Nair",6,BALRAM,Residential,658
+S2203011,"Vishal Kulkarni",6,BALRAM,Day Scholar,654
+S2203012,"Sagar Kamble",6,KRISHNA,Day Scholar,617
+S2203015,"Manav Saxena",6,BALRAM,Day Scholar,675
+S2204008,"Nikhil Kadam",7,KRISHNA,Residential,701
+S2204009,"Radha Shah",7,KRISHNA,Residential,704
+S2204010,"Ved Shah",7,BALRAM,Day Scholar,754
+S2205001,"Aryan Kaur",8,BALRAM,Residential,869
+S2205007,"Dhruv Kapoor",8,KRISHNA,Residential,816
+S2205020,"Yash Tripathi",8,KRISHNA,Residential,804
+S2205023,"Jayant Choudhary",8,KRISHNA,Residential,819
+S2205024,"Mayank Mishra",8,KRISHNA,Residential,810
+S2205027,"Prateek Rao",8,BALRAM,Day Scholar,852
+S2205028,"Ved Joshi",8,Vedic,Vedic School,1309
+S2206016,"Meera Tiwari",9,KRISHNA,Residential,923
+S2206020,"Damodar Dubey",9,BALRAM,Residential,976
+S2206021,"Utkarsh Patel",9,BALRAM,Day Scholar,952
+S2206024,"Divyansh Sharma",9,KRISHNA,Day Scholar,912
+S2206025,"Vaibhav Kulkarni",9,KRISHNA,Day Scholar,906
+S2207001,"Sarthak Saxena",10,KRISHNA,Residential,1003
+S2207004,"Kunal Mandal",10,KRISHNA,Residential,1023
+S2207009,"Anand Mishra",10,KRISHNA,Residential,1027
+S2207010,"Navin Trivedi",10,KRISHNA,Residential,1001
+S2207011,"Girish Mandal",10,KRISHNA,Residential,1012
+S2207017,"Chaitanya Shukla",10,KRISHNA,Residential,1018
+S2207019,"Yash Rao",10,BALRAM,Residential,1051
+S2207020,"Balaram Pillai",10,BALRAM,Residential,1060
+S2207021,"Sumit Dubey",10,KRISHNA,Residential,1032
+S2207025,"Sumit Pandey",10,KRISHNA,Residential,1013
+S2207027,"Vedant Bansal",10,BALRAM,Residential,1052
+S2207028,"Vivek Kamble",10,KRISHNA,Residential,1031
+S2208013,"Vasudev Saini",11,BALRAM,Residential,1157
+S2208014,"Ishaan Joshi",11,BALRAM,Residential,1153
+S2208017,"Lakshya Kapoor",11,KRISHNA,Day Scholar,1104
+S2208022,"Ayush Vyas",11,KRISHNA,Residential,1106
+S2209002,"Rajat Patil",12,BALRAM,Residential,1251
+S2209005,"Dhruv Prasad",12,KRISHNA,Residential,1207
+S2209007,"Tejas Rana",12,BALRAM,Residential,1265
+S2209008,"Kartik Bansal",12,BALRAM,Residential,1252
+S2209010,"Madhav Chauhan",12,KRISHNA,Day Scholar,1218
+S2209011,"Ishaan Upadhyay",12,KRISHNA,Residential,1208
+S2209014,"Uday Kaur",12,KRISHNA,Residential,1215
+S2209021,"Suraj Kumar",12,KRISHNA,Residential,1212
+S2209022,"Subhash Trivedi",12,KRISHNA,Residential,1206
+S2301001,"Dhruv Patil",3,A,Day Scholar,306
+S2301006,"Damodar Saxena",3,A,Day Scholar,313
+S2301009,"Sagar Kadam",3,A,Day Scholar,308
+S2301010,"Yogesh Patel",3,A,Day Scholar,315
+S2301022,"Navin Chaudhary",3,A,Day Scholar,314
+S2301025,"Ayush Sengar",3,A,Day Scholar,317
+S2302006,"Keshav Tiwari",4,A,Residential,410
+S2302008,"Sohan Nayak",4,A,Residential,420
+S2302013,"Rahul Solanki",4,A,Day Scholar,416
+S2303003,"Ankit Sinha",5,A,Residential,522
+S2303009,"Uday Kulkarni",5,A,Residential,520
+S2303015,"Jatin Patel",5,A,Residential,516
+S2303016,"Girish Sahu",5,A,Day Scholar,521
+S2303020,"Samarth Dubey",5,Vedic,Vedic School,1302
+S2304002,"Radhesh Gupta",6,BALRAM,Residential,659
+S2304006,"Chaitanya Iyer",6,KRISHNA,Residential,606
+S2304008,"Dev Das",6,BALRAM,Day Scholar,667
+S2304011,"Madhav Nair",6,BALRAM,Day Scholar,672
+S2304012,"Om Tripathi",6,KRISHNA,Residential,616
+S2304013,"Atharv Upadhyay",6,KRISHNA,Residential,604
+S2304014,"Jayant Khanna",6,KRISHNA,Residential,609
+S2304015,"Rahul Rana",6,KRISHNA,Day Scholar,603
+S2304018,"Ansh Rathore",6,Vedic,Vedic School,1304
+S2304019,"Shaurya Trivedi",6,Vedic,Vedic School,1305
+S2304021,"Mohit Mehra",6,Vedic,Vedic School,1303
+S2304022,"Deepak Sharma",6,KRISHNA,Residential,612
+S2305001,"Vedant Mehta",7,KRISHNA,Residential,716
+S2305004,"Naman Singh",7,BALRAM,Day Scholar,767
+S2305005,"Ayush Das",7,KRISHNA,Residential,709
+S2305015,"Sachin Verma",7,KRISHNA,Residential,720
+S2305018,"Deepak Jain",7,Vedic,Vedic School,1307
+S2305020,"Anand Das",7,Vedic,Vedic School,1308
+S2306001,"Advait Shah",8,KRISHNA,Residential,814
+S2306003,"Vasudev Reddy",8,KRISHNA,Residential,801
+S2306017,"Anand Sengar",8,BALRAM,Residential,858
+S2306022,"Raghav Kumar",8,BALRAM,Residential,863
+S2306026,"Kabir Upadhyay",8,BALRAM,Day Scholar,854
+S2306028,"Tejas Choudhary",8,BALRAM,Day Scholar,860
+S2306029,"Sarthak Pandey",8,BALRAM,Residential,859
+S2306033,"Keshav Saini",8,KRISHNA,Day Scholar,815
+S2306034,"Vaibhav Verma",8,KRISHNA,Residential,818
+S2307004,"Rahul Bansal",9,BALRAM,Residential,966
+S2307005,"Radhesh Mandal",9,KRISHNA,Residential,919
+S2307006,"Radhesh Bhardwaj",9,BALRAM,Residential,965
+S2307010,"Sahil Iyer",9,KRISHNA,Residential,905
+S2307012,"Sohan Sahu",9,KRISHNA,Residential,911
+S2307016,"Vivek Pillai",9,KRISHNA,Residential,926
+S2307017,"Manav Reddy",9,BALRAM,Residential,963
+S2307018,"Bhavesh Upadhyay",9,KRISHNA,Vedic School,927
+S2307019,"Devansh Deshmukh",9,KRISHNA,Vedic School,918
+S2307020,"Dhruv Rao",9,BALRAM,Residential,971
+S2307023,"Vinay Patil",9,KRISHNA,Vedic School,903
+S2308001,"Rohan Bhardwaj",10,KRISHNA,Residential,1015
+S2308002,"Tanish Upadhyay",10,KRISHNA,Residential,1007
+S2308003,"Atharv Yadav",10,KRISHNA,Residential,1030
+S2308004,"Vamsi Upadhyay",10,KRISHNA,Residential,1016
+S2308006,"Radhesh Khanna",10,KRISHNA,Day Scholar,1009
+S2308008,"Tara Choudhary",10,KRISHNA,Day Scholar,1004
+S2308011,"Mahesh Prasad",10,KRISHNA,Residential,1014
+S2308012,"Sahil Pandey",10,KRISHNA,Residential,1002
+S2308013,"Kabir Patil",10,KRISHNA,Residential,1029
+S2308016,"Suraj Iyer",10,BALRAM,Residential,1055
+S2308019,"Atharv Thakur",10,BALRAM,Residential,1057
+S2308020,"Govind Chauhan",10,KRISHNA,Day Scholar,1011
+S2308022,"Dev Kulkarni",10,KRISHNA,Day Scholar,1008
+S2308023,"Meera Kamble",10,KRISHNA,Residential,1006
+S2308026,"Rahul Kadam",8,Vedic,Vedic School,1310
+S2309012,"Dhruv Chauhan",11,KRISHNA,Residential,1101
+S2309020,"Daksh Kamble",11,BALRAM,Residential,1158
+S2309024,"Sohan Jain",11,KRISHNA,Residential,1103
+S2309025,"Ankit Rao",11,BALRAM,Day Scholar,1155
+S2401003,"Mohit Kumar",2,A,Day Scholar,224
+S2401004,"Yogesh Chauhan",2,A,Day Scholar,217
+S2401008,"Harsh Iyer",2,A,Day Scholar,203
+S2401009,"Hemant Vyas",2,A,Residential,204
+S2401011,"Samarth Kumar",2,A,Residential,212
+S2401013,"Mohit Solanki",2,A,Day Scholar,216
+S2401014,"Daksh Gupta",2,A,Residential,220
+S2401016,"Mahesh Kumar",2,A,Residential,213
+S2401017,"Mayank Patil",2,A,Day Boarding,218
+S2401019,"Chaitanya Rana",2,A,Residential,210
+S2401020,"Daksh Patil",2,A,Residential,211
+S2401021,"Samarth Chaudhary",2,A,Residential,201
+S2401022,"Aditya Vyas",2,A,Day Scholar,219
+S2402001,"Mukund Kulkarni",3,A,Residential,303
+S2402002,"Daksh Mehta",3,A,Residential,301
+S2402003,"Vivek Mehta",3,A,Residential,302
+S2402004,"Ishaan Singh",3,A,Residential,304
+S2402005,"Vishal Bansal",3,A,Residential,307
+S2402006,"Vihaan Khanna",3,A,Residential,309
+S2403003,"Damodar Rathore",4,A,Residential,401
+S2403005,"Jayant Tripathi",4,A,Day Scholar,412
+S2403007,"Vasudev Mandal",4,A,Residential,423
+S2403008,"Vivek Tripathi",4,A,Day Scholar,411
+S2403009,"Damodar Iyer",4,A,Day Scholar,413
+S2403010,"Kunal Nayak",4,A,Residential,403
+S2403011,"Ojas Singh",4,A,Residential,408
+S2404003,"Aarav Sharma",5,A,Residential,525
+S2404004,"Arjun Mandal",5,A,Day Scholar,506
+S2404007,"Pravin Mandal",5,A,Residential,538
+S2404008,"Narayan Agarwal",5,A,Residential,533
+S2404010,"Vaibhav Sengar",5,A,Residential,532
+S2404011,"Manav Nayak",5,A,Residential,531
+S2404012,"Daksh Kulkarni",5,A,Day Scholar,515
+S2404013,"Hemant Kulkarni",5,A,Residential,510
+S2405002,"Pranav Chaudhary",6,KRISHNA,Residential,608
+S2405008,"Suraj Mehta",6,BALRAM,Residential,673
+S2405009,"Kartik Agarwal",6,BALRAM,Residential,660
+S2405010,"Mohit Nayak",6,BALRAM,Residential,661
+S2405012,"Sachin Pillai",6,BALRAM,Residential,664
+S2405015,"Kabir Das",6,BALRAM,Day Scholar,668
+S2405016,"Rakesh Mehta",6,KRISHNA,Day Scholar,618
+S2405018,"Nimai Chaudhary",6,KRISHNA,Residential,625
+S2405019,"Gopal Dubey",6,KRISHNA,Day Scholar,605
+S2406001,"Utkarsh Reddy",7,BALRAM,Residential,755
+S2406002,"Deepak Singh",7,KRISHNA,Residential,705
+S2406003,"Sanjay Patil",7,KRISHNA,Residential,711
+S2406004,"Rahul Trivedi",7,BALRAM,Residential,760
+S2406006,"Samarth Prasad",7,KRISHNA,Residential,719
+S2406008,"Damodar Mehra",7,BALRAM,Residential,765
+S2406012,"Rohan Upadhyay",7,KRISHNA,Residential,702
+S2406013,"Divyansh Tiwari",7,BALRAM,Residential,758
+S2406014,"Amrit Kaur",7,KRISHNA,Residential,708
+S2406015,"Tanish Shukla",7,KRISHNA,Residential,717
+S2406017,"Abhinav Dubey",7,KRISHNA,Residential,707
+S2406019,"Sanjay Yadav",7,KRISHNA,Residential,722
+S2406020,"Vedant Yadav",7,KRISHNA,Residential,721
+S2406025,"Vasudev Sharma",7,BALRAM,Day Scholar,768
+S2406026,"Pravin Choudhary",7,KRISHNA,Residential,718
+S2406028,"Suraj Solanki",7,BALRAM,Residential,753
+S2406029,"Yogesh Kadam",7,KRISHNA,Residential,703
+S2406030,"Akshay Bansal",7,BALRAM,Residential,763
+S2406036,"Ved Patel",7,BALRAM,Day Scholar,766
+S2407004,"Vamsi Sengar",8,KRISHNA,Residential,823
+S2407005,"Amrit Tiwari",8,BALRAM,Residential,866
+S2407006,"Mayank Solanki",8,KRISHNA,Residential,822
+S2407009,"Gopal Tiwari",8,BALRAM,Residential,865
+S2407011,"Gaurav Saxena",8,KRISHNA,Residential,811
+S2407014,"Vinay Sinha",8,KRISHNA,Day Scholar,821
+S2407020,"Gaurav Tripathi",8,BALRAM,Day Scholar,856
+S2407022,"Rahul Upadhyay",8,BALRAM,Residential,855
+S2407023,"Yogesh Mehta",8,KRISHNA,Residential,809
+S2408001,"Keshav Rathore",9,KRISHNA,Residential,932
+S2408002,"Radhesh Bansal",9,KRISHNA,Residential,915
+S2408003,"Utkarsh Khanna",9,BALRAM,Residential,970
+S2408007,"Darsh Patil",9,KRISHNA,Residential,908
+S2408008,"Ved Pandey",9,KRISHNA,Residential,901
+S2408011,"Damodar Solanki",9,KRISHNA,Residential,924
+S2408012,"Sachin Patil",9,KRISHNA,Residential,910
+S2408013,"Sarthak Sahu",9,BALRAM,Residential,961
+S2408015,"Nikhil Solanki",9,BALRAM,Residential,960
+S2408016,"Pranav Thakur",9,KRISHNA,Day Scholar,907
+S2408018,"Mayank Tripathi",9,BALRAM,Day Scholar,953
+S2408021,"Mukund Sinha",9,KRISHNA,Residential,931
+S2408022,"Pravin Bansal",9,BALRAM,Day Scholar,951
+S2408024,"Gopal Gupta",9,BALRAM,Day Scholar,958
+S2408027,"Devansh Sharma",9,KRISHNA,Residential,916
+S2408028,"Jatin Deshmukh",9,KRISHNA,Residential,913
+S2409001,"Divyansh Saxena",10,BALRAM,Residential,1053
+S2409002,"Pravin Rathore",10,BALRAM,Residential,1054
+S2409003,"Tarun Vyas",10,KRISHNA,Residential,1019
+S2409006,"Utkarsh Singh",10,KRISHNA,Residential,1022
+S2409008,"Sahil Mishra",10,KRISHNA,Day Scholar,1017
+S2409010,"Raghav Rao",10,KRISHNA,Residential,1010
+S2409011,"Vishal Nair",10,BALRAM,Residential,1059
+S2409012,"Akshay Solanki",10,BALRAM,Day Scholar,1058
+S2409013,"Radha Khanna",10,KRISHNA,Residential,1021
+S2409014,"Prateek Chauhan",10,KRISHNA,Day Scholar,1020
+S2411001,"Raghav Kulkarni",12,BALRAM,Residential,1253
+S2411002,"Subhash Patil",12,BALRAM,Residential,1254
+S2411005,"Shaurya Singh",12,KRISHNA,Residential,1203
+S2411007,"Ankit Reddy",12,KRISHNA,Residential,1210
+S2411008,"Ankit Patel",12,KRISHNA,Day Scholar,1211
+S2411009,"Suraj Agarwal",12,KRISHNA,Day Scholar,1217
+S2502001,"Pushkar Chaudhary",2,A,Residential,222
+S2502002,"Arjun Dubey",2,A,Day Scholar,218
+S2502004,"Rishabh Shah",2,A,Day Scholar,205
+S2502005,"Uday Mishra",2,A,Day Scholar,206
+S2502006,"Tejas Pandey",2,A,Residential,223
+S2502007,"Harsh Saxena",2,A,Residential,214
+S2502008,"Aarav Sinha",2,A,Day Scholar,202
+S2502009,"Vamsi Rana",2,A,Residential,208
+S2502010,"Darsh Solanki",2,A,Day Scholar,221
+S2502011,"Madhav Tripathi",2,A,Day Scholar,215
+S2502012,"Parth Yadav",2,A,Residential,209
+S2502013,"Sumit Yadav",2,A,Day Scholar,207
+S2503001,"Vinay Prasad",3,A,Residential,316
+S2503002,"Rohan Malhotra",3,A,Residential,318
+S2503003,"Mahesh Mandal",3,A,Day Scholar,311
+S2503004,"Divyansh Nair",3,A,Residential,312
+S2503005,"Ved Das",3,A,Day Scholar,305
+S2503007,"Soham Iyer",3,A,Residential,310
+S2504001,"Pravin Chauhan",4,A,Day Scholar,404
+S2504002,"Manav Singh",4,A,Residential,402
+S2504003,"Gopal Kumar",4,A,Day Scholar,414
+S2504004,"Tarun Thakur",4,A,Residential,409
+S2504005,"Manav Bansal",4,A,Residential,417
+S2504006,"Madhav Mandal",4,A,Residential,406
+S2504007,"Nimai Yadav",4,A,Residential,422
+S2504008,"Kartik Verma",4,A,Day Scholar,419
+S2504009,"Vamsi Mehra",4,A,Residential,415
+S2504010,"Sanjay Sharma",4,A,Residential,424
+S2504011,"Ansh Tiwari",4,A,Residential,421
+S2504012,"Akshay Yadav",4,A,Day Scholar,407
+S2504013,"Balaram Kaur",4,Vedic,Vedic School,
+S2504014,"Satvik Pillai",4,Vedic,Vedic School,
+S2504015,"Subhash Chaudhary",4,Vedic,Vedic School,
+S2504016,"Siddharth Prasad",4,Vedic,Vedic School,
+S2504017,"Madhav Kaur",4,Vedic,Vedic School,
+S2504018,"Vaibhav Pillai",4,Vedic,Vedic School,
+S2505001,"Gaurav Vyas",5,A,Day Scholar,508
+S2505002,"Ojas Yadav",5,A,Residential,507
+S2505003,"Daksh Trivedi",5,A,Day Scholar,535
+S2505004,"Parth Solanki",5,A,Residential,539
+S2505006,"Sanjay Reddy",5,A,Residential,512
+S2505007,"Vishal Verma",5,A,Residential,529
+S2505008,"Utkarsh Kumar",5,A,Residential,526
+S2505009,"Kabir Verma",5,A,Day Scholar,536
+S2505010,"Vedant Tiwari",5,A,Residential,523
+S2505011,"Vivek Reddy",5,A,Day Scholar,518
+S2505012,"Damodar Bhardwaj",5,A,Day Scholar,502
+S2505013,"Abhinav Saxena",5,A,Residential,501
+S2505014,"Ansh Kadam",5,A,Residential,505
+S2505015,"Raghav Malhotra",5,A,Residential,514
+S2505016,"Girish Dubey",5,A,Day Scholar,511
+S2505017,"Vedant Nair",5,A,Residential,527
+S2505018,"Tanish Deshmukh",5,A,Residential,530
+S2505019,"Rajat Gupta",5,A,Residential,524
+S2506001,"Sumit Nair",6,KRISHNA,Residential,621
+S2506002,"Ishaan Saini",6,KRISHNA,Day Scholar,619
+S2506004,"Pravin Patel",6,BALRAM,Residential,656
+S2506005,"Raghav Nair",6,KRISHNA,Residential,623
+S2506006,"Vihaan Iyer",6,KRISHNA,Residential,610
+S2506007,"Gaurav Kaur",6,BALRAM,Residential,657
+S2506008,"Aryan Rana",6,KRISHNA,Day Scholar,611
+S2506009,"Kaushik Thakur",6,KRISHNA,Residential,601
+S2506011,"Samarth Rathore",6,BALRAM,Residential,665
+S2506012,"Yogesh Agarwal",6,KRISHNA,Residential,624
+S2506013,"Girish Malhotra",6,BALRAM,Residential,671
+S2506014,"Samarth Das",6,BALRAM,Residential,652
+S2506015,"Sachin Saxena",6,KRISHNA,Residential,620
+S2506016,"Rudra Vyas",6,BALRAM,Day Scholar,663
+S2506017,"Pushkar Kamble",6,KRISHNA,Residential,615
+S2506018,"Suraj Pillai",6,BALRAM,Residential,676
+S2506019,"Atharv Chauhan",6,KRISHNA,Residential,602
+S2506020,"Tanish Reddy",6,KRISHNA,Residential,626
+S2506021,"Kaushik Kamble",6,BALRAM,Day Scholar,655
+S2506022,"Damodar Verma",6,BALRAM,Residential,670
+S2506023,"Prateek Yadav",6,KRISHNA,Residential,607
+S2506024,"Rakesh Patel",6,BALRAM,Residential,662
+S2506026,"Tejas Gupta",6,BALRAM,Day Scholar,653
+S2506027,"Rahul Kapoor",6,BALRAM,Day Scholar,669
+S2506028,"Sarthak Kadam",6,BALRAM,Day Scholar,674
+S2506029,"Anand Saxena",6,BALRAM,Residential,
+S2507001,"Kunal Joshi",7,BALRAM,Residential,771
+S2507002,"Govind Patel",7,KRISHNA,Residential,713
+S2507003,"Suraj Gupta",7,BALRAM,Residential,770
+S2507004,"Parth Shukla",7,BALRAM,Residential,773
+S2507005,"Vedant Khanna",7,BALRAM,Residential,757
+S2507006,"Soham Nayak",7,BALRAM,Residential,756
+S2507007,"Gaurav Bhardwaj",7,BALRAM,Residential,762
+S2507008,"Devansh Saxena",7,BALRAM,Residential,769
+S2507009,"Nimai Tripathi",7,BALRAM,Residential,772
+S2507010,"Sohan Bhardwaj",7,BALRAM,Residential,761
+S2507011,"Aditya Kulkarni",7,BALRAM,Day Scholar,764
+S2507012,"Vinay Joshi",7,KRISHNA,Residential,710
+S2507013,"Lakshya Mehta",7,KRISHNA,Residential,714
+S2507014,"Anirudh Deshmukh",7,KRISHNA,Residential,715
+S2507015,"Suraj Khanna",7,KRISHNA,Residential,712
+S2507016,"Vikram Dubey",7,KRISHNA,Residential,706
+S2507017,"Sumit Tiwari",7,BALRAM,Residential,759
+S2507018,"Narayan Yadav",7,BALRAM,Residential,
+S2508001,"Gopal Sahu",8,BALRAM,Residential,851
+S2508002,"Atharv Kaur",8,KRISHNA,Residential,806
+S2508003,"Vikram Singh",8,BALRAM,Residential,870
+S2508004,"Samarth Jain",8,BALRAM,Residential,857
+S2508005,"Gopal Shukla",8,KRISHNA,Residential,820
+S2508006,"Rakesh Gupta",8,KRISHNA,Day Scholar,807
+S2508008,"Keshav Sahu",8,BALRAM,Residential,861
+S2508009,"Lakshya Vyas",8,BALRAM,Day Scholar,867
+S2508010,"Shivam Rathore",8,BALRAM,Residential,864
+S2508013,"Uday Gupta",8,KRISHNA,Residential,803
+S2508014,"Darsh Agarwal",8,BALRAM,Day Scholar,868
+S2508015,"Kabir Dubey",8,KRISHNA,Residential,802
+S2508016,"Hitesh Saxena",8,KRISHNA,Day Scholar,812
+S2508017,"Ojas Malhotra",8,BALRAM,Residential,
+S2508018,"Siddharth Rao",8,BALRAM,Residential,
+S2509001,"Yogesh Thakur",9,BALRAM,Residential,972
+S2509003,"Keshav Rao",9,KRISHNA,Residential,929
+S2509004,"Dev Gupta",9,KRISHNA,Residential,928
+S2509005,"Ayush Pandey",9,BALRAM,Residential,967
+S2509006,"Rudra Thakur",9,KRISHNA,Residential,904
+S2509007,"Manav Deshmukh",9,KRISHNA,Residential,921
+S2509008,"Kabir Trivedi",9,KRISHNA,Residential,922
+S2509009,"Daksh Jain",9,KRISHNA,Residential,917
+S2509012,"Bhavesh Sharma",9,BALRAM,Residential,957
+S2509013,"Sanjay Kamble",9,KRISHNA,Residential,920
+S2509014,"Aarav Agarwal",9,BALRAM,Residential,968
+S2509016,"Damodar Khanna",9,BALRAM,Residential,975
+S2509017,"Govind Kumar",9,KRISHNA,Day Scholar,909
+S2509018,"Siddharth Sharma",9,BALRAM,Residential,955
+S2509019,"Amrit Bansal",9,BALRAM,Residential,973
+S2509020,"Avinash Iyer",9,BALRAM,Residential,954
+S2509021,"Sanya Kadam",9,BALRAM,Residential,964
+S2511001,"Ishaan Kamble",11,BALRAM,Residential,1152
+S2511002,"Sagar Patel",11,KRISHNA,Residential,1108
+S2511003,"Shaurya Iyer",11,BALRAM,Residential,

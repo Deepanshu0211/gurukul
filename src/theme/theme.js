@@ -94,6 +94,18 @@ export const shadow = {
   },
 };
 
+/**
+ * The greeting is the one warm, human moment in an otherwise black-and-white
+ * data app, so it gets its own small palette — borrowed from the cream ground
+ * and gold jewellery of the login illustration, which ties the two together.
+ * Used ONLY for the greeting header. Attendance data stays monochrome.
+ */
+export const warm = {
+  bg: "#FAF6EE", // cream ground from the illustration
+  border: "#EFE6D6",
+  ink: "#8C6B3F", // muted gold-brown for the devotional line
+};
+
 // Kept for compatibility with anything still importing it; in the minimal
 // theme this is just a neutral, not a warm accent.
 export const gold = "#111111";

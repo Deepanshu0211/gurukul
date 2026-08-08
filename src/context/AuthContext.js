@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { fetchStaffByEmail } from "../lib/staff";
 
 const AuthContext = createContext(null);
 
@@ -13,19 +14,35 @@ export function AuthProvider({ children }) {
     let cancelled = false;
 
     const loadStaffFor = async (email) => {
-      const { data } = await supabase.from("staff").select("*").eq("email", email).single();
-      if (!cancelled && data) setUser(data);
+      try {
+        const staff = await fetchStaffByEmail(email);
+        if (!cancelled && staff) setUser(staff);
+      } catch (e) {
+        // A failed staff lookup just means we show the login screen.
+        console.warn("Could not restore staff record:", e?.message);
+      }
     };
 
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
+    // Never let session restoration block the app. If storage or the network
+    // stalls, fall through to the login screen instead of a blank screen.
+    const failsafe = setTimeout(() => {
+      if (!cancelled) setRestoring(false);
+    }, 4000);
+
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
         const email = data?.session?.user?.email;
-        if (email) return loadStaffFor(email);
-      })
-      .finally(() => {
-        if (!cancelled) setRestoring(false);
-      });
+        if (email) await loadStaffFor(email);
+      } catch (e) {
+        console.warn("Session restore failed:", e?.message);
+      } finally {
+        if (!cancelled) {
+          clearTimeout(failsafe);
+          setRestoring(false);
+        }
+      }
+    })();
 
     // Keeps the app in step if the session expires or is refreshed elsewhere.
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -35,6 +52,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       cancelled = true;
+      clearTimeout(failsafe);
       sub?.subscription?.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -45,8 +63,17 @@ export function AuthProvider({ children }) {
       user,
       restoring,
       login: (staff) => setUser(staff),
+      /** Merge a partial profile update so the UI reflects it immediately,
+       *  without a round trip to re-read the row. */
+      updateUser: (patch) => setUser((prev) => (prev ? { ...prev, ...patch } : prev)),
       logout: async () => {
-        await supabase.auth.signOut();
+        // Clear locally even if the network call fails, so the user is never
+        // stuck signed in on the device.
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {
+          console.warn("Sign out request failed:", e?.message);
+        }
         setUser(null);
       },
     }),

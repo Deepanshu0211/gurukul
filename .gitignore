@@ -40,7 +40,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
-docs/dev-test-credentials.md
 
 # Raw source art / video working folders — the app bundles from src/assets
 src/imgs/

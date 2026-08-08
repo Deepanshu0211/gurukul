@@ -1,56 +1,94 @@
-import React from "react";
-import { View, Text, StyleSheet, SectionList, TouchableOpacity } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  SectionList,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import {
-  DUTIES,
-  NOW,
-  fmtTime,
-  dutyStatus,
-  studentsForDuty,
-  escalationStage,
-} from "../data/mockData";
+import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
+import GreetingHeader from "../components/GreetingHeader";
+import { NOW } from "../data/mockData";
+import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
+import { plural, fmtTime, fmtDuration } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
-import { useAttendance } from "../context/AttendanceContext";
+import { useSchoolData } from "../context/SchoolDataContext";
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-// "closes in 8 min" beats "7:30 AM – 7:50 AM" when the question is
-// "do I have time?" — so the countdown is what gets prominence.
-const countdown = (duty, status) => {
-  if (status === "overdue") {
-    const late = NOW - duty.end;
-    return late < 60 ? `Overdue by ${late} min` : `Overdue by ${Math.floor(late / 60)}h`;
-  }
-  const left = duty.end - NOW;
-  if (left <= 60) return `Closes in ${left} min`;
-  return `Closes ${fmtTime(duty.end)}`;
+const SECTIONS = {
+  URGENT: "urgent",
+  LATER: "later",
+  DONE: "done",
 };
 
 export default function DutiesScreen({ navigation }) {
   const { user } = useAuth();
-  const { records } = useAttendance();
+  const { duties: allDuties, records, loading, error, refresh, studentsForDuty } = useSchoolData();
+  const [refreshing, setRefreshing] = useState(false);
 
-  const isTeacher = user.role === "teacher";
-  const duties = isTeacher ? DUTIES.filter((d) => d.staffId === user.id) : DUTIES;
+  // Reload on focus so a coordinator's reassignment shows up when a teacher
+  // returns to this tab, rather than only after an app restart.
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
-  const withStatus = duties.map((d) => ({ ...d, _status: dutyStatus(d, records) }));
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  };
 
-  // Overdue first inside the urgent group — the most at-risk duty leads.
-  const urgent = withStatus
-    .filter((d) => d._status === "overdue" || d._status === "due")
-    .sort((a, b) => (a._status === "overdue" ? -1 : 1) - (b._status === "overdue" ? -1 : 1));
-  const later = withStatus.filter((d) => d._status === "upcoming").sort((a, b) => a.start - b.start);
-  const done = withStatus.filter((d) => d._status === "done").sort((a, b) => a.start - b.start);
+  const isTeacher = user?.role === "teacher";
 
-  const sections = [
-    { key: "urgent", title: "Needs attention", data: urgent },
-    { key: "later", title: "Later today", data: later },
-    { key: "done", title: "Submitted", data: done },
-  ].filter((s) => s.data.length > 0);
+  const duties = useMemo(
+    () => (isTeacher ? allDuties.filter((d) => d.staffId === user.id) : allDuties),
+    [isTeacher, allDuties, user?.id]
+  );
+
+  const { urgent, later, done } = useMemo(
+    () => groupDuties(duties, records, NOW),
+    [duties, records]
+  );
+
+  const sections = useMemo(
+    () =>
+      [
+        { key: SECTIONS.URGENT, title: "Needs attention", data: urgent },
+        { key: SECTIONS.LATER, title: "Later today", data: later },
+        { key: SECTIONS.DONE, title: "Submitted", data: done },
+      ].filter((s) => s.data.length > 0),
+    [urgent, later, done]
+  );
 
   const openDuty = (id) => navigation.navigate("DutyMarking", { dutyId: id });
+
+  if (loading && duties.length === 0) {
+    return (
+      <SafeAreaView style={[styles.screen, styles.centered]} edges={["top", "left", "right"]}>
+        <ActivityIndicator color={colors.text} />
+        <Text style={styles.centeredText}>Loading today's duties…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && duties.length === 0) {
+    return (
+      <SafeAreaView style={[styles.screen, styles.centered]} edges={["top", "left", "right"]}>
+        <Ionicons name="cloud-offline-outline" size={26} color={colors.textMuted} />
+        <Text style={styles.centeredText}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={refresh} activeOpacity={0.8}>
+          <Text style={styles.retryText}>Try again</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
@@ -60,24 +98,17 @@ export default function DutiesScreen({ navigation }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
-          <Header
+          <DutiesHeader
             user={user}
             scopeNote={isTeacher ? "Your duties today" : "All duties today"}
             done={done.length}
             total={duties.length}
-            urgentCount={urgent.length}
+            pending={urgent.length}
           />
         }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="checkmark-done-outline" size={30} color={colors.textMuted} />
-            <Text style={styles.emptyTitle}>Nothing assigned today</Text>
-            <Text style={styles.emptyBody}>
-              Duties appear here as the coordinator assigns them.
-            </Text>
-          </View>
-        }
+        ListEmptyComponent={<EmptyState />}
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeader}>
             <Text style={typography.label}>{section.title.toUpperCase()}</Text>
@@ -86,19 +117,16 @@ export default function DutiesScreen({ navigation }) {
         )}
         renderItem={({ item, section }) => {
           const count = studentsForDuty(item).length;
-          if (section.key === "urgent") {
-            return <UrgentCard duty={item} count={count} onPress={() => openDuty(item.id)} />;
+          const onPress = () => openDuty(item.id);
+
+          if (section.key === SECTIONS.URGENT) {
+            return <UrgentCard duty={item} count={count} onPress={onPress} />;
           }
-          if (section.key === "later") {
-            return <LaterRow duty={item} count={count} onPress={() => openDuty(item.id)} />;
+          if (section.key === SECTIONS.LATER) {
+            return <LaterRow duty={item} count={count} onPress={onPress} />;
           }
           return (
-            <DoneRow
-              duty={item}
-              count={count}
-              record={records[item.id]}
-              onPress={() => openDuty(item.id)}
-            />
+            <DoneRow duty={item} count={count} record={records[item.id]} onPress={onPress} />
           );
         }}
       />
@@ -106,60 +134,44 @@ export default function DutiesScreen({ navigation }) {
   );
 }
 
-function Header({ user, scopeNote, done, total, urgentCount }) {
-  const pct = total ? Math.round((done / total) * 100) : 0;
-  // Names carry honorifics (Mt = Mataji, Pr = Prabhu); the given name alone
-  // is what a greeting should use.
-  const firstName = (user.name || "").split(" ")[0];
+function DutiesHeader({ user, scopeNote, done, total, pending }) {
   const allDone = total > 0 && done === total;
 
-  return (
-    <View style={styles.header}>
-      <Text style={styles.greetLabel}>RADHE RADHE</Text>
-      <Text style={styles.greetName}>{firstName}</Text>
-      <Text style={typography.caption}>
-        {scopeNote} · Friday, {fmtTime(NOW)}
-      </Text>
+  const badge =
+    pending > 0
+      ? { text: `${pending} pending`, tone: "warning" }
+      : allDone
+      ? { text: "All clear", tone: "success", icon: "checkmark" }
+      : null;
 
-      <View style={styles.progressBlock}>
-        <View style={styles.progressTop}>
-          <Text style={styles.progressCount}>
-            {done}
-            <Text style={styles.progressOf}> of {total} submitted</Text>
-          </Text>
-          {urgentCount > 0 ? (
-            <View style={styles.urgentBadge}>
-              <Text style={styles.urgentBadgeText}>
-                {urgentCount} pending
-              </Text>
-            </View>
-          ) : allDone ? (
-            <View style={styles.clearBadge}>
-              <Ionicons name="checkmark" size={11} color={colors.success} />
-              <Text style={styles.clearBadgeText}>All clear</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${pct}%` }]} />
-        </View>
-      </View>
-    </View>
+  return (
+    <GreetingHeader
+      user={user}
+      meta={`${scopeNote} · Friday, ${fmtTime(NOW)}`}
+      done={done}
+      total={total}
+      badge={badge}
+    />
   );
 }
 
-// Actionable duties get the most visual weight on the screen: full card,
-// countdown, escalation state, and a real button.
+/** Actionable duties carry the most visual weight: countdown, escalation
+ *  state, and a real button. Everything else on the screen is quieter. */
 function UrgentCard({ duty, count, onPress }) {
-  const overdue = duty._status === "overdue";
-  const esc = escalationStage(duty);
+  const overdue = duty.status === DUTY_STATUS.OVERDUE;
+  const esc = escalationStage(duty, NOW);
+  const countdownText = overdue
+    ? `Overdue by ${fmtDuration(NOW - duty.end)}`
+    : `Closes in ${fmtDuration(duty.end - NOW)}`;
 
   return (
     <View style={[styles.card, overdue && styles.cardOverdue]}>
       <View style={styles.cardTop}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{duty.checkpoint}</Text>
-          <Text style={typography.caption}>
+        <View style={styles.cardTitleCol}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {duty.checkpoint}
+          </Text>
+          <Text style={typography.caption} numberOfLines={1}>
             {duty.group} · {plural(count, "student")}
           </Text>
         </View>
@@ -170,7 +182,7 @@ function UrgentCard({ duty, count, onPress }) {
             color={overdue ? colors.danger : colors.warning}
           />
           <Text style={[styles.timePillText, { color: overdue ? colors.danger : colors.warning }]}>
-            {countdown(duty, duty._status)}
+            {countdownText}
           </Text>
         </View>
       </View>
@@ -190,14 +202,16 @@ function UrgentCard({ duty, count, onPress }) {
   );
 }
 
-// Nothing to do yet — so this is a quiet single line, led by its time.
+/** Nothing to do yet — a quiet row, led by its time. */
 function LaterRow({ duty, count, onPress }) {
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
       <Text style={styles.rowTime}>{fmtTime(duty.start)}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{duty.checkpoint}</Text>
-        <Text style={typography.caption}>
+      <View style={styles.rowMain}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {duty.checkpoint}
+        </Text>
+        <Text style={typography.caption} numberOfLines={1}>
           {duty.group} · {plural(count, "student")}
         </Text>
       </View>
@@ -206,24 +220,24 @@ function LaterRow({ duty, count, onPress }) {
   );
 }
 
-// Done and dusted — collapses to one line, but still shows the counts the
-// spec asks for (A2) and stays tappable for the read-only cross-check (A7).
+/** Done — collapses to one line but keeps the counts the spec asks for (A2),
+ *  and stays tappable for the read-only cross-check (A7). */
 function DoneRow({ duty, count, record, onPress }) {
-  const absent = record ? Object.values(record.statuses).filter((s) => s === "A").length : 0;
-  const marked = record ? Object.keys(record.statuses).length : 0;
-  const present = count - marked;
+  const { present, absent } = summarise(count, record?.statuses);
 
   return (
     <TouchableOpacity style={[styles.row, styles.rowDone]} onPress={onPress} activeOpacity={0.6}>
       <View style={styles.check}>
         <Ionicons name="checkmark" size={13} color={colors.success} />
       </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitleDone}>{duty.checkpoint}</Text>
-        <Text style={typography.caption}>
+      <View style={styles.rowMain}>
+        <Text style={styles.rowTitleDone} numberOfLines={1}>
+          {duty.checkpoint}
+        </Text>
+        <Text style={typography.caption} numberOfLines={1}>
           {present}/{count} present
           {absent > 0 && <Text style={{ color: colors.danger }}> · {absent} absent</Text>}
-          {record ? ` · ${fmtTime(record.at)}` : ""}
+          {record?.at != null ? ` · ${fmtTime(record.at)}` : ""}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={colors.border} />
@@ -231,62 +245,27 @@ function DoneRow({ duty, count, record, onPress }) {
   );
 }
 
+function EmptyState() {
+  return (
+    <View style={styles.empty}>
+      <Ionicons name="checkmark-done-outline" size={30} color={colors.textMuted} />
+      <Text style={styles.emptyTitle}>Nothing assigned today</Text>
+      <Text style={styles.emptyBody}>Duties appear here as the coordinator assigns them.</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  // Generous bottom padding so the last card clears the tab bar instead of
-  // sitting flush against it.
-  content: { paddingHorizontal: spacing.md, paddingBottom: 48 },
+  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: TAB_CONTENT_INSET },
 
-  header: { paddingTop: spacing.sm, paddingBottom: 2 },
-  greetLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 10.5,
-    color: colors.textMuted,
-    letterSpacing: 1.6,
-    marginBottom: 2,
-  },
-  greetName: {
-    fontFamily: fonts.bold,
-    fontSize: 30,
-    color: colors.text,
-    letterSpacing: -0.4,
-    marginBottom: 3,
-  },
 
-  progressBlock: { marginTop: spacing.sm + 2 },
-  progressTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  progressCount: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
-  progressOf: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
-  urgentBadge: {
-    backgroundColor: colors.warningBg,
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  urgentBadgeText: { fontFamily: fonts.semibold, fontSize: 11, color: colors.warning },
-  clearBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: colors.successBg,
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  clearBadgeText: { fontFamily: fonts.semibold, fontSize: 11, color: colors.success },
-  track: { height: 4, borderRadius: 2, backgroundColor: colors.cardAlt, overflow: "hidden" },
-  fill: { height: "100%", backgroundColor: colors.success, borderRadius: 2 },
 
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
   sectionCount: { fontFamily: fonts.semibold, fontSize: 11, color: colors.border },
@@ -296,24 +275,26 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.warning,
     borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    padding: 13,
+    marginBottom: 8,
   },
   cardOverdue: { borderColor: colors.danger, backgroundColor: colors.dangerBg },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  cardTitle: { fontFamily: fonts.bold, fontSize: 19, color: colors.text, marginBottom: 2 },
+  cardTitleCol: { flex: 1, minWidth: 0 },
+  cardTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginBottom: 2 },
 
   timePill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: radius.pill,
+    flexShrink: 0,
   },
   timePillDue: { backgroundColor: colors.warningBg },
   timePillOverdue: { backgroundColor: colors.white },
-  timePillText: { fontFamily: fonts.bold, fontSize: 11.5 },
+  timePillText: { fontFamily: fonts.bold, fontSize: 11 },
 
   escRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: spacing.sm },
   escText: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
@@ -325,10 +306,10 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
-    paddingVertical: 13,
-    marginTop: spacing.md,
+    paddingVertical: 12,
+    marginTop: spacing.sm + 2,
   },
-  markBtnText: { fontFamily: fonts.bold, fontSize: 14.5, color: colors.white },
+  markBtnText: { fontFamily: fonts.bold, fontSize: 14, color: colors.white },
 
   row: {
     flexDirection: "row",
@@ -338,20 +319,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 13,
+    marginBottom: 7,
   },
   rowDone: { backgroundColor: colors.cardAlt, borderColor: "transparent" },
+  rowMain: { flex: 1, minWidth: 0 },
   rowTime: {
     fontFamily: fonts.semibold,
     fontSize: 12,
     color: colors.textMuted,
-    width: 62,
+    width: 60,
     fontVariant: ["tabular-nums"],
   },
-  rowTitle: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, marginBottom: 1 },
-  rowTitleDone: { fontFamily: fonts.medium, fontSize: 14.5, color: colors.textMuted, marginBottom: 1 },
+  rowTitle: { fontFamily: fonts.semibold, fontSize: 14.5, color: colors.text, marginBottom: 1 },
+  rowTitleDone: { fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted, marginBottom: 1 },
   check: {
     width: 22,
     height: 22,
@@ -361,8 +343,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  empty: { alignItems: "center", paddingVertical: 64, gap: 6 },
-  emptyTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, marginTop: 4 },
+  centered: { alignItems: "center", justifyContent: "center", gap: 10, padding: spacing.xl },
+  centeredText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+    maxWidth: 260,
+  },
+  retryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.text,
+  },
+  retryText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+
+  empty: { alignItems: "center", paddingVertical: 56, gap: 6 },
+  emptyTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginTop: 4 },
   emptyBody: {
     fontFamily: fonts.regular,
     fontSize: 13,

@@ -19,6 +19,7 @@ import { colors, radius, spacing, loginFonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { fetchStaffByEmail } from "../lib/staff";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -229,18 +230,15 @@ export default function LoginScreen() {
       }
       return;
     }
-
     const { data: staffRow, error: staffError } = await supabase
       .from("staff")
       .select("*")
       .eq("email", email.trim())
       .single();
-
     if (staffError || !staffRow) {
-      triggerNotification("Signed in, but no staff record found for this account.");
+      setError("Signed in, but no staff record found for this account.");
       return;
     }
-
     login(staffRow);
   };
 

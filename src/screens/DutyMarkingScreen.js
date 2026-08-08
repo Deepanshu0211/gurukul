@@ -7,31 +7,60 @@ import {
   TouchableOpacity,
   Modal,
   Pressable,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
-import { DUTIES, STATUS_META, studentsForDuty } from "../data/mockData";
+import { STATUS_META } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
-import { useAttendance } from "../context/AttendanceContext";
+import { useSchoolData } from "../context/SchoolDataContext";
+import { useDialog } from "../components/Dialog";
+import { haptics } from "../lib/haptics";
 
 export default function DutyMarkingScreen({ route, navigation }) {
   const { dutyId } = route.params;
-  const duty = DUTIES.find((d) => d.id === dutyId);
-  const students = useMemo(() => studentsForDuty(duty), [duty]);
   const { user } = useAuth();
-  const { records, submitDuty } = useAttendance();
+  const { duties, records, studentsForDuty, submitDuty } = useSchoolData();
+  const dialog = useDialog();
+
+  const duty = duties.find((d) => d.id === dutyId);
+  const students = useMemo(() => studentsForDuty(duty), [duty, studentsForDuty]);
+
   const existing = records[dutyId];
-  const readOnly = !!existing;
+  const readOnly = duty?.state === "submitted";
 
   const [statuses, setStatuses] = useState(existing ? existing.statuses : {});
+  const [saving, setSaving] = useState(false);
   // Which student's status sheet is open — null when closed.
   const [sheetFor, setSheetFor] = useState(null);
 
+  // The duty can be missing if it was reassigned or removed while this screen
+  // was open — better an honest message than a crash on `duty.checkpoint`.
+  if (!duty) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+        <View style={styles.gone}>
+          <Ionicons name="alert-circle-outline" size={28} color={colors.textMuted} />
+          <Text style={styles.goneTitle}>Duty not available</Text>
+          <Text style={styles.goneBody}>
+            It may have been reassigned. Go back and pull to refresh.
+          </Text>
+          <TouchableOpacity style={styles.goneBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.goneBtnText}>Back to duties</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const toggleAbsent = (studentId) => {
     if (readOnly) return;
+    // Distinct feels for marking vs undoing, so a teacher going down a line of
+    // students can tell what happened without looking at the screen.
+    if (statuses[studentId] === "A") haptics.undoAbsent();
+    else haptics.markAbsent();
+
     setStatuses((prev) => {
       const next = { ...prev };
       if (next[studentId] === "A") delete next[studentId];
@@ -41,6 +70,9 @@ export default function DutyMarkingScreen({ route, navigation }) {
   };
 
   const setStatus = (studentId, code) => {
+    if (code === "A") haptics.markAbsent();
+    else haptics.select();
+
     setStatuses((prev) => {
       const next = { ...prev };
       if (code === "P") delete next[studentId];
@@ -55,25 +87,46 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const absent = Object.values(statuses).filter((s) => s === "A").length;
   const elsewhere = marked - absent;
 
-  const handleSubmit = () => {
-    submitDuty(dutyId, statuses, user.id);
-    Alert.alert(
-      "Submitted",
-      `${duty.checkpoint} · ${present}/${students.length} present, ${absent} absent. Summary sent to Coordinator, MOD & Principal.`
-    );
-    navigation.goBack();
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await submitDuty(dutyId, statuses, user.id);
+      haptics.success();
+      dialog.alert({
+        icon: "checkmark-circle-outline",
+        title: "Submitted",
+        message: `${duty.checkpoint} · ${present}/${students.length} present, ${absent} absent.`,
+      });
+      navigation.goBack();
+    } catch (e) {
+      // Stay on the screen so the marks aren't lost — a teacher who has just
+      // walked a line of forty students must not have to start again.
+      dialog.alert({
+        icon: "alert-circle-outline",
+        title: "Not submitted",
+        message: `${e.message || "Something went wrong saving this."}\n\nYour marks are still here. Try again.`,
+        destructive: true,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmSubmit = () => {
     if (absent > 0) {
-      Alert.alert(
-        `${absent} student${absent === 1 ? "" : "s"} marked absent`,
-        "Absent means the child is unaccounted for and will raise a safety alert. Submit anyway?",
-        [
-          { text: "Review", style: "cancel" },
-          { text: "Submit", style: "destructive", onPress: handleSubmit },
-        ]
-      );
+      // This dialog exists because someone may be about to submit a mis-tap;
+      // a physical interruption reinforces "stop and read".
+      haptics.warn();
+      dialog.confirm({
+        icon: "warning-outline",
+        title: `${absent} student${absent === 1 ? "" : "s"} marked absent`,
+        message:
+          "Absent means the child is unaccounted for, and this will raise a safety alert to the Principal. Submit anyway?",
+        cancelLabel: "Review",
+        confirmLabel: "Submit",
+        destructive: true,
+        onConfirm: handleSubmit,
+      });
     } else {
       handleSubmit();
     }
@@ -170,7 +223,12 @@ export default function DutyMarkingScreen({ route, navigation }) {
           <Tally value={absent} label="Absent" danger />
         </View>
         {!readOnly && (
-          <PrimaryButton title="Submit" onPress={confirmSubmit} style={styles.submitBtn} />
+          <PrimaryButton
+            title={saving ? "Saving…" : "Submit"}
+            onPress={confirmSubmit}
+            disabled={saving}
+            style={styles.submitBtn}
+          />
         )}
       </View>
 
@@ -245,6 +303,25 @@ function SheetOption({ label, hint, active, danger, onPress }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+
+  gone: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: spacing.xl },
+  goneTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
+  goneBody: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+    maxWidth: 250,
+  },
+  goneBtn: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.text,
+  },
+  goneBtnText: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.text },
 
   header: {
     flexDirection: "row",

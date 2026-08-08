@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -9,22 +10,17 @@ import {
   Modal,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import {
-  DUTIES,
-  STAFF,
-  ROLE_LABELS,
-  NOW,
-  fmtTime,
-  dutyStatus,
-  studentsForDuty,
-} from "../data/mockData";
-import { useAttendance } from "../context/AttendanceContext";
+import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
+import { STAFF, ROLE_LABELS, NOW } from "../data/mockData";
+import { dutyStatus, DUTY_STATUS } from "../domain/duties";
+import { fmtTime, plural, initial } from "../utils/format";
+import { useSchoolData } from "../context/SchoolDataContext";
 import { useStudents } from "../lib/students";
+import { useDialog } from "../components/Dialog";
 
 const TABS = [
   { key: "duties", label: "Duties" },
@@ -33,21 +29,37 @@ const TABS = [
 ];
 
 export default function RosterScreen() {
-  const { records } = useAttendance();
+  const { duties: DUTIES, records, studentsForDuty, reassignDuty, refresh } = useSchoolData();
+  const dialog = useDialog();
   const [tab, setTab] = useState("duties");
-
-  // Per-day overrides live here for now; defaults stay untouched (SRS B2).
-  const [assignments, setAssignments] = useState(
-    Object.fromEntries(DUTIES.map((d) => [d.id, d.staffId]))
-  );
   const [reassigning, setReassigning] = useState(null);
+
+  // Reload on focus so a submission made by a teacher shows here without an
+  // app restart.
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
   const staffById = (id) => STAFF.find((s) => s.id === id);
   const staffName = (id) => staffById(id)?.name || "Unassigned";
 
-  const applyReassign = (staffId) => {
-    setAssignments((prev) => ({ ...prev, [reassigning.id]: staffId }));
+  // Writes to Supabase, so the teacher losing or gaining the duty sees it
+  // too — this is a today-only override; the recurring default is untouched.
+  const applyReassign = async (staffId) => {
+    const duty = reassigning;
     setReassigning(null);
+    try {
+      await reassignDuty(duty.id, staffId);
+    } catch (e) {
+      dialog.alert({
+        icon: "alert-circle-outline",
+        title: "Could not reassign",
+        message: e.message || "The duty was not reassigned. Try again.",
+        destructive: true,
+      });
+    }
   };
 
   return (
@@ -72,13 +84,14 @@ export default function RosterScreen() {
 
       {tab === "duties" && (
         <DutiesTab
-          assignments={assignments}
+          duties={DUTIES}
           records={records}
           staffName={staffName}
+          studentsForDuty={studentsForDuty}
           onReassign={setReassigning}
         />
       )}
-      {tab === "staff" && <StaffTab assignments={assignments} />}
+      {tab === "staff" && <StaffTab duties={DUTIES} />}
       {tab === "students" && <StudentsTab />}
 
       <Modal
@@ -96,7 +109,7 @@ export default function RosterScreen() {
             default is unchanged.
           </Text>
           <ScrollableStaff
-            current={reassigning ? assignments[reassigning.id] : null}
+            current={reassigning ? reassigning.staffId : null}
             onPick={applyReassign}
           />
         </View>
@@ -105,10 +118,10 @@ export default function RosterScreen() {
   );
 }
 
-function DutiesTab({ assignments, records, staffName, onReassign }) {
-  const withStatus = DUTIES.map((d) => ({ ...d, _status: dutyStatus(d, records) }));
-  const pending = withStatus.filter((d) => d._status !== "done");
-  const done = withStatus.filter((d) => d._status === "done");
+function DutiesTab({ duties, records, staffName, studentsForDuty, onReassign }) {
+  const withStatus = duties.map((d) => ({ ...d, _status: dutyStatus(d, records, NOW) }));
+  const pending = withStatus.filter((d) => d._status !== DUTY_STATUS.DONE);
+  const done = withStatus.filter((d) => d._status === DUTY_STATUS.DONE);
 
   const sections = [
     { title: "Not yet submitted", data: pending },
@@ -129,8 +142,8 @@ function DutiesTab({ assignments, records, staffName, onReassign }) {
         </View>
       )}
       renderItem={({ item }) => {
-        const overdue = item._status === "overdue";
-        const submitted = item._status === "done";
+        const overdue = item._status === DUTY_STATUS.OVERDUE;
+        const submitted = item._status === DUTY_STATUS.DONE;
         const total = studentsForDuty(item).length;
         return (
           <View style={[styles.card, overdue && styles.cardOverdue]}>
@@ -152,7 +165,7 @@ function DutiesTab({ assignments, records, staffName, onReassign }) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.assignLabel}>ASSIGNED TO</Text>
-                <Text style={styles.assignName}>{staffName(assignments[item.id])}</Text>
+                <Text style={styles.assignName}>{staffName(item.staffId)}</Text>
               </View>
               {submitted ? (
                 <View style={styles.doneTag}>
@@ -183,8 +196,9 @@ function DutiesTab({ assignments, records, staffName, onReassign }) {
   );
 }
 
-function StaffTab({ assignments }) {
-  const dutiesFor = (id) => Object.values(assignments).filter((v) => v === id).length;
+function StaffTab({ duties }) {
+  const dialog = useDialog();
+  const dutiesFor = (id) => duties.filter((d) => d.staffId === id).length;
   return (
     <SectionList
       sections={[{ title: "", data: STAFF }]}
@@ -195,7 +209,13 @@ function StaffTab({ assignments }) {
         <View style={styles.listHeaderRow}>
           <Text style={styles.sectionLabel}>{STAFF.length} STAFF</Text>
           <TouchableOpacity
-            onPress={() => Alert.alert("Add staff", "Adding staff is an administrator action.")}
+            onPress={() =>
+              dialog.alert({
+                icon: "person-add-outline",
+                title: "Add staff",
+                message: "Adding a staff member is an administrator action.",
+              })
+            }
             hitSlop={8}
           >
             <Text style={styles.addLink}>+ Add</Text>
@@ -209,14 +229,14 @@ function StaffTab({ assignments }) {
             style={styles.personRow}
             activeOpacity={0.6}
             onPress={() =>
-              Alert.alert(
-                item.name,
-                `${ROLE_LABELS[item.role]}\n${item.email}\n\nDeactivating a staff member flags their pending duties for reassignment.`,
-                [
-                  { text: "Close", style: "cancel" },
-                  { text: "Deactivate", style: "destructive" },
-                ]
-              )
+              dialog.confirm({
+                icon: "person-outline",
+                title: item.name,
+                message: `${ROLE_LABELS[item.role]} · ${item.email}\n\nDeactivating flags their pending duties for reassignment.`,
+                cancelLabel: "Close",
+                confirmLabel: "Deactivate",
+                destructive: true,
+              })
             }
           >
             <View style={styles.personAvatar}>
@@ -245,6 +265,7 @@ const TYPE_LABEL = {
 };
 
 function StudentsTab() {
+  const dialog = useDialog();
   const { students, loading, error, reload } = useStudents();
   const [query, setQuery] = useState("");
 
@@ -308,7 +329,11 @@ function StudentsTab() {
             </Text>
             <TouchableOpacity
               onPress={() =>
-                Alert.alert("Add student", "Add individually, or bulk-import the Excel register.")
+                dialog.alert({
+                  icon: "person-add-outline",
+                  title: "Add student",
+                  message: "Add individually, or bulk-import the Excel register.",
+                })
               }
               hitSlop={8}
             >
@@ -349,12 +374,13 @@ function StudentsTab() {
           style={styles.personRow}
           activeOpacity={0.6}
           onPress={() =>
-            Alert.alert(
-              item.name,
-              `Admission no. ${item.adm}\nClass ${item.label} · Roll ${item.roll || "—"}\n${
+            dialog.alert({
+              icon: "school-outline",
+              title: item.name,
+              message: `Admission no. ${item.adm}\nClass ${item.label} · Roll ${item.roll || "—"}\n${
                 TYPE_LABEL[item.type]
-              }${item.remedial ? "\nRemedial batch" : ""}`
-            )
+              }${item.remedial ? "\nRemedial batch" : ""}`,
+            })
           }
         >
           <View style={styles.rollBadge}>
@@ -418,7 +444,7 @@ const styles = StyleSheet.create({
   tabText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.textMuted },
   tabTextActive: { color: colors.text },
 
-  list: { paddingHorizontal: spacing.md, paddingBottom: 48 },
+  list: { paddingHorizontal: spacing.md, paddingBottom: TAB_CONTENT_INSET },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
