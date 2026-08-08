@@ -1,5 +1,18 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity, Image, Dimensions } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+  Animated,
+  PanResponder,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius, spacing, loginFonts } from "../theme/theme";
@@ -7,69 +20,240 @@ import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 
-// Square source art (1254x1254), shown whole and centered. Sized against BOTH
-// screen dimensions and capped, so the illustration is generous on a big phone
-// but shrinks automatically on a short/old display — the goal is the whole
-// login fitting without scrolling on typical phones. The ScrollView below is
-// the safety net for the smallest screens and for when the keyboard is open.
 const { width: SCREEN_W } = Dimensions.get("window");
 
-// ─────────────────────────────────────────────────────────────
-// ADJUST THIS ONE NUMBER to resize the illustration.
-// It's a multiple of the screen width. The whole square image is
-// always shown intact — nothing is cropped.
-//   0.7 = smaller   1.0 = exactly screen width   1.4 = large
-// ─────────────────────────────────────────────────────────────
 const HERO_SCALE = 1.2;
 const HERO_SIZE = Math.round(SCREEN_W * HERO_SCALE);
+
+// ─────────────────────────────────────────────────────────────
+// 100x IMPROVED SWIPEABLE NOTIFICATION TOAST
+// Features: PanResponder gesture (swipe up/left/right to dismiss),
+// spring entrance physics, drag feedback, countdown progress bar,
+// and auto-pause on user interaction.
+// ─────────────────────────────────────────────────────────────
+function SwipeableToast({ message, onDismiss, duration = 3500 }) {
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: -120 })).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(1)).current;
+  const isInteracting = useRef(false);
+  const progressAnimation = useRef(null);
+
+  const startDismissTimer = () => {
+    progress.setValue(1);
+    progressAnimation.current = Animated.timing(progress, {
+      toValue: 0,
+      duration: duration,
+      useNativeDriver: false,
+    });
+    progressAnimation.current.start(({ finished }) => {
+      if (finished && !isInteracting.current) {
+        animateOut("up");
+      }
+    });
+  };
+
+  const animateIn = () => {
+    pan.setValue({ x: 0, y: -100 });
+    opacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(pan, {
+        toValue: { x: 0, y: 0 },
+        friction: 6,
+        tension: 90,
+        useNativeDriver: false,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      startDismissTimer();
+    });
+  };
+
+  const animateOut = (dir = "up") => {
+    let toY = -140;
+    let toX = 0;
+    if (dir === "left") toX = -SCREEN_W;
+    if (dir === "right") toX = SCREEN_W;
+
+    Animated.parallel([
+      Animated.timing(pan, {
+        toValue: { x: toX, y: toY },
+        duration: 200,
+        useNativeDriver: false,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: false,
+      }),
+    ]).start(() => {
+      onDismiss();
+    });
+  };
+
+  useEffect(() => {
+    animateIn();
+    return () => {
+      if (progressAnimation.current) progressAnimation.current.stop();
+    };
+  }, [message]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4;
+      },
+      onPanResponderGrant: () => {
+        isInteracting.current = true;
+        if (progressAnimation.current) progressAnimation.current.stop();
+      },
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], {
+        useNativeDriver: false,
+      }),
+      onPanResponderRelease: (_, gestureState) => {
+        isInteracting.current = false;
+        const { dx, dy, vx, vy } = gestureState;
+
+        if (dy < -20 || vy < -0.3) {
+          animateOut("up");
+        } else if (dx < -50 || vx < -0.4) {
+          animateOut("left");
+        } else if (dx > 50 || vx > 0.4) {
+          animateOut("right");
+        } else {
+          Animated.spring(pan, {
+            toValue: { x: 0, y: 0 },
+            friction: 5,
+            tension: 100,
+            useNativeDriver: false,
+          }).start(() => {
+            startDismissTimer();
+          });
+        }
+      },
+    })
+  ).current;
+
+  const progressBarWidth = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "100%"],
+  });
+
+  return (
+    <Animated.View
+      {...panResponder.panHandlers}
+      style={[
+        styles.toastContainer,
+        {
+          transform: [{ translateX: pan.x }, { translateY: pan.y }],
+          opacity: opacity,
+        },
+      ]}
+    >
+      <View style={styles.toastContent}>
+        {/* Swipe Pill Handle */}
+        <View style={styles.swipeHandle} />
+
+        <View style={styles.toastMainRow}>
+          <View style={styles.toastIconBg}>
+            <Ionicons name="alert-circle" size={18} color={colors.danger} />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toastText}>{message}</Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => animateOut("up")}
+            hitSlop={12}
+            style={styles.toastCloseBtn}
+          >
+            <Ionicons name="close" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Minimal Progress Line */}
+        <View style={styles.progressTrack}>
+          <Animated.View style={[styles.progressBar, { width: progressBarWidth }]} />
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
   const [focusedField, setFocusedField] = useState(null);
+  const [notification, setNotification] = useState(null);
+
+  const triggerNotification = (msg) => {
+    setNotification(msg);
+  };
 
   const handleContinue = async () => {
-    setError("");
-    if (!email.trim() || !password) {
-      setError("Enter both your email and password.");
+    if (!email.trim() && !password) {
+      triggerNotification("Please enter both your email and password.");
       return;
     }
+    if (!email.trim()) {
+      triggerNotification("Please enter your email address.");
+      return;
+    }
+    if (!password) {
+      triggerNotification("Please enter your password.");
+      return;
+    }
+
     const { error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
+
     if (authError) {
-      // Distinguish the real causes — a blanket "wrong password" message hides
-      // rate limits and network failures, which need completely different fixes.
       const msg = (authError.message || "").toLowerCase();
       if (msg.includes("invalid login") || msg.includes("credentials")) {
-        setError("Incorrect email or password.");
+        triggerNotification("Incorrect email or password.");
       } else if (msg.includes("rate") || msg.includes("too many")) {
-        setError("Too many attempts. Wait a minute and try again.");
+        triggerNotification("Too many attempts. Wait a minute and try again.");
       } else if (msg.includes("network") || msg.includes("fetch")) {
-        setError("No connection. Check the device's internet and retry.");
+        triggerNotification("No connection. Check the device's internet and retry.");
       } else {
-        setError(authError.message);
+        triggerNotification(authError.message);
       }
       return;
     }
+
     const { data: staffRow, error: staffError } = await supabase
       .from("staff")
       .select("*")
       .eq("email", email.trim())
       .single();
+
     if (staffError || !staffRow) {
-      setError("Signed in, but no staff record found for this account.");
+      triggerNotification("Signed in, but no staff record found for this account.");
       return;
     }
+
     login(staffRow);
   };
 
   return (
     <SafeAreaView style={styles.screen}>
+      {/* 100x Floating Swipeable Notification */}
+      {notification && (
+        <SwipeableToast
+          message={notification}
+          onDismiss={() => setNotification(null)}
+        />
+      )}
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -140,13 +324,6 @@ export default function LoginScreen() {
           <TouchableOpacity style={{ alignSelf: "flex-end", marginTop: 10 }}>
             <Text style={styles.forgotLink}>Forgot password?</Text>
           </TouchableOpacity>
-
-          {!!error && (
-            <View style={styles.errorBox}>
-              <Ionicons name="alert-circle" size={16} color={colors.danger} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
 
           <PrimaryButton
             title="Sign in"
@@ -244,17 +421,71 @@ const styles = StyleSheet.create({
   },
   helpLink: { fontFamily: loginFonts.bold, color: colors.text },
 
-  errorBox: {
+  toastContainer: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 14 : 14,
+    left: spacing.lg,
+    right: spacing.lg,
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  toastContent: {
+    backgroundColor: colors.card,
+    borderRadius: radius.pill,
+    paddingTop: 6,
+    paddingBottom: 0,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    overflow: "hidden",
+  },
+  swipeHandle: {
+    width: 28,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "#E5E5E5",
+    alignSelf: "center",
+    marginBottom: 6,
+  },
+  toastMainRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.dangerBg,
-    borderRadius: radius.pill,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    marginTop: spacing.md,
+    paddingBottom: 10,
   },
-  errorText: { color: colors.danger, fontSize: 12.5, fontFamily: loginFonts.medium, flex: 1 },
+  toastIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.dangerBg,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  toastText: {
+    fontSize: 13,
+    fontFamily: loginFonts.medium,
+    color: colors.text,
+    lineHeight: 17,
+  },
+  toastCloseBtn: {
+    padding: 4,
+    marginLeft: 6,
+  },
+  progressTrack: {
+    height: 2.5,
+    backgroundColor: colors.dangerBg,
+    marginHorizontal: -16,
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: colors.danger,
+    borderRadius: 1.5,
+  },
 
   footNote: { textAlign: "center", color: colors.textMuted, fontSize: 12, marginTop: spacing.md },
 });

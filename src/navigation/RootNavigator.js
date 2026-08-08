@@ -1,6 +1,6 @@
 import React from "react";
 import { View } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +14,14 @@ import DashboardScreen from "../screens/DashboardScreen";
 import RosterScreen from "../screens/RosterScreen";
 import AccountScreen from "../screens/AccountScreen";
 import ClassDayScreen from "../screens/ClassDayScreen";
+
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.bg,
+  },
+};
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -105,7 +113,7 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       {user ? <RoleTabs role={user.role} hasClass={!!user.classKey} /> : <LoginScreen />}
     </NavigationContainer>
   );

@@ -47,11 +47,11 @@ export default function App() {
   if (!fontsLoaded) return null;
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      <SafeAreaProvider>
+    <View style={{ flex: 1, backgroundColor: "#FFFFFF" }} onLayout={onLayoutRootView}>
+      <SafeAreaProvider style={{ backgroundColor: "#FFFFFF" }}>
         <AuthProvider>
           <AttendanceProvider>
-            <StatusBar style="dark" />
+            <StatusBar style="dark" backgroundColor="#FFFFFF" translucent />
             <RootNavigator />
           </AttendanceProvider>
         </AuthProvider>
