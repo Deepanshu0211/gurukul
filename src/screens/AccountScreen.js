@@ -236,7 +236,7 @@ export default function AccountScreen() {
             label="About this app"
             onPress={() =>
               dialog.alert({
-                title: "Gurukula Attendance",
+                title: "BGIS Attendance",
                 message:
                   "Attendance & Student Safety · Pilot build\n\nBhaktivedanta Gurukula & International School",
               })
@@ -414,7 +414,9 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.cardAlt,
+    backgroundColor: "rgba(238, 244, 250, 0.82)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.7)",
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     marginBottom: spacing.lg,
@@ -433,11 +435,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   group: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.85)",
+    borderTopColor: "rgba(255, 255, 255, 0.95)",
+    borderBottomColor: "rgba(255, 255, 255, 0.45)",
     borderRadius: radius.md,
     overflow: "hidden",
+    shadowColor: "#1C4E80",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 13, paddingHorizontal: 14 },
   rowLabel: { fontFamily: fonts.regular, fontSize: 11.5, color: colors.textMuted },

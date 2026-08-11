@@ -1,12 +1,13 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { colors, radius, spacing, typography, shadow, fonts } from "../theme/theme";
+import { GlassView } from "./GlassView";
 
-export function Card({ style, children, ...rest }) {
+export function Card({ style, children, cornerRadius = 24, ...rest }) {
   return (
-    <View style={[styles.card, style]} {...rest}>
+    <GlassView cornerRadius={cornerRadius} style={[styles.card, style]} {...rest}>
       {children}
-    </View>
+    </GlassView>
   );
 }
 
@@ -16,12 +17,12 @@ export function Pill({ label, tone = "neutral", style }) {
     warning: { bg: colors.warningBg, fg: colors.warning },
     danger: { bg: colors.dangerBg, fg: colors.danger },
     info: { bg: colors.infoBg, fg: colors.info },
-    neutral: { bg: colors.cardAlt, fg: colors.textMuted },
-    primary: { bg: colors.cardAlt, fg: colors.text },
+    neutral: { bg: "rgba(238, 244, 250, 0.85)", fg: colors.textMuted },
+    primary: { bg: "rgba(28, 78, 128, 0.12)", fg: colors.primary },
   };
   const t = tones[tone] || tones.neutral;
   return (
-    <View style={[{ backgroundColor: t.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill }, style]}>
+    <View style={[{ backgroundColor: t.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.6)" }, style]}>
       <Text style={{ color: t.fg, fontSize: 12, fontFamily: fonts.semibold }}>{label}</Text>
     </View>
   );
@@ -48,7 +49,7 @@ export function SecondaryButton({ title, onPress, style }) {
   );
 }
 
-export function IconCircle({ children, bg = colors.cardAlt, size = 52 }) {
+export function IconCircle({ children, bg = "rgba(238, 244, 250, 0.85)", size = 52 }) {
   return (
     <View
       style={{
@@ -58,6 +59,8 @@ export function IconCircle({ children, bg = colors.cardAlt, size = 52 }) {
         backgroundColor: bg,
         alignItems: "center",
         justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "rgba(255, 255, 255, 0.7)",
       }}
     >
       {children}
@@ -71,13 +74,18 @@ export function SectionTitle({ children, style }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: "rgba(255, 255, 255, 0.76)",
     borderRadius: radius.lg,
     padding: spacing.md,
-    // White card on a white ground — the hairline border is what defines it.
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.card,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.85)",
+    borderTopColor: "rgba(255, 255, 255, 0.95)",
+    borderBottomColor: "rgba(255, 255, 255, 0.45)",
+    shadowColor: "#1C4E80",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
   },
   primaryBtn: {
     backgroundColor: colors.primary,
@@ -85,6 +93,11 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#1C4E80",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   primaryBtnText: {
     color: colors.white,
@@ -93,11 +106,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   secondaryBtn: {
-    backgroundColor: colors.cardAlt,
+    backgroundColor: "rgba(238, 244, 250, 0.85)",
     borderRadius: radius.pill,
     paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.7)",
   },
   secondaryBtnText: {
     color: colors.text,

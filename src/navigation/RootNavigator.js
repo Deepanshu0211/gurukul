@@ -19,7 +19,7 @@ const navTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: colors.bg,
+    background: "transparent",
   },
 };
 

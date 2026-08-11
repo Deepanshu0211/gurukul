@@ -13,7 +13,7 @@ import {
   Animated,
   PanResponder,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius, spacing, loginFonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
@@ -33,6 +33,8 @@ const HERO_SIZE = Math.round(SCREEN_W * HERO_SCALE);
 // and auto-pause on user interaction.
 // ─────────────────────────────────────────────────────────────
 function SwipeableToast({ message, onDismiss, duration = 3500 }) {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, 12);
   const pan = useRef(new Animated.ValueXY({ x: 0, y: -120 })).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const progress = useRef(new Animated.Value(1)).current;
@@ -150,6 +152,7 @@ function SwipeableToast({ message, onDismiss, duration = 3500 }) {
       style={[
         styles.toastContainer,
         {
+          top: topInset,
           transform: [{ translateX: pan.x }, { translateY: pan.y }],
           opacity: opacity,
         },
@@ -261,15 +264,16 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Image
-            source={require("../assets/krishna-login-square.png")}
-            style={styles.heroImage}
+        <Image
+            source={require("../assets/krishna-bgis-blend.png")}
+            style={[styles.heroImage, { width: 290, height: 200, marginTop: 12, marginBottom: 12 }]}
             resizeMode="contain"
           />
 
-          <Text style={styles.brandTitle}>Gurukula</Text>
+
+          <Text style={styles.brandTitle}>BGIS</Text>
           <Text style={[styles.brandSubtitle, { marginBottom: spacing.md }]}>
-            Please sign in to continue.
+            Bhaktivedanta Gurukula & International School
           </Text>
 
           <Text style={styles.fieldLabel}>EMAIL</Text>
@@ -285,7 +289,7 @@ export default function LoginScreen() {
               onChangeText={setEmail}
               onFocus={() => setFocusedField("email")}
               onBlur={() => setFocusedField(null)}
-              placeholder="you@gurukula.org"
+              placeholder="you@bgis.org"
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               keyboardType="email-address"
@@ -344,11 +348,8 @@ const styles = StyleSheet.create({
 
   heroImage: {
     width: HERO_SIZE,
-    height: HERO_SIZE, // square source, shown whole
+    height: HERO_SIZE,
     alignSelf: "center",
-    // The PNG has empty margin baked in around the figure. These negative
-    // margins pull the layout back over that dead space without cropping the
-    // image itself. Raise the multipliers to tighten further.
     marginTop: -HERO_SIZE * 0.150,
     marginBottom: -HERO_SIZE * 0.1,
   },
@@ -391,13 +392,19 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.card,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: "rgba(255, 255, 255, 0.88)",
+    borderTopColor: "rgba(255, 255, 255, 0.95)",
+    borderBottomColor: "rgba(255, 255, 255, 0.45)",
     borderRadius: radius.pill,
     paddingHorizontal: 20,
     paddingVertical: 13,
     marginTop: 6,
+    shadowColor: "#1C4E80",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
   },
   inputRowFocused: { borderColor: colors.primary },
   input: { flex: 1, fontSize: 15, fontFamily: loginFonts.medium, color: colors.text, padding: 0 },
@@ -428,18 +435,18 @@ const styles = StyleSheet.create({
     elevation: 9999,
   },
   toastContent: {
-    backgroundColor: colors.card,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
     borderRadius: radius.pill,
     paddingTop: 6,
     paddingBottom: 0,
     paddingHorizontal: 16,
     borderWidth: 1.5,
-    borderColor: colors.border,
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    borderColor: "rgba(255, 255, 255, 0.95)",
+    shadowColor: "#1C4E80",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 6,
     overflow: "hidden",
   },
   swipeHandle: {

@@ -75,7 +75,7 @@ export default function DashboardScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Text style={styles.pageTitle}>Today</Text>
-        <Text style={typography.caption}>Bhaktivedanta Gurukula · Friday, {fmtTime(NOW)}</Text>
+        <Text style={typography.caption}>BGIS · Bhaktivedanta Gurukula & International School · Friday, {fmtTime(NOW)}</Text>
 
         {/* The safety number leads: it is the reason the system exists. */}
         <View style={[styles.hero, open.length > 0 && styles.heroAlarm]}>
@@ -287,12 +287,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: colors.successBg,
+    backgroundColor: "rgba(240, 253, 244, 0.88)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.85)",
     borderRadius: radius.md,
     padding: spacing.md,
     marginTop: spacing.md,
+    shadowColor: "#1C4E80",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  heroAlarm: { backgroundColor: colors.dangerBg },
+  heroAlarm: { backgroundColor: "rgba(254, 242, 242, 0.88)" },
   heroBig: { fontFamily: fonts.bold, fontSize: 40, color: colors.danger, lineHeight: 44 },
   heroTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   heroSub: { fontFamily: fonts.regular, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
@@ -300,12 +307,18 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: "row", gap: 8, marginTop: spacing.sm },
   statCard: {
     flex: 1,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.85)",
+    borderTopColor: "rgba(255, 255, 255, 0.95)",
+    borderBottomColor: "rgba(255, 255, 255, 0.45)",
     borderRadius: radius.md,
     paddingVertical: 12,
     alignItems: "center",
+    shadowColor: "#1C4E80",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   statValue: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
   statLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted, marginTop: 1 },

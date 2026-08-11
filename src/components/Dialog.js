@@ -11,6 +11,9 @@ import { colors, spacing, radius, fonts } from "../theme/theme";
 //   dialog.alert({ title, message });
 //   dialog.confirm({ title, message, confirmLabel, destructive, onConfirm });
 
+import { GlassView } from "./GlassView";
+
+// Replaces React Native's Alert.alert
 const DialogContext = createContext(null);
 
 export function DialogProvider({ children }) {
@@ -37,40 +40,42 @@ export function DialogProvider({ children }) {
       <Modal visible={!!config} transparent animationType="fade" onRequestClose={close}>
         <Pressable style={styles.backdrop} onPress={close}>
           {/* Stops a tap inside the card from closing the dialog. */}
-          <Pressable style={styles.card} onPress={() => {}}>
-            {config?.icon && (
-              <View style={[styles.iconWrap, config.destructive && styles.iconWrapDanger]}>
-                <Ionicons
-                  name={config.icon}
-                  size={20}
-                  color={config.destructive ? colors.danger : colors.text}
-                />
-              </View>
-            )}
-
-            <Text style={styles.title}>{config?.title}</Text>
-            {!!config?.message && <Text style={styles.message}>{config.message}</Text>}
-
-            <View style={styles.actions}>
-              {config?.kind === "confirm" && (
-                <TouchableOpacity style={styles.cancelBtn} onPress={close} activeOpacity={0.7}>
-                  <Text style={styles.cancelText}>{config?.cancelLabel || "Cancel"}</Text>
-                </TouchableOpacity>
+          <Pressable onPress={() => {}}>
+            <GlassView style={styles.card} cornerRadius={22}>
+              {config?.icon && (
+                <View style={[styles.iconWrap, config.destructive && styles.iconWrapDanger]}>
+                  <Ionicons
+                    name={config.icon}
+                    size={20}
+                    color={config.destructive ? colors.danger : colors.text}
+                  />
+                </View>
               )}
-              <TouchableOpacity
-                style={[
-                  styles.confirmBtn,
-                  config?.destructive && styles.confirmBtnDanger,
-                  config?.kind === "alert" && { flex: 1 },
-                ]}
-                onPress={config?.kind === "confirm" ? handleConfirm : close}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.confirmText}>
-                  {config?.confirmLabel || (config?.kind === "alert" ? "Got it" : "Confirm")}
-                </Text>
-              </TouchableOpacity>
-            </View>
+
+              <Text style={styles.title}>{config?.title}</Text>
+              {!!config?.message && <Text style={styles.message}>{config.message}</Text>}
+
+              <View style={styles.actions}>
+                {config?.kind === "confirm" && (
+                  <TouchableOpacity style={styles.cancelBtn} onPress={close} activeOpacity={0.7}>
+                    <Text style={styles.cancelText}>{config?.cancelLabel || "Cancel"}</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.confirmBtn,
+                    config?.destructive && styles.confirmBtnDanger,
+                    config?.kind === "alert" && { flex: 1 },
+                  ]}
+                  onPress={config?.kind === "confirm" ? handleConfirm : close}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.confirmText}>
+                    {config?.confirmLabel || (config?.kind === "alert" ? "Got it" : "Confirm")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </GlassView>
           </Pressable>
         </Pressable>
       </Modal>

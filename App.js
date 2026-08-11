@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { View } from "react-native";
+import { View, ImageBackground } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
@@ -53,14 +53,22 @@ export default function App() {
   if (!fontsLoaded) return null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#FFFFFF" }} onLayout={onLayoutRootView}>
-      <SafeAreaProvider style={{ backgroundColor: "#FFFFFF" }}>
-        <AuthProvider>
-          <AttendanceProvider>
-            <StatusBar style="dark" />
-            <RootNavigator />
-          </AttendanceProvider>
-        </AuthProvider>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <SafeAreaProvider style={{ backgroundColor: "transparent" }}>
+        <ImageBackground
+          source={require("./src/assets/bg.png")}
+          style={{ flex: 1 }}
+          resizeMode="cover"
+        >
+          <AuthProvider>
+            <SchoolDataProvider>
+              <DialogProvider>
+                <StatusBar style="dark" backgroundColor="transparent" translucent />
+                <RootNavigator />
+              </DialogProvider>
+            </SchoolDataProvider>
+          </AuthProvider>
+        </ImageBackground>
       </SafeAreaProvider>
     </View>
   );

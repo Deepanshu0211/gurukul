@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   },
   // Zebra striping instead of borders — at this density, a line under every
   // row turns the table into a grid of noise.
-  rowAlt: { backgroundColor: colors.cardAlt },
+  rowAlt: { backgroundColor: "rgba(238, 244, 250, 0.65)" },
 
   cell: { alignItems: "center" },
   colLabel: { fontFamily: fonts.semibold, fontSize: 9, letterSpacing: 0.6, color: colors.textMuted },
@@ -314,10 +314,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 14,
     paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.card,
+    paddingVertical: 10,
+    borderTopWidth: 1.5,
+    borderTopColor: "rgba(255, 255, 255, 0.85)",
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendText: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },

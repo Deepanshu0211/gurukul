@@ -1,4 +1,4 @@
-# Gurukula — Attendance & Student Safety
+# BGIS Attendance — Attendance & Student Safety
 
 Attendance for **Bhaktivedanta Gurukula and International School**: a residential
 and day school of ~415 students in Grades 2–12, where roll is called 8–10 times

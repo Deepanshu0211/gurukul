@@ -62,12 +62,12 @@ export const SPANNING = ["H", "S", "O", "G"];
 
 // role -> staff profile used for the login screen
 export const STAFF = [
-  { id: "t1", name: "Krishna Saha Mt", role: "teacher", email: "krishna.saha@gurukula.org", classKey: "4|A", classLabel: "Class 4 A" },
-  { id: "t2", name: "Ajay Solanki Pr", role: "teacher", email: "ajay.solanki@gurukula.org", classKey: "9|BALRAM", classLabel: "Class 9 Balram" },
-  { id: "c1", name: "Ashram Coordinator", role: "coordinator", email: "coordinator@gurukula.org" },
-  { id: "m1", name: "Principal Office", role: "management", email: "principal@gurukula.org" },
-  { id: "a1", name: "Admin Desk", role: "admin", email: "admin@gurukula.org" },
-  { id: "n1", name: "Sister Nurse", role: "nurse", email: "nurse@gurukula.org" },
+  { id: "t1", name: "Krishna Saha Mt", role: "teacher", email: "krishna.saha@bgis.org", classKey: "4|A", classLabel: "Class 4 A" },
+  { id: "t2", name: "Ajay Solanki Pr", role: "teacher", email: "ajay.solanki@bgis.org", classKey: "9|BALRAM", classLabel: "Class 9 Balram" },
+  { id: "c1", name: "Ashram Coordinator", role: "coordinator", email: "coordinator@bgis.org" },
+  { id: "m1", name: "Principal Office", role: "management", email: "principal@bgis.org" },
+  { id: "a1", name: "Admin Desk", role: "admin", email: "admin@bgis.org" },
+  { id: "n1", name: "Sister Nurse", role: "nurse", email: "nurse@bgis.org" },
 ];
 
 export const ROLE_LABELS = {

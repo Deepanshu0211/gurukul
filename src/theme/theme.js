@@ -4,26 +4,26 @@
 // from "overdue" from "absent" at a glance, and flattening those to grey would
 // destroy the one thing this app exists to communicate.
 export const colors = {
-  bg: "#FFFFFF",
-  bgGradientTop: "#1A1A1A",
-  bgGradientBottom: "#FFFFFF",
-  card: "#FFFFFF",
-  cardAlt: "#F5F5F5",
-  primary: "#111111",
-  primaryDark: "#000000",
-  text: "#0A0A0A",
-  textMuted: "#737373",
-  border: "#E5E5E5",
+  bg: "transparent",
+  bgGradientTop: "#1C4E80",
+  bgGradientBottom: "transparent",
+  card: "rgba(255, 255, 255, 0.78)",
+  cardAlt: "rgba(238, 244, 250, 0.72)",
+  primary: "#1C4E80",
+  primaryDark: "#153D66",
+  text: "#0F243A",
+  textMuted: "#64748B",
+  border: "#E2E8F0",
   success: "#15803D",
   successBg: "#F0FDF4",
   warning: "#B45309",
   warningBg: "#FFFBEB",
   danger: "#B91C1C",
   dangerBg: "#FEF2F2",
-  info: "#1D4ED8",
+  info: "#1C4E80",
   infoBg: "#EFF6FF",
   white: "#FFFFFF",
-  black: "#000000",
+  black: "#1C4E80",
 };
 
 export const radius = {
@@ -108,8 +108,8 @@ export const warm = {
 
 // Kept for compatibility with anything still importing it; in the minimal
 // theme this is just a neutral, not a warm accent.
-export const gold = "#111111";
-export const goldBg = "#F5F5F5";
+export const gold = "#1C4E80";
+export const goldBg = "#EFF6FF";
 
 // Per-role tint. In the minimal theme every role shares the same neutral
 // treatment — role is communicated by the label text, not by colour.
