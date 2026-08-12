@@ -6,25 +6,60 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
-  Pressable,
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
+import {
+  colors,
+  spacing,
+  typography,
+  radius,
+  fonts,
+  layout,
+  surface,
+  numeric,
+} from "../theme/theme";
+import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset";
+import ScreenHeader from "../components/ScreenHeader";
+import EdgeFade, { useScrolled } from "../components/EdgeFade";
+import BottomSheet, { SheetOption } from "../components/BottomSheet";
+import FadeIn from "../components/FadeIn";
+import { SectionLabel, Stat, Divider, Card, StatusTag } from "../components/ui";
 import { NOW } from "../data/mockData";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
 import { fmtTime, plural } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
+import { useAuth } from "../context/AuthContext";
+import { canCloseAlerts } from "../domain/roles";
+import { useToast } from "../components/Toast";
 import { haptics } from "../lib/haptics";
+
+// Left edge of the checkpoint rows' text, so the dividers between them start
+// at the same x as the titles above and below them.
+const FEED_INSET = spacing.md;
+
+// Checkpoint state → the shared tag vocabulary used on Duties and Roster.
+const FEED_TONE = {
+  [DUTY_STATUS.DONE]: "submitted",
+  [DUTY_STATUS.OVERDUE]: "overdue",
+  [DUTY_STATUS.DUE]: "due",
+  [DUTY_STATUS.UPCOMING]: "pending",
+};
 
 export default function DashboardScreen() {
   const { students, duties, records, studentsForDuty, refresh } = useSchoolData();
+  const { user } = useAuth();
+  const toast = useToast();
+  // Closing an alert is a written, attributable act (SRS F4) — the nurse can
+  // see the board but the remark has to come from a coordinator or above.
+  const mayClose = canCloseAlerts(user?.role);
   const [refreshing, setRefreshing] = useState(false);
+  const tabInset = useTabContentInset();
+  const topInset = useScreenTopInset();
+  const { scrolled, onScroll } = useScrolled();
 
   // Resolutions are local for now. There is no `alerts` table yet, so these
   // are lost on restart — the remark must persist and be audit-logged before
@@ -63,26 +98,35 @@ export default function DashboardScreen() {
       ...prev,
       [resolving.id]: { remark: reason.trim(), at: fmtTime(NOW) },
     }));
+    toast.show(`${resolving.student.name} accounted for`);
     setResolving(null);
     setRemark("");
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: topInset, paddingBottom: tabInset }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
       >
-        <Text style={styles.pageTitle}>Today</Text>
-        <Text style={typography.caption}>Bhaktivedanta Gurukula · Friday, {fmtTime(NOW)}</Text>
+        <ScreenHeader
+          title="Today"
+          subtitle={`Bhaktivedanta Gurukula & International School · Friday, ${fmtTime(NOW)}`}
+        />
 
         {/* The safety number leads: it is the reason the system exists. */}
-        <View style={[styles.hero, open.length > 0 && styles.heroAlarm]}>
+        <View style={[styles.hero, open.length > 0 ? styles.heroAlarm : styles.heroCalm]}>
           {open.length === 0 ? (
             <>
-              <Ionicons name="shield-checkmark" size={24} color={colors.success} />
-              <View style={{ flex: 1 }}>
+              <View style={styles.heroIcon}>
+                <Ionicons name="shield-checkmark" size={24} color={colors.onDark} />
+              </View>
+              <View style={styles.heroText}>
                 <Text style={styles.heroTitle}>All students accounted for</Text>
                 <Text style={styles.heroSub}>
                   {submitted.length} of {duties.length} checkpoints marked so far.
@@ -91,11 +135,11 @@ export default function DashboardScreen() {
             </>
           ) : (
             <>
-              <Text style={styles.heroBig}>{open.length}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.heroTitle, { color: colors.danger }]}>
-                  {plural(open.length, "student")} to check on
-                </Text>
+              <View style={styles.heroIcon}>
+                <Text style={styles.heroBig}>{open.length}</Text>
+              </View>
+              <View style={styles.heroText}>
+                <Text style={styles.heroTitle}>{plural(open.length, "student")} to check on</Text>
                 <Text style={styles.heroSub}>Marked absent and not yet explained.</Text>
               </View>
             </>
@@ -103,66 +147,89 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <Stat value={students.length} label="Students" />
-          <Stat value={`${submitted.length}/${duties.length}`} label="Marked" />
-          <Stat value={overdue.length} label="Overdue" warn={overdue.length > 0} />
+          <Card tone="card" style={styles.statCard}>
+            <Stat value={students.length} label="Students" />
+          </Card>
+          <Card tone="card" style={styles.statCard}>
+            <Stat value={`${submitted.length}/${duties.length}`} label="Marked" />
+          </Card>
+          <Card tone="card" style={styles.statCard}>
+            <Stat value={overdue.length} label="Overdue" tone={overdue.length > 0 ? "warning" : undefined} />
+          </Card>
         </View>
 
         {open.length > 0 && (
           <>
-            <SectionTitle text="NEEDS CHECKING" count={open.length} />
-            {open.map((a) => (
-              <AlertCard
-                key={a.id}
-                alert={a}
-                onResolve={() => {
-                  setResolving(a);
-                  setRemark("");
-                }}
-              />
+            <SectionLabel count={open.length} tone="overdue">
+              Needs checking
+            </SectionLabel>
+            {open.map((a, i) => (
+              <FadeIn key={a.id} index={i}>
+                <AlertCard
+                  alert={a}
+                  onResolve={
+                    mayClose
+                      ? () => {
+                          setResolving(a);
+                          setRemark("");
+                        }
+                      : null
+                  }
+                />
+              </FadeIn>
             ))}
           </>
         )}
 
-        <SectionTitle text="CHECKPOINTS" />
-        <View style={styles.group}>
+        <SectionLabel>Checkpoints</SectionLabel>
+        <Card style={styles.group}>
           {duties.map((d, i) => {
             const status = dutyStatus(d, records, NOW);
             const total = studentsForDuty(d).length;
             const { present } = summarise(total, records[d.id]?.statuses);
             return (
               <View key={d.id}>
-                {i > 0 && <View style={styles.divider} />}
+                {i > 0 && <Divider inset={FEED_INSET} />}
                 <View style={styles.feedRow}>
-                  <View style={[styles.dot, DOT[status]]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.feedTitle}>{d.checkpoint}</Text>
+                  <View style={styles.feedMain}>
+                    <Text style={styles.feedTitle} numberOfLines={1}>
+                      {d.checkpoint}
+                    </Text>
+                    {/* One caption that always answers the same question in the
+                        same place: what came in, or when it is due to. */}
                     <Text style={typography.caption} numberOfLines={1}>
-                      {d.group}
+                      {d.group} ·{" "}
+                      {status === DUTY_STATUS.DONE ? (
+                        <Text style={styles.feedMeta}>
+                          {present}/{total} present
+                        </Text>
+                      ) : (
+                        `closes ${fmtTime(d.end)}`
+                      )}
                     </Text>
                   </View>
-                  <Text style={styles.feedMeta}>
-                    {status === DUTY_STATUS.DONE
-                      ? `${present}/${total}`
-                      : status === DUTY_STATUS.OVERDUE
-                      ? "Overdue"
-                      : fmtTime(d.start)}
-                  </Text>
+                  <StatusTag tone={FEED_TONE[status]} />
                 </View>
               </View>
             );
           })}
-        </View>
+        </Card>
 
         {closed.length > 0 && (
           <>
-            <SectionTitle text="SORTED OUT" count={closed.length} />
+            <SectionLabel count={closed.length} tone="submitted">
+              Sorted out
+            </SectionLabel>
             {closed.map((a) => (
               <View key={a.id} style={styles.closedCard}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.closedName}>{a.student.name}</Text>
-                  <Text style={styles.closedRemark}>{resolved[a.id].remark}</Text>
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                <View style={styles.closedMain}>
+                  <Text style={styles.closedName} numberOfLines={1}>
+                    {a.student.name}
+                  </Text>
+                  <Text style={styles.closedRemark} numberOfLines={2}>
+                    {resolved[a.id].remark}
+                  </Text>
                 </View>
                 <Text style={styles.closedTime}>{resolved[a.id].at}</Text>
               </View>
@@ -171,56 +238,50 @@ export default function DashboardScreen() {
         )}
       </ScrollView>
 
+      <EdgeFade top={0} height={topInset} visible={scrolled} />
+
       {/* Resolving is a tap, not an essay. Typing a sentence on a phone is the
           slowest possible way to record "found him, he's fine". */}
-      <Modal
+      <BottomSheet
         visible={!!resolving}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setResolving(null)}
+        onClose={() => setResolving(null)}
+        title={resolving?.student.name}
+        subtitle="Where is this student?"
       >
-        <Pressable style={styles.backdrop} onPress={() => setResolving(null)} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetGrip} />
-          <Text style={styles.sheetTitle}>{resolving?.student.name}</Text>
-          <Text style={[typography.caption, { marginBottom: spacing.md }]}>
-            Where is this student?
-          </Text>
+        {QUICK_REASONS.map((r) => (
+          <SheetOption
+            key={r.id}
+            icon={r.icon}
+            label={r.label}
+            onPress={() => resolve(r.label)}
+            trailing={<Ionicons name="chevron-forward" size={16} color={colors.icon} />}
+          />
+        ))}
 
-          {QUICK_REASONS.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              style={styles.reasonRow}
-              onPress={() => resolve(r.label)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name={r.icon} size={20} color={colors.text} />
-              <Text style={styles.reasonLabel}>{r.label}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.border} />
-            </TouchableOpacity>
-          ))}
-
-          <Text style={[typography.label, { marginTop: spacing.md, marginBottom: 6 }]}>
-            OR WRITE IT
-          </Text>
-          <View style={styles.otherRow}>
-            <TextInput
-              value={remark}
-              onChangeText={setRemark}
-              placeholder="Something else…"
-              placeholderTextColor={colors.textMuted}
-              style={styles.otherInput}
-            />
-            <TouchableOpacity
-              onPress={() => resolve(remark)}
-              disabled={!remark.trim()}
-              style={[styles.otherBtn, !remark.trim() && { opacity: 0.35 }]}
-            >
-              <Ionicons name="arrow-forward" size={18} color={colors.white} />
-            </TouchableOpacity>
-          </View>
+        <Text style={[typography.label, styles.orLabel]}>OR WRITE IT</Text>
+        <View style={styles.otherRow}>
+          <TextInput
+            value={remark}
+            onChangeText={setRemark}
+            placeholder="Something else…"
+            placeholderTextColor={colors.textMuted}
+            style={styles.otherInput}
+            returnKeyType="done"
+            onSubmitEditing={() => resolve(remark)}
+            accessibilityLabel="Write where this student is"
+          />
+          <TouchableOpacity
+            onPress={() => resolve(remark)}
+            disabled={!remark.trim()}
+            style={[styles.otherBtn, !remark.trim() && { opacity: 0.35 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Save remark"
+            accessibilityState={{ disabled: !remark.trim() }}
+          >
+            <Ionicons name="arrow-forward" size={18} color={colors.white} />
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -230,7 +291,9 @@ function AlertCard({ alert, onResolve }) {
   return (
     <View style={[styles.alertCard, urgent && styles.alertCardUrgent]}>
       <View style={styles.alertTop}>
-        <Text style={styles.alertName}>{alert.student.name}</Text>
+        <Text style={styles.alertName} numberOfLines={1}>
+          {alert.student.name}
+        </Text>
         {urgent && (
           <View style={styles.urgentTag}>
             <Text style={styles.urgentTagText}>WENT MISSING</Text>
@@ -242,213 +305,138 @@ function AlertCard({ alert, onResolve }) {
       </Text>
       <Text style={styles.alertBody}>{describeAlert(alert)}</Text>
 
-      <TouchableOpacity style={styles.resolveBtn} onPress={onResolve} activeOpacity={0.85}>
-        <Text style={styles.resolveBtnText}>Where is this student?</Text>
-      </TouchableOpacity>
+      {!!onResolve && (
+        <TouchableOpacity
+          style={styles.resolveBtn}
+          onPress={onResolve}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={`Record where ${alert.student.name} is`}
+        >
+          <Text style={styles.resolveBtnText}>Where is this student?</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
-
-function SectionTitle({ text, count }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionLabel}>{text}</Text>
-      {count != null && <Text style={styles.sectionCount}>{count}</Text>}
-    </View>
-  );
-}
-
-function Stat({ value, label, warn }) {
-  return (
-    <View style={styles.statCard}>
-      <Text style={[styles.statValue, warn && { color: colors.warning }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-const DOT = {
-  [DUTY_STATUS.DONE]: { backgroundColor: colors.success },
-  [DUTY_STATUS.OVERDUE]: { backgroundColor: colors.danger },
-  [DUTY_STATUS.DUE]: { backgroundColor: colors.warning },
-  [DUTY_STATUS.UPCOMING]: { backgroundColor: colors.border },
-};
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: TAB_CONTENT_INSET,
-  },
-  pageTitle: { fontFamily: fonts.bold, fontSize: 26, color: colors.text, letterSpacing: -0.4 },
+  content: { paddingHorizontal: layout.gutter },
 
+  // The one thing on the screen that must be readable from across a room. It
+  // is solid — calm reads deep teal, alarm reads wine — because as a pale
+  // tinted card it was indistinguishable from the stat cards beneath it.
   hero: {
+    ...surface.inverse,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.successBg,
+    gap: spacing.md - 4,
     borderRadius: radius.md,
     padding: spacing.md,
     marginTop: spacing.md,
   },
-  heroAlarm: { backgroundColor: colors.dangerBg },
-  heroBig: { fontFamily: fonts.bold, fontSize: 40, color: colors.danger, lineHeight: 44 },
-  heroTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
-  heroSub: { fontFamily: fonts.regular, fontSize: 12.5, color: colors.textMuted, marginTop: 2 },
-
-  statsRow: { flexDirection: "row", gap: 8, marginTop: spacing.sm },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.card,
+  heroCalm: { backgroundColor: colors.primaryDeep, borderColor: colors.primary },
+  heroAlarm: { backgroundColor: colors.danger, borderColor: colors.danger },
+  heroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    alignItems: "center",
+    borderColor: "rgba(255, 255, 255, 0.30)",
   },
-  statValue: { fontFamily: fonts.bold, fontSize: 18, color: colors.text },
-  statLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  heroText: { flex: 1, minWidth: 0, gap: 2 },
+  heroBig: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 30, color: colors.onDark, ...numeric },
+  heroTitle: { ...typography.h2, fontSize: 16, lineHeight: 21, color: colors.onDark },
+  heroSub: { ...typography.caption, color: colors.onDarkMuted },
 
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  sectionLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 10.5,
-    letterSpacing: 1.3,
-    color: colors.textMuted,
-  },
-  sectionCount: { fontFamily: fonts.semibold, fontSize: 11, color: colors.border },
+  statsRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  statCard: { flex: 1, paddingVertical: spacing.md - 2, paddingHorizontal: spacing.xs },
 
   alertCard: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...surface.raised,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  alertCardUrgent: {
-    borderColor: colors.danger,
-    borderWidth: 1.5,
-    backgroundColor: colors.dangerBg,
-  },
-  alertTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 1 },
-  alertName: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, flexShrink: 1 },
+  alertCardUrgent: { borderColor: colors.danger, borderWidth: 1.5, backgroundColor: colors.dangerBg },
+  alertTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: 2 },
+  alertName: { ...typography.h1, fontSize: 18, lineHeight: 24, flexShrink: 1 },
   urgentTag: {
     backgroundColor: colors.danger,
     borderRadius: radius.pill,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
+    flexShrink: 0,
   },
-  urgentTagText: { fontFamily: fonts.bold, fontSize: 9, color: colors.white, letterSpacing: 0.5 },
-  alertBody: {
-    fontFamily: fonts.regular,
-    fontSize: 13.5,
-    color: colors.text,
-    lineHeight: 19,
-    marginTop: 8,
+  urgentTagText: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    lineHeight: 12,
+    color: colors.white,
+    letterSpacing: 0.6,
   },
+  alertBody: { ...typography.body, fontSize: 13, lineHeight: 19, marginTop: spacing.sm },
   // Large target, and a plain question rather than "close with remark".
   resolveBtn: {
     marginTop: spacing.md,
-    paddingVertical: 14,
+    minHeight: layout.touch,
+    paddingVertical: 13,
     borderRadius: radius.pill,
     backgroundColor: colors.primary,
     alignItems: "center",
+    justifyContent: "center",
   },
-  resolveBtnText: { fontFamily: fonts.bold, fontSize: 14.5, color: colors.white },
+  resolveBtnText: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.white },
 
-  group: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    overflow: "hidden",
-  },
+  group: { padding: 0, overflow: "hidden" },
   feedRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 13,
+    gap: spacing.md - 4,
+    minHeight: layout.row,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
   },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  feedTitle: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
-  feedMeta: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: colors.textMuted,
-    fontVariant: ["tabular-nums"],
-  },
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: 31 },
+  feedMain: { flex: 1, minWidth: 0, gap: 1 },
+  feedTitle: { ...typography.bodyStrong },
+  feedMeta: { fontFamily: fonts.bold, color: colors.text, ...numeric },
 
   closedCard: {
+    ...surface.sunken,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.cardAlt,
+    gap: spacing.md - 4,
     borderRadius: radius.md,
     padding: spacing.md - 2,
-    marginBottom: 7,
+    marginBottom: spacing.sm,
   },
-  closedName: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
-  closedRemark: { fontFamily: fonts.regular, fontSize: 12.5, color: colors.textMuted, marginTop: 1 },
-  closedTime: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
+  closedMain: { flex: 1, minWidth: 0, gap: 1 },
+  closedName: { ...typography.bodyStrong },
+  closedRemark: { ...typography.caption },
+  closedTime: { ...typography.caption, fontSize: 11, ...numeric },
 
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-  },
-  sheetGrip: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: "center",
-    marginBottom: spacing.md,
-  },
-  sheetTitle: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
-
-  reasonRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 7,
-  },
-  reasonLabel: { flex: 1, fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
-
-  otherRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  orLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
+  otherRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   otherInput: {
     flex: 1,
+    minHeight: layout.touch,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
     fontFamily: fonts.medium,
-    fontSize: 14.5,
+    fontSize: 15,
     color: colors.text,
   },
   otherBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: layout.touch,
+    height: layout.touch,
+    borderRadius: layout.touch / 2,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",

@@ -14,7 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
  * room, and 40 marks means 40 buzzes near sleeping children.
  */
 
-const STORAGE_KEY = "gurukula.haptics.enabled";
+const STORAGE_KEY = "bgis.haptics.enabled";
 
 // Cached in memory so the marking screen never awaits storage mid-tap.
 let enabled = true;

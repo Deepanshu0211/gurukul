@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, Image, StyleSheet } from "react-native";
-import { colors, fonts, warm } from "../theme/theme";
+import { colors, fonts } from "../theme/theme";
 import { initial } from "../utils/format";
 
 /**
@@ -36,8 +36,13 @@ export default function Avatar({
 
   const isWarm = tone === "warm";
   const dim = { width: size, height: size, borderRadius: size / 2 };
+  // `warm` now means "on the deep teal card", so its ring and fallback are
+  // drawn in the cream accent — a teal-on-teal ring was invisible there.
   const ring = bordered
-    ? { borderWidth: Math.max(1.5, size * 0.04), borderColor: isWarm ? warm.border : colors.border }
+    ? {
+        borderWidth: Math.max(1.5, size * 0.04),
+        borderColor: isWarm ? colors.accentDim : colors.border,
+      }
     : null;
 
   return (
@@ -55,13 +60,13 @@ export default function Avatar({
             dim,
             ring,
             styles.fallback,
-            { backgroundColor: isWarm ? colors.card : colors.cardAlt },
+            { backgroundColor: isWarm ? colors.primary : colors.cardAlt },
           ]}
         >
           <Text
             style={[
               styles.initial,
-              { fontSize: size * 0.4, color: isWarm ? warm.ink : colors.text },
+              { fontSize: size * 0.4, color: isWarm ? colors.accent : colors.text },
             ]}
           >
             {initial(name)}

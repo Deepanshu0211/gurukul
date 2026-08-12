@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "gurukul",
-    "slug": "gurukul",
+    "name": "BGIS Attendance",
+    "slug": "bgis",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -11,20 +11,21 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#EBF4F2",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.deepanshu02112006.bgis"
     },
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#FFFFFF",
+      "backgroundColor": "#00000000",
       "translucent": true
     },
     "androidNavigationBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#FFFFFF"
+      "backgroundColor": "#00000000"
     },
     "web": {
       "favicon": "./assets/favicon.png"

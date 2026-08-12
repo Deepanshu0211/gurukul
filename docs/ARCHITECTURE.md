@@ -54,6 +54,53 @@ rather than reading a global clock, so it can be tested and so the simulated
 **Status codes are constants, not strings.** Compare against `DUTY_STATUS.DONE`,
 not `"done"` — a typo in a string is silent, a typo in a constant is an error.
 
+**One token for one decision.** `theme/theme.js` is the only place a colour,
+size, radius, shadow or text style is chosen:
+
+| Need | Use | Never |
+|---|---|---|
+| Page side padding | `layout.gutter` | a per-screen number |
+| Gap under the status bar | `layout.screenTop` | letting the safe-area inset be the whole gap |
+| Shadow | `shadow.sm \| md \| lg` | `elevation` — see the note in `theme.js` |
+| Any margin/padding/gap | `spacing.xs…xl` (4/8/16/24/32) | 7, 9, 11, 13 |
+| Text | a `typography.*` role | a bare `fontSize` |
+| Card / row background | `surface.card \| raised \| sunken` | a fresh `rgba(255,255,255,…)` |
+| Chevrons, counts, grips | `colors.icon` | `colors.border` (invisible on white) |
+| Tap target | `minHeight: layout.touch` (44) | a padding that happens to land near it |
+| Digits that change | `...numeric` | nothing — the row shifts as they tick |
+
+**Shared UI is shared, not copied.** `components/ui.js` owns `Card`, `Pill`,
+`SectionLabel`, `Divider`, `Chevron`, `Stat`, `EmptyState` and the buttons;
+`components/BottomSheet.js` is the only bottom sheet; `components/ScreenHeader.js`
+is the only page title. Six hand-rolled copies of the same card and four
+hand-rolled sheets are what made the app read as "almost aligned".
+
+**Every write confirms itself.** A successful save shows a toast
+(`useToast().show(...)`); a failure shows a dialog (`useDialog().alert(...)`).
+Never the reverse — a modal after a successful submit is a tap for nothing, and
+a silent failure is worse than a loud one. Rows use `<Row>` from `ui.js`, which
+dims and ripples on press.
+
+**Long lists are memoised and windowed.** `studentsForDuty` is cached per duty
+in `SchoolDataContext` because group resolution walks all 415 students; row
+components are `React.memo` with stable handler identities; fixed-height rows
+get `getItemLayout`. Never call `studentsForDuty` inside a `renderItem`.
+
+**Dividers take an `inset` equal to what leads the row** (padding + icon/avatar
+width + gap). A divider that starts at a different x than the text above it
+reads as a wobble down the whole group.
+
+**Insets come from hooks, not constants** — `useScreenTopInset()` at the top,
+`useTabContentInset()` at the bottom (`navigation/tabBarInset.js`). Screens do
+NOT wrap in `SafeAreaView edges={["top"]}`: content scrolls behind the status
+bar and `<EdgeFade>` softens the boundary, so rows dissolve rather than being
+sliced. Render `EdgeFade` *after* the scrolling view — siblings paint in order.
+
+**The Android theme is `Theme.AppCompat.Light`, not DayNight.** The app is
+light-only (`userInterfaceStyle: "light"`); leaving the native theme on
+DayNight meant a phone in dark mode got a black window background behind the
+transparent status bar. See `android/app/src/main/res/values/styles.xml`.
+
 **Guard the edges.** Lists get `ListEmptyComponent`, async work gets loading
 and error states, text that can be long gets `numberOfLines`, and anything
 dividing by a count gets a zero check (see `utils/format.js → percent`).
@@ -73,6 +120,7 @@ sleeping children is a real problem.
 | Duty status / escalation / tallies | `domain/duties.js` |
 | Safety alerts (SRS F1) | `domain/alerts.js` |
 | Duties, group resolution, submission | `lib/duties.js` |
+| Past days (class history, SRS A8) | `lib/history.js` |
 | Shared students/duties/attendance state | `context/SchoolDataContext.js` |
 | Time, pluralisation, name formatting | `utils/format.js` |
 | Supabase client and session config | `lib/supabase.js` |

@@ -50,33 +50,28 @@ export const STATUS_META = {
   // purpose. Every other status means the school knows where the child is,
   // so they read as neutral greys in the minimal theme and are told apart
   // by their label, not their colour.
-  A: { label: "Absent", color: "#B91C1C" },
-  H: { label: "Home", color: "#404040" },
-  S: { label: "Sick", color: "#404040" },
-  V: { label: "Activity", color: "#404040" },
-  O: { label: "Outing", color: "#404040" },
-  G: { label: "Gita Nagari", color: "#404040" },
-  Y: { label: "Self study", color: "#404040" },
+  A: { label: "Absent", color: "#8E1F3C" },
+  H: { label: "Home", color: "#3E4F4D" },
+  S: { label: "Sick", color: "#3E4F4D" },
+  V: { label: "Activity", color: "#3E4F4D" },
+  O: { label: "Outing", color: "#3E4F4D" },
+  G: { label: "Gita Nagari", color: "#3E4F4D" },
+  Y: { label: "Self study", color: "#3E4F4D" },
 };
 export const SPANNING = ["H", "S", "O", "G"];
 
 // role -> staff profile used for the login screen
 export const STAFF = [
-  { id: "t1", name: "Krishna Saha Mt", role: "teacher", email: "krishna.saha@gurukula.org", classKey: "4|A", classLabel: "Class 4 A" },
-  { id: "t2", name: "Ajay Solanki Pr", role: "teacher", email: "ajay.solanki@gurukula.org", classKey: "9|BALRAM", classLabel: "Class 9 Balram" },
-  { id: "c1", name: "Ashram Coordinator", role: "coordinator", email: "coordinator@gurukula.org" },
-  { id: "m1", name: "Principal Office", role: "management", email: "principal@gurukula.org" },
-  { id: "a1", name: "Admin Desk", role: "admin", email: "admin@gurukula.org" },
-  { id: "n1", name: "Sister Nurse", role: "nurse", email: "nurse@gurukula.org" },
+  { id: "t1", name: "Krishna Saha Mt", role: "teacher", email: "krishna.saha@bgis.org", classKey: "4|A", classLabel: "Class 4 A" },
+  { id: "t2", name: "Ajay Solanki Pr", role: "teacher", email: "ajay.solanki@bgis.org", classKey: "9|BALRAM", classLabel: "Class 9 Balram" },
+  { id: "c1", name: "Ashram Coordinator", role: "coordinator", email: "coordinator@bgis.org" },
+  { id: "m1", name: "Principal Office", role: "management", email: "principal@bgis.org" },
+  { id: "a1", name: "Admin Desk", role: "admin", email: "admin@bgis.org" },
+  { id: "n1", name: "Sister Nurse", role: "nurse", email: "nurse@bgis.org" },
 ];
 
-export const ROLE_LABELS = {
-  teacher: "Teacher",
-  coordinator: "Coordinator",
-  management: "Management",
-  admin: "Admin",
-  nurse: "Nurse",
-};
+// ROLE_LABELS moved to domain/roles.js — it is presentation copy tied to what
+// each role may do, not mock data. Import it from there.
 
 // Simulated clock, so the demo always shows a mid-morning state with some
 // duties done, one due and one overdue. Replace with real time when the
