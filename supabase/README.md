@@ -10,6 +10,8 @@ staging copy, or recovery if the current one is lost.
 | `migrations/001_schema.sql` | Tables, keys, indexes |
 | `migrations/002_rls_policies.sql` | Row-Level Security for every table |
 | `migrations/003_storage_avatars.sql` | Storage policies for profile photos |
+| `migrations/004_class_teacher_history.sql` | Class-teacher history + its read policies |
+| `migrations/005_cover_marking.sql` | Any teacher may mark any pending checkpoint |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
 | `../docs/data/students_415_insert.sql` | The 415-student register |
 
@@ -18,7 +20,13 @@ staging copy, or recovery if the current one is lost.
 **1. Create the project** — region Mumbai (closest to the school; keeps latency
 low and data in-country, which SRS §14 P2 asks for).
 
-**2. Run the migrations in order** in the SQL Editor: `001`, `002`, `003`.
+**2. Run the migrations in order** in the SQL Editor: `001` … `005`.
+
+`005` is what makes the app's "Whole school" view and cover marking work. Until
+it is run, the database still answers with only the signed-in teacher's own
+duties no matter what the app asks for, and submitting a colleague's checkpoint
+fails with a policy error — the Duties screen says so on screen rather than
+showing an identical-looking list.
 
 **3. Create the storage bucket.** Storage → New bucket:
 ```

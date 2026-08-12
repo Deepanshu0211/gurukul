@@ -1,28 +1,85 @@
-import React, { useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Modal,
-  Pressable,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import { PrimaryButton } from "../components/ui";
+import {
+  colors,
+  spacing,
+  typography,
+  radius,
+  fonts,
+  layout,
+  surface,
+  shadow,
+  numeric,
+} from "../theme/theme";
+import { PrimaryButton, Pill, EmptyState, SecondaryButton, Row } from "../components/ui";
+import BottomSheet, { SheetOption } from "../components/BottomSheet";
+import EdgeFade, { useScrolled } from "../components/EdgeFade";
+import SearchField from "../components/SearchField";
+import { useScreenTopInset } from "../navigation/tabBarInset";
 import { STATUS_META } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
+import { useToast } from "../components/Toast";
 import { haptics } from "../lib/haptics";
+
+/**
+ * Marking one checkpoint.
+ *
+ * The interaction is built around the fact that almost everybody is present:
+ * the teacher is hunting for the two or three exceptions in a line of up to
+ * 300 children, usually one-handed, often before sunrise.
+ *
+ *  - Every row carries an explicit ✓ / ✕ pair rather than a hidden toggle, so
+ *    the current state is visible without reading and either answer is one
+ *    tap. The previous version toggled on a tap anywhere in the row, which
+ *    meant a mis-tap while scrolling silently marked a child absent.
+ *  - A colour stripe down the left edge makes the exceptions findable when
+ *    scrolling back to check the count.
+ *  - Tapping the name opens the full status list (Home, Sick, Outing …).
+ *  - Search appears once the group is too long to scan, which is the
+ *    residential meal and night checkpoints.
+ */
+
+// Rows are a fixed height so the list can be virtualised without measuring.
+// Both text lines are single-line, which is what makes the height reliable.
+const ROW_H = 68;
+const ROW_GAP = spacing.sm;
+// Below this a group fits in a screenful or two and a search field is just
+// another thing in the way. A single class section (20–40) is already past the
+// point where finding one name means thumbing the whole list, so this sits
+// well under the residential-group sizes it was originally written for.
+const SEARCH_THRESHOLD = 15;
+
+const keyExtractor = (s) => s.id;
+const getItemLayout = (_, index) => ({
+  length: ROW_H + ROW_GAP,
+  offset: (ROW_H + ROW_GAP) * index,
+  index,
+});
+
+// Presentation copy for the status picker. Lives here rather than in
+// mockData because it describes the choice to a teacher, not the record.
+const STATUS_HINT = {
+  H: "Signed out to family",
+  S: "Unwell — sick bay or home",
+  V: "At a school activity",
+  O: "On an approved outing",
+  G: "At Gita Nagari",
+  Y: "In supervised self study",
+};
 
 export default function DutyMarkingScreen({ route, navigation }) {
   const { dutyId } = route.params;
   const { user } = useAuth();
-  const { duties, records, studentsForDuty, submitDuty } = useSchoolData();
+  const { duties, records, studentsForDuty, submitDuty, staffName } = useSchoolData();
   const dialog = useDialog();
+  const toast = useToast();
+  const insets = useSafeAreaInsets();
+  const topInset = useScreenTopInset();
+  const { scrolled, onScroll } = useScrolled();
 
   const duty = duties.find((d) => d.id === dutyId);
   const students = useMemo(() => studentsForDuty(duty), [duty, studentsForDuty]);
@@ -32,45 +89,25 @@ export default function DutyMarkingScreen({ route, navigation }) {
 
   const [statuses, setStatuses] = useState(existing ? existing.statuses : {});
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState("");
   // Which student's status sheet is open — null when closed.
   const [sheetFor, setSheetFor] = useState(null);
+  // Measured rather than hardcoded: the footer is two rows tall when the
+  // Submit button is showing and one when the duty is locked, and a fixed
+  // padding left the last student either buried or floating.
+  const [footerH, setFooterH] = useState(96);
+  // Where the list starts, so the fade can sit exactly on its top edge.
+  const [chromeH, setChromeH] = useState(140);
 
-  // The duty can be missing if it was reassigned or removed while this screen
-  // was open — better an honest message than a crash on `duty.checkpoint`.
-  if (!duty) {
-    return (
-      <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-        <View style={styles.gone}>
-          <Ionicons name="alert-circle-outline" size={28} color={colors.textMuted} />
-          <Text style={styles.goneTitle}>Duty not available</Text>
-          <Text style={styles.goneBody}>
-            It may have been reassigned. Go back and pull to refresh.
-          </Text>
-          <TouchableOpacity style={styles.goneBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.goneBtnText}>Back to duties</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // A ref, so these handlers keep a stable identity across renders. Passing a
+  // fresh closure into 300 memoised rows re-renders every one of them on each
+  // change of state.
+  const statusesRef = useRef(statuses);
+  statusesRef.current = statuses;
 
-  const toggleAbsent = (studentId) => {
-    if (readOnly) return;
-    // Distinct feels for marking vs undoing, so a teacher going down a line of
-    // students can tell what happened without looking at the screen.
-    if (statuses[studentId] === "A") haptics.undoAbsent();
-    else haptics.markAbsent();
-
-    setStatuses((prev) => {
-      const next = { ...prev };
-      if (next[studentId] === "A") delete next[studentId];
-      else next[studentId] = "A";
-      return next;
-    });
-  };
-
-  const setStatus = (studentId, code) => {
+  const setStatus = useCallback((studentId, code) => {
     if (code === "A") haptics.markAbsent();
+    else if (statusesRef.current[studentId] === "A") haptics.undoAbsent();
     else haptics.select();
 
     setStatuses((prev) => {
@@ -80,23 +117,67 @@ export default function DutyMarkingScreen({ route, navigation }) {
       return next;
     });
     setSheetFor(null);
-  };
+  }, []);
+
+  const openSheet = useCallback((student) => setSheetFor(student), []);
+
+  const searchable = students.length > SEARCH_THRESHOLD;
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) => s.name.toLowerCase().includes(q) || String(s.roll || "").includes(q)
+    );
+  }, [students, query]);
 
   const marked = Object.keys(statuses).length;
   const present = students.length - marked;
   const absent = Object.values(statuses).filter((s) => s === "A").length;
   const elsewhere = marked - absent;
 
+  // Cover marking: anyone may submit a pending checkpoint, and the duty stays
+  // assigned to whoever it was rostered to. `submitted_by` records who really
+  // did it, so this has to be said on screen — a teacher must never submit a
+  // colleague's list thinking it was their own class.
+  const covering = !!duty && duty.staffId !== user?.id;
+  // Falls back to a generic phrase — the warning matters more than the name,
+  // and a duty can outlive the staff row it points at.
+  const coveringFor = covering ? staffName(duty.staffId) || "another teacher" : null;
+
+  // The duty can be missing if it was reassigned or removed while this screen
+  // was open — better an honest message than a crash on `duty.checkpoint`.
+  if (!duty) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["left", "right"]}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Duty not available"
+          body="It may have been reassigned. Go back and pull to refresh."
+          action={
+            <SecondaryButton
+              title="Back to duties"
+              onPress={() => navigation.goBack()}
+              style={{ marginTop: spacing.sm }}
+            />
+          }
+        />
+      </SafeAreaView>
+    );
+  }
+
   const handleSubmit = async () => {
     setSaving(true);
     try {
       await submitDuty(dutyId, statuses, user.id);
       haptics.success();
-      dialog.alert({
-        icon: "checkmark-circle-outline",
-        title: "Submitted",
-        message: `${duty.checkpoint} · ${present}/${students.length} present, ${absent} absent.`,
-      });
+      // A toast, not a dialog. Submitting is the last step of a round and the
+      // teacher is already walking to the next checkpoint — a modal they have
+      // to dismiss first is a tap for nothing.
+      toast.show(
+        `${duty.checkpoint} submitted${coveringFor ? ` for ${coveringFor}` : ""} · ${present}/${
+          students.length
+        } present${absent > 0 ? `, ${absent} absent` : ""}`
+      );
       navigation.goBack();
     } catch (e) {
       // Stay on the screen so the marks aren't lost — a teacher who has just
@@ -113,6 +194,20 @@ export default function DutyMarkingScreen({ route, navigation }) {
   };
 
   const confirmSubmit = () => {
+    // Submitting someone else's checkpoint is worth one deliberate stop, even
+    // with nobody absent: it is the one case where a teacher could be looking
+    // at a class list that is not the one in front of them.
+    if (coveringFor && absent === 0) {
+      dialog.confirm({
+        icon: "people-outline",
+        title: `Submit ${duty.checkpoint} for ${coveringFor}?`,
+        message: `${students.length} students, all present. This closes the checkpoint and is recorded as submitted by you.`,
+        cancelLabel: "Review",
+        confirmLabel: "Submit",
+        onConfirm: handleSubmit,
+      });
+      return;
+    }
     if (absent > 0) {
       // This dialog exists because someone may be about to submit a mis-tap;
       // a physical interruption reinforces "stop and read".
@@ -133,94 +228,132 @@ export default function DutyMarkingScreen({ route, navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="arrow-back" size={20} color={colors.text} />
-        </TouchableOpacity>
-        <View style={{ flex: 1, marginLeft: spacing.sm }}>
-          <Text style={styles.headerTitle}>{duty.checkpoint}</Text>
-          <Text style={typography.caption}>
-            {duty.group} · {students.length} student{students.length === 1 ? "" : "s"}
+    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
+      {/* Header, summary and search measured as one block: the fade has to sit
+          on the list's top edge, and the block's height varies with whether
+          the duty is still editable and whether search is showing. */}
+      <View
+        onLayout={(e) => {
+          const h = Math.round(e.nativeEvent.layout.height);
+          setChromeH((prev) => (Math.abs(prev - h) > 1 ? h : prev));
+        }}
+      >
+        <View style={[styles.header, { paddingTop: topInset }]}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            hitSlop={layout.hitSlop}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Back to duties"
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.headerText}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {duty.checkpoint}
+            </Text>
+            <Text style={typography.caption} numberOfLines={1}>
+              {duty.group}
+            </Text>
+          </View>
+          {readOnly && <Pill label="Locked" icon="lock-closed" tone="neutral" />}
+        </View>
+
+        {/* One line that answers "where am I up to?" without doing arithmetic
+            against the footer tallies. */}
+        <View style={styles.summary}>
+          <Text style={styles.summaryText}>
+            <Text style={styles.summaryStrong}>{students.length}</Text> students
+            {marked > 0 ? (
+              <Text>
+                {" · "}
+                <Text style={styles.summaryStrong}>{marked}</Text> marked as an exception
+              </Text>
+            ) : readOnly ? (
+              ""
+            ) : (
+              " · everyone present unless you say otherwise"
+            )}
           </Text>
         </View>
-        {readOnly && (
-          <View style={styles.lockedPill}>
-            <Ionicons name="lock-closed" size={11} color={colors.textMuted} />
-            <Text style={styles.lockedText}>Locked</Text>
+
+        {!!coveringFor && !readOnly && (
+          <View style={styles.coverBanner}>
+            <Ionicons name="people-outline" size={16} color={colors.onDark} />
+            <Text style={styles.coverText} numberOfLines={2}>
+              You are marking this for <Text style={styles.coverName}>{coveringFor}</Text>. It stays
+              their duty; the record will show you submitted it.
+            </Text>
           </View>
+        )}
+
+        {searchable && (
+          <SearchField
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Find a name or roll number"
+            hint={`${visible.length}/${students.length}`}
+            accessibilityLabel="Find a student in this group"
+            style={styles.search}
+          />
         )}
       </View>
 
-      {!readOnly && (
-        <Text style={styles.hint}>
-          Everyone starts <Text style={styles.hintStrong}>Present</Text> — tap a name to mark
-          absent, or tap the status to choose another.
-        </Text>
-      )}
-
       <FlatList
-        data={students}
-        keyExtractor={(s) => s.id}
-        contentContainerStyle={styles.list}
+        data={visible}
+        keyExtractor={keyExtractor}
+        contentContainerStyle={[styles.list, { paddingBottom: footerH + spacing.md }]}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => {
-          const code = statuses[item.id];
-          const isAbsent = code === "A";
-          const meta = code ? STATUS_META[code] : null;
-
-          return (
-            <View style={[styles.row, isAbsent && styles.rowAbsent, code && !isAbsent && styles.rowElsewhere]}>
-              <TouchableOpacity
-                style={styles.rowMain}
-                onPress={() => toggleAbsent(item.id)}
-                disabled={readOnly}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={typography.caption}>
-                  {item.label} · Roll {item.roll} · {item.type === "D" ? "Day scholar" : "Residential"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => !readOnly && setSheetFor(item)}
-                disabled={readOnly}
-                style={[
-                  styles.statusChip,
-                  isAbsent && styles.statusChipAbsent,
-                  code && !isAbsent && styles.statusChipElsewhere,
-                ]}
-                hitSlop={6}
-              >
-                <Text
-                  style={[
-                    styles.statusChipText,
-                    isAbsent && { color: colors.danger },
-                    code && !isAbsent && { color: colors.text },
-                  ]}
-                >
-                  {meta ? meta.label : "Present"}
-                </Text>
-                {!readOnly && (
-                  <Ionicons
-                    name="chevron-down"
-                    size={11}
-                    color={isAbsent ? colors.danger : colors.textMuted}
-                    style={{ marginLeft: 3 }}
-                  />
-                )}
-              </TouchableOpacity>
-            </View>
-          );
-        }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        // Mangalarati covers every residential student — 300+ rows. Rows are a
+        // fixed height, so the list can skip measuring them entirely and jump
+        // straight to any scroll offset.
+        getItemLayout={getItemLayout}
+        initialNumToRender={14}
+        maxToRenderPerBatch={12}
+        windowSize={11}
+        // Deliberately NOT removeClippedSubviews: on Android it detaches rows
+        // that are still on screen during a fast flick, which shows up as rows
+        // blanking and popping back.
+        removeClippedSubviews={false}
+        ListEmptyComponent={
+          <EmptyState
+            icon="search-outline"
+            title="No match"
+            body={`Nobody in this group matches “${query}”.`}
+            compact
+          />
+        }
+        renderItem={({ item }) => (
+          <StudentRow
+            student={item}
+            code={statuses[item.id]}
+            readOnly={readOnly}
+            onSet={setStatus}
+            onOpenSheet={openSheet}
+          />
+        )}
       />
 
-      <View style={styles.footer}>
+      <EdgeFade top={chromeH} visible={scrolled} />
+
+      <View
+        style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}
+        // Only react to a real change. Re-setting the same height on every
+        // layout pass re-rendered the whole list mid-scroll.
+        onLayout={(e) => {
+          const h = Math.round(e.nativeEvent.layout.height);
+          setFooterH((prev) => (Math.abs(prev - h) > 1 ? h : prev));
+        }}
+      >
         <View style={styles.tallies}>
-          <Tally value={present} label="Present" />
+          <Tally value={present} label="Present" tone="success" />
           <Tally value={elsewhere} label="Elsewhere" />
-          <Tally value={absent} label="Absent" danger />
+          <Tally value={absent} label="Absent" tone="danger" />
         </View>
         {!readOnly && (
           <PrimaryButton
@@ -232,228 +365,292 @@ export default function DutyMarkingScreen({ route, navigation }) {
         )}
       </View>
 
-      {/* Status picker as a bottom sheet — a Modal renders above everything,
-          unlike the old inline dropdown which got clipped by adjacent rows. */}
-      <Modal
+      <BottomSheet
         visible={!!sheetFor}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setSheetFor(null)}
+        onClose={() => setSheetFor(null)}
+        title={sheetFor?.name}
+        subtitle="Where is this student?"
       >
-        <Pressable style={styles.backdrop} onPress={() => setSheetFor(null)} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetGrip} />
-          <Text style={styles.sheetTitle}>{sheetFor?.name}</Text>
-          <Text style={[typography.caption, { marginBottom: spacing.md }]}>
-            Where is this student?
-          </Text>
-
-          <SheetOption
-            label="Present"
-            hint="At this checkpoint"
-            active={sheetFor && !statuses[sheetFor.id]}
-            onPress={() => setStatus(sheetFor.id, "P")}
-          />
-          <SheetOption
-            label="Absent"
-            hint="Whereabouts unknown — raises an alert"
-            danger
-            active={sheetFor && statuses[sheetFor.id] === "A"}
-            onPress={() => setStatus(sheetFor.id, "A")}
-          />
-          {Object.entries(STATUS_META)
-            .filter(([k]) => k !== "A")
-            .map(([k, v]) => (
-              <SheetOption
-                key={k}
-                label={v.label}
-                hint="Accounted for"
-                active={sheetFor && statuses[sheetFor.id] === k}
-                onPress={() => setStatus(sheetFor.id, k)}
-              />
-            ))}
-        </View>
-      </Modal>
+        <SheetOption
+          label="Present"
+          hint="At this checkpoint"
+          active={sheetFor && !statuses[sheetFor.id]}
+          onPress={() => setStatus(sheetFor.id, "P")}
+        />
+        <SheetOption
+          label="Absent"
+          hint="Whereabouts unknown — raises a safety alert"
+          danger
+          active={sheetFor && statuses[sheetFor.id] === "A"}
+          onPress={() => setStatus(sheetFor.id, "A")}
+        />
+        {Object.entries(STATUS_META)
+          .filter(([k]) => k !== "A")
+          .map(([k, v]) => (
+            <SheetOption
+              key={k}
+              label={v.label}
+              hint={STATUS_HINT[k] || "Accounted for"}
+              active={sheetFor && statuses[sheetFor.id] === k}
+              onPress={() => setStatus(sheetFor.id, k)}
+            />
+          ))}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
 
-function Tally({ value, label, danger }) {
+/**
+ * One student. Memoised on the props that actually change its appearance, so
+ * marking one child absent re-renders one row rather than the whole class.
+ */
+const StudentRow = React.memo(function StudentRow({
+  student,
+  code,
+  readOnly,
+  onSet,
+  onOpenSheet,
+}) {
+  const isAbsent = code === "A";
+  const isElsewhere = !!code && !isAbsent;
+  const meta = code ? STATUS_META[code] : null;
+  const label = meta ? meta.label : "Present";
+
+  return (
+    <View style={[styles.row, isAbsent && styles.rowAbsent, isElsewhere && styles.rowElsewhere]}>
+      {/* Full-height colour edge: the only thing that makes two exceptions
+          findable when scrolling back through 300 rows. */}
+      <View
+        style={[
+          styles.stripe,
+          isAbsent && styles.stripeAbsent,
+          isElsewhere && styles.stripeElsewhere,
+        ]}
+      />
+
+      <Row
+        style={styles.rowMain}
+        onPress={() => onOpenSheet(student)}
+        disabled={readOnly}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: readOnly }}
+        accessibilityLabel={`${student.name}, roll ${student.roll}, currently ${label}`}
+        accessibilityHint={readOnly ? undefined : "Opens the full list of statuses"}
+      >
+        <Text style={styles.name} numberOfLines={1}>
+          {student.name}
+        </Text>
+        <Text style={typography.caption} numberOfLines={1}>
+          Roll {student.roll} · {student.type === "D" ? "Day scholar" : "Residential"}
+        </Text>
+      </Row>
+
+      {isElsewhere ? (
+        // A named status can't be shown on a two-way switch, so it takes the
+        // whole control and stays tappable to change.
+        <TouchableOpacity
+          onPress={() => !readOnly && onOpenSheet(student)}
+          disabled={readOnly}
+          activeOpacity={0.7}
+          style={styles.elsewhereChip}
+          accessibilityRole="button"
+          accessibilityLabel={`${student.name} is marked ${label}. Change`}
+        >
+          <Text style={styles.elsewhereText} numberOfLines={1}>
+            {label}
+          </Text>
+          {!readOnly && <Ionicons name="chevron-down" size={12} color={colors.textMuted} />}
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.switch}>
+          <MarkButton
+            icon="checkmark"
+            active={!code}
+            tone="success"
+            disabled={readOnly}
+            onPress={() => onSet(student.id, "P")}
+            accessibilityLabel={`Mark ${student.name} present`}
+          />
+          <MarkButton
+            icon="close"
+            active={isAbsent}
+            tone="danger"
+            disabled={readOnly}
+            onPress={() => onSet(student.id, "A")}
+            accessibilityLabel={`Mark ${student.name} absent`}
+          />
+        </View>
+      )}
+    </View>
+  );
+});
+
+/** Half of the present/absent switch. Filled when it is the current answer. */
+function MarkButton({ icon, active, tone, disabled, onPress, accessibilityLabel }) {
+  const fill = tone === "danger" ? colors.danger : colors.success;
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.7}
+      style={[styles.markBtn, active && { backgroundColor: fill }]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Ionicons name={icon} size={19} color={active ? colors.white : colors.icon} />
+    </TouchableOpacity>
+  );
+}
+
+function Tally({ value, label, tone }) {
+  const lit = value > 0;
+  const color =
+    tone === "danger" && lit
+      ? colors.danger
+      : tone === "success" && lit
+      ? colors.success
+      : colors.text;
   return (
     <View style={styles.tally}>
-      <Text style={[styles.tallyValue, danger && value > 0 && { color: colors.danger }]}>
-        {value}
-      </Text>
+      <Text style={[styles.tallyValue, { color }]}>{value}</Text>
       <Text style={styles.tallyLabel}>{label}</Text>
     </View>
   );
 }
 
-function SheetOption({ label, hint, active, danger, onPress }) {
-  return (
-    <TouchableOpacity style={[styles.sheetOption, active && styles.sheetOptionActive]} onPress={onPress}>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.sheetOptionLabel, danger && { color: colors.danger }]}>{label}</Text>
-        <Text style={typography.caption}>{hint}</Text>
-      </View>
-      {active && <Ionicons name="checkmark-circle" size={20} color={colors.text} />}
-    </TouchableOpacity>
-  );
-}
+// One switch half; two of them plus the gap is the control's width.
+const MARK_BTN = 44;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
 
-  gone: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8, padding: spacing.xl },
-  goneTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text },
-  goneBody: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.textMuted,
-    textAlign: "center",
-    maxWidth: 250,
-  },
-  goneBtn: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.text,
-  },
-  goneBtnText: { fontFamily: fonts.semibold, fontSize: 13.5, color: colors.text },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    gap: spacing.md - 4,
+    paddingHorizontal: layout.gutter,
+    paddingBottom: spacing.sm + 2,
   },
-  headerTitle: { fontFamily: fonts.display, fontSize: 19, color: colors.text },
+  headerText: { flex: 1, minWidth: 0 },
+  headerTitle: { ...typography.h1, fontSize: 20, lineHeight: 26 },
   backBtn: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+  },
+
+  summary: { paddingHorizontal: layout.gutter, paddingBottom: spacing.sm + 2 },
+  summaryText: { ...typography.caption, fontSize: 13, lineHeight: 18 },
+  summaryStrong: { fontFamily: fonts.bold, color: colors.text },
+
+  search: { marginHorizontal: layout.gutter, marginBottom: spacing.sm + 2 },
+
+  coverBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.primaryDeep,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md - 4,
+    marginHorizontal: layout.gutter,
+    marginBottom: spacing.sm + 2,
+  },
+  coverText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.onDarkMuted,
+  },
+  coverName: { fontFamily: fonts.bold, color: colors.onDark },
+
+  list: { paddingHorizontal: layout.gutter },
+
+  row: {
+    ...surface.card,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: radius.md,
+    // Fixed, not minimum: getItemLayout depends on it. Both text lines are
+    // single-line, so nothing can grow past this.
+    height: ROW_H,
+    marginBottom: ROW_GAP,
+    paddingRight: spacing.sm,
+    overflow: "hidden",
+  },
+  rowAbsent: { borderColor: colors.danger, backgroundColor: colors.dangerBg },
+  rowElsewhere: { backgroundColor: colors.cardAlt },
+
+  stripe: { width: 4, height: "100%", backgroundColor: "transparent" },
+  stripeAbsent: { backgroundColor: colors.danger },
+  stripeElsewhere: { backgroundColor: colors.icon },
+
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    gap: 1,
+    paddingLeft: spacing.md - 4,
+    paddingRight: spacing.sm,
+    height: "100%",
+  },
+  name: { ...typography.h3 },
+
+  switch: { flexDirection: "row", gap: spacing.xs + 2, flexShrink: 0 },
+  markBtn: {
+    width: MARK_BTN,
+    height: MARK_BTN,
+    borderRadius: MARK_BTN / 2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  lockedPill: {
+
+  elsewhereChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    backgroundColor: colors.cardAlt,
-  },
-  lockedText: { fontFamily: fonts.semibold, fontSize: 11, color: colors.textMuted },
-
-  hint: {
-    fontFamily: fonts.regular,
-    fontSize: 12.5,
-    color: colors.textMuted,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-    lineHeight: 18,
-  },
-  hintStrong: { fontFamily: fonts.bold, color: colors.text },
-
-  list: { paddingHorizontal: spacing.md, paddingBottom: 130, gap: 8 },
-
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.76)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.85)",
-    borderTopColor: "rgba(255, 255, 255, 0.95)",
-    borderBottomColor: "rgba(255, 255, 255, 0.45)",
-    borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    shadowColor: "#1C4E80",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-  },
-  // Absent is the one state that must be impossible to miss.
-  rowAbsent: { borderColor: colors.danger, backgroundColor: "rgba(254, 242, 242, 0.88)" },
-  rowElsewhere: { backgroundColor: "rgba(238, 244, 250, 0.75)" },
-  rowMain: { flex: 1, marginRight: spacing.sm },
-  name: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text, marginBottom: 1 },
-
-  statusChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 11,
-    paddingVertical: 6,
+    gap: 3,
+    minHeight: layout.touch,
+    minWidth: 96,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md - 4,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.8)",
+    borderColor: colors.textMuted,
+    backgroundColor: colors.white,
+    flexShrink: 0,
   },
-  statusChipAbsent: { borderColor: colors.danger, backgroundColor: colors.white },
-  statusChipElsewhere: { borderColor: colors.textMuted, backgroundColor: colors.white },
-  statusChipText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.textMuted },
+  elsewhereText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.text },
 
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(255, 255, 255, 0.88)",
-    borderTopWidth: 1.5,
-    borderTopColor: "rgba(255, 255, 255, 0.95)",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
+    backgroundColor: colors.bar,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairlineTop,
+    paddingHorizontal: layout.gutter,
+    paddingTop: spacing.md - 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    shadowColor: "#1C4E80",
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 10,
+    gap: spacing.md,
+    ...shadow.lg,
+    shadowOffset: { width: 0, height: -8 },
   },
   tallies: { flexDirection: "row", gap: spacing.lg },
   tally: { alignItems: "flex-start" },
-  tallyValue: { fontFamily: fonts.display, fontSize: 20, color: colors.text },
-  tallyLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
-  submitBtn: { paddingHorizontal: 34, paddingVertical: 13, borderRadius: radius.pill },
-
-  backdrop: { flex: 1, backgroundColor: "rgba(15, 36, 58, 0.35)" },
-  sheet: {
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.95)",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-  },
-  sheetGrip: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: "center",
-    marginBottom: spacing.md,
-  },
-  sheetTitle: { fontFamily: fonts.display, fontSize: 20, color: colors.text },
-  sheetOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: "transparent",
-    marginBottom: 6,
-  },
-  sheetOptionActive: { borderColor: colors.text, backgroundColor: colors.cardAlt },
-  sheetOptionLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
+  tallyValue: { fontFamily: fonts.bold, fontSize: 21, lineHeight: 27, ...numeric },
+  tallyLabel: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 15, color: colors.textMuted },
+  submitBtn: { paddingHorizontal: spacing.xl },
 });

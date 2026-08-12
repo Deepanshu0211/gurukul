@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { fetchStudents } from "../lib/students";
+import { fetchStaff } from "../lib/staff";
 import {
   fetchDuties,
   fetchAttendance,
@@ -21,6 +22,7 @@ const SchoolDataContext = createContext(null);
 
 export function SchoolDataProvider({ children }) {
   const [students, setStudents] = useState([]);
+  const [staff, setStaff] = useState([]);
   const [duties, setDuties] = useState([]);
   // { [dutyId]: { statuses: { admissionNo: code }, submittedBy, submittedAt } }
   const [records, setRecords] = useState({});
@@ -30,8 +32,13 @@ export function SchoolDataProvider({ children }) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [studentRows, dutyRows] = await Promise.all([fetchStudents(), fetchDuties()]);
+      const [studentRows, staffRows, dutyRows] = await Promise.all([
+        fetchStudents(),
+        fetchStaff(),
+        fetchDuties(),
+      ]);
       setStudents(studentRows);
+      setStaff(staffRows);
       setDuties(dutyRows);
 
       // Pull attendance only for duties already submitted — there is nothing
@@ -59,9 +66,24 @@ export function SchoolDataProvider({ children }) {
     load();
   }, [load]);
 
+  /**
+   * Cached per duty. `resolveGroup` filters and sorts the whole 415-student
+   * register, and screens call this inside `renderItem` — on the Duties list
+   * that was one full filter+sort per row per render, which is what made
+   * scrolling stutter on a low-end phone. The cache is thrown away whenever
+   * the register changes, so it can never serve a stale group.
+   */
+  const groupCache = useMemo(() => new Map(), [students]);
   const studentsForDuty = useCallback(
-    (duty) => resolveGroup(duty, students),
-    [students]
+    (duty) => {
+      if (!duty) return [];
+      const hit = groupCache.get(duty.id);
+      if (hit) return hit;
+      const group = resolveGroup(duty, students);
+      groupCache.set(duty.id, group);
+      return group;
+    },
+    [groupCache, students]
   );
 
   const submitDuty = useCallback(
@@ -94,19 +116,40 @@ export function SchoolDataProvider({ children }) {
     setDuties((prev) => prev.map((d) => (d.id === dutyId ? { ...d, staffId } : d)));
   }, []);
 
+  /** Directory lookups. `staffName` returns "" for an id that is not in the
+   *  directory, so a caller can fall back rather than print "undefined". */
+  const staffById = useCallback((id) => staff.find((s) => s.id === id) || null, [staff]);
+  const staffName = useCallback((id) => staffById(id)?.name || "", [staffById]);
+
   const value = useMemo(
     () => ({
       students,
+      staff,
       duties,
       records,
       loading,
       error,
       refresh: load,
       studentsForDuty,
+      staffById,
+      staffName,
       submitDuty,
       reassignDuty,
     }),
-    [students, duties, records, loading, error, load, studentsForDuty, submitDuty, reassignDuty]
+    [
+      students,
+      staff,
+      duties,
+      records,
+      loading,
+      error,
+      load,
+      studentsForDuty,
+      staffById,
+      staffName,
+      submitDuty,
+      reassignDuty,
+    ]
   );
 
   return <SchoolDataContext.Provider value={value}>{children}</SchoolDataContext.Provider>;

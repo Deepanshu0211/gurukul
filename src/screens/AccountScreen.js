@@ -6,28 +6,40 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
-  Pressable,
   ActivityIndicator,
   Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
-import { ROLE_LABELS } from "../data/mockData";
+import { colors, spacing, typography, radius, fonts, layout, surface } from "../theme/theme";
+import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset";
+import ScreenHeader from "../components/ScreenHeader";
+import EdgeFade, { useScrolled } from "../components/EdgeFade";
+import BottomSheet, { SheetOption } from "../components/BottomSheet";
+import { SectionLabel, Divider, Stat, TextAction, PrimaryButton, Chevron } from "../components/ui";
+import { roleLabel } from "../domain/roles";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
+import { useToast } from "../components/Toast";
 import Avatar from "../components/Avatar";
 import { pickImage, uploadAvatar, removeAvatar } from "../lib/avatars";
 import { updateOwnPhone } from "../lib/staff";
 import { haptics, isHapticsEnabled, setHapticsEnabled } from "../lib/haptics";
 
+const ICON = 18;
+// Row text starts after the padding, the icon and the gap. Dividers use the
+// same number so the hairline begins exactly under the label above it.
+const ROW_INSET = spacing.md + ICON + spacing.sm;
+
 export default function AccountScreen() {
   const { user, logout, updateUser } = useAuth();
   const { duties, records } = useSchoolData();
   const dialog = useDialog();
+  const toast = useToast();
+  const tabInset = useTabContentInset();
+  const topInset = useScreenTopInset();
+  const { scrolled, onScroll } = useScrolled();
 
   const [editing, setEditing] = useState(false);
   const [draftPhone, setDraftPhone] = useState(user.phone || "");
@@ -54,6 +66,7 @@ export default function AccountScreen() {
       const updated = await updateOwnPhone(user.id, next);
       updateUser({ phone: updated?.phone ?? next });
       setEditing(false);
+      toast.show(next ? "Phone number saved" : "Phone number cleared");
     } catch (e) {
       dialog.alert({
         icon: "alert-circle-outline",
@@ -74,6 +87,7 @@ export default function AccountScreen() {
       setPhotoBusy(true);
       const url = await uploadAvatar(uri, user.id);
       updateUser({ photoUrl: url });
+      toast.show("Profile photo updated");
     } catch (e) {
       dialog.alert({
         icon: "alert-circle-outline",
@@ -99,6 +113,7 @@ export default function AccountScreen() {
         try {
           await removeAvatar(user.id);
           updateUser({ photoUrl: null });
+          toast.show("Profile photo removed");
         } catch (e) {
           dialog.alert({
             icon: "alert-circle-outline",
@@ -124,15 +139,21 @@ export default function AccountScreen() {
     });
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Account</Text>
+    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: topInset, paddingBottom: tabInset }]}
+        showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+      >
+        <ScreenHeader title="Account" />
 
         <View style={styles.profileCard}>
           <TouchableOpacity
             onPress={() => setPhotoSheet(true)}
             disabled={photoBusy}
             activeOpacity={0.8}
+            accessibilityRole="button"
             accessibilityLabel="Change profile photo"
           >
             <Avatar name={user.name} src={user.photoUrl} size={84} bordered />
@@ -144,11 +165,13 @@ export default function AccountScreen() {
               )}
             </View>
           </TouchableOpacity>
-          <Text style={styles.profileName}>{user.name}</Text>
+          <Text style={styles.profileName} numberOfLines={1}>
+            {user.name}
+          </Text>
           <View style={styles.rolePill}>
-            <Text style={styles.rolePillText}>{ROLE_LABELS[user.role]}</Text>
+            <Text style={styles.rolePillText}>{roleLabel(user.role)}</Text>
           </View>
-          {user.classLabel && <Text style={typography.caption}>{user.classLabel}</Text>}
+          {!!user.classLabel && <Text style={typography.caption}>{user.classLabel}</Text>}
         </View>
 
         {myDuties.length > 0 && (
@@ -161,10 +184,10 @@ export default function AccountScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionLabel}>YOUR DETAILS</Text>
+        <SectionLabel>Your details</SectionLabel>
         <View style={styles.group}>
           <DetailRow icon="mail-outline" label="Email" value={user.email} locked />
-          <Divider />
+          <Divider inset={ROW_INSET} />
           <DetailRow
             icon="call-outline"
             label="Phone"
@@ -174,19 +197,19 @@ export default function AccountScreen() {
               setEditing(true);
             }}
           />
-          <Divider />
-          <DetailRow icon="shield-outline" label="Role" value={ROLE_LABELS[user.role]} locked />
+          <Divider inset={ROW_INSET} />
+          <DetailRow icon="shield-outline" label="Role" value={roleLabel(user.role)} locked />
         </View>
         <Text style={styles.note}>
           Name, email and role are managed by the school office. Ask an administrator to change
           them.
         </Text>
 
-        <Text style={styles.sectionLabel}>PREFERENCES</Text>
-        <View style={styles.group}>
+        {/* <SectionLabel>Preferences</SectionLabel> */}
+        {/* <View style={styles.group}>
           <View style={styles.row}>
-            <Ionicons name="phone-portrait-outline" size={18} color={colors.textMuted} />
-            <View style={{ flex: 1, marginLeft: spacing.sm, marginRight: spacing.sm }}>
+            <Ionicons name="phone-portrait-outline" size={ICON} color={colors.textMuted} />
+            <View style={styles.rowMain}>
               <Text style={styles.rowValue}>Vibration feedback</Text>
               <Text style={styles.rowHint}>
                 A short buzz when you mark a student absent or submit. Turn off for night and
@@ -198,11 +221,12 @@ export default function AccountScreen() {
               onValueChange={toggleHaptics}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={colors.white}
+              accessibilityLabel="Vibration feedback"
             />
           </View>
-        </View>
+        </View> */}
 
-        <Text style={styles.sectionLabel}>SECURITY</Text>
+        <SectionLabel>Security</SectionLabel>
         <View style={styles.group}>
           <ActionRow
             icon="key-outline"
@@ -217,7 +241,7 @@ export default function AccountScreen() {
           />
         </View>
 
-        <Text style={styles.sectionLabel}>SUPPORT</Text>
+        <SectionLabel>Support</SectionLabel>
         <View style={styles.group}>
           <ActionRow
             icon="help-circle-outline"
@@ -230,7 +254,7 @@ export default function AccountScreen() {
               })
             }
           />
-          <Divider />
+          <Divider inset={ROW_INSET} />
           <ActionRow
             icon="document-text-outline"
             label="About this app"
@@ -244,107 +268,97 @@ export default function AccountScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={confirmLogout} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={confirmLogout}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+        >
           <Ionicons name="log-out-outline" size={18} color={colors.danger} />
           <Text style={styles.logoutText}>Sign out</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>Pilot build · v0.1</Text>
+       
       </ScrollView>
 
-      <Modal visible={editing} transparent animationType="slide" onRequestClose={() => setEditing(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setEditing(false)} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetGrip} />
-          <Text style={styles.sheetTitle}>Phone number</Text>
-          <Text style={[typography.caption, { marginBottom: spacing.md }]}>
-            Used for duty reminders and escalations.
-          </Text>
-          <TextInput
-            value={draftPhone}
-            onChangeText={setDraftPhone}
-            placeholder="+91 ..."
-            placeholderTextColor={colors.textMuted}
-            keyboardType="phone-pad"
-            autoFocus
-            style={styles.sheetInput}
-          />
-          <TouchableOpacity
-            style={[styles.saveBtn, savingPhone && { opacity: 0.6 }]}
-            onPress={savePhone}
-            disabled={savingPhone}
-            activeOpacity={0.85}
-          >
-            {savingPhone ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Text style={styles.saveBtnText}>Save</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </Modal>
+      <EdgeFade top={0} height={topInset} visible={scrolled} />
 
-      <Modal
-        visible={photoSheet}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPhotoSheet(false)}
+      <BottomSheet
+        visible={editing}
+        onClose={() => setEditing(false)}
+        title="Phone number"
+        subtitle="Used for duty reminders and escalations."
+        scroll={false}
       >
-        <Pressable style={styles.backdrop} onPress={() => setPhotoSheet(false)} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetGrip} />
-          <Text style={styles.sheetTitle}>Profile photo</Text>
-          <Text style={[typography.caption, { marginBottom: spacing.md }]}>
-            Shown to coordinators and on your marked records.
-          </Text>
+        <TextInput
+          value={draftPhone}
+          onChangeText={setDraftPhone}
+          placeholder="+91 ..."
+          placeholderTextColor={colors.textMuted}
+          keyboardType="phone-pad"
+          textContentType="telephoneNumber"
+          autoComplete="tel"
+          autoFocus
+          style={styles.sheetInput}
+          accessibilityLabel="Phone number"
+        />
+        <PrimaryButton
+          title={savingPhone ? "Saving…" : "Save"}
+          onPress={savePhone}
+          disabled={savingPhone}
+          style={{ marginTop: spacing.md }}
+        />
+      </BottomSheet>
 
-          <PhotoOption
-            icon="camera-outline"
-            label="Take a photo"
-            onPress={() => changePhoto("camera")}
+      <BottomSheet
+        visible={photoSheet}
+        onClose={() => setPhotoSheet(false)}
+        title="Profile photo"
+        subtitle="Shown to coordinators and on your marked records."
+      >
+        <SheetOption
+          icon="camera-outline"
+          label="Take a photo"
+          onPress={() => changePhoto("camera")}
+        />
+        <SheetOption
+          icon="images-outline"
+          label="Choose from gallery"
+          onPress={() => changePhoto("library")}
+        />
+        {!!user.photoUrl && (
+          <SheetOption
+            icon="trash-outline"
+            label="Remove photo"
+            danger
+            onPress={confirmRemovePhoto}
           />
-          <PhotoOption
-            icon="images-outline"
-            label="Choose from gallery"
-            onPress={() => changePhoto("library")}
-          />
-          {!!user.photoUrl && (
-            <PhotoOption
-              icon="trash-outline"
-              label="Remove photo"
-              destructive
-              onPress={confirmRemovePhoto}
-            />
-          )}
-        </View>
-      </Modal>
+        )}
+      </BottomSheet>
     </SafeAreaView>
-  );
-}
-
-function Stat({ value, label }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
   );
 }
 
 function DetailRow({ icon, label, value, locked, onEdit }) {
   return (
     <View style={styles.row}>
-      <Ionicons name={icon} size={18} color={colors.textMuted} />
-      <View style={{ flex: 1, marginLeft: spacing.sm }}>
+      <Ionicons name={icon} size={ICON} color={colors.textMuted} />
+      <View style={styles.rowMain}>
         <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowValue}>{value}</Text>
+        <Text style={styles.rowValue} numberOfLines={1}>
+          {value}
+        </Text>
       </View>
       {locked ? (
-        <Ionicons name="lock-closed" size={13} color={colors.border} />
+        <Ionicons
+          name="lock-closed"
+          size={14}
+          color={colors.icon}
+          accessibilityLabel="Managed by the school office"
+        />
       ) : (
-        <TouchableOpacity onPress={onEdit} hitSlop={10}>
-          <Text style={styles.editLink}>Edit</Text>
-        </TouchableOpacity>
+        <TextAction label="Edit" accessibilityLabel={`Edit ${label}`} onPress={onEdit} />
       )}
     </View>
   );
@@ -352,176 +366,111 @@ function DetailRow({ icon, label, value, locked, onEdit }) {
 
 function ActionRow({ icon, label, onPress }) {
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
-      <Ionicons name={icon} size={18} color={colors.textMuted} />
-      <Text style={[styles.rowValue, { flex: 1, marginLeft: spacing.sm }]}>{label}</Text>
-      <Ionicons name="chevron-forward" size={16} color={colors.border} />
+    <TouchableOpacity
+      style={styles.row}
+      onPress={onPress}
+      activeOpacity={0.6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Ionicons name={icon} size={ICON} color={colors.textMuted} />
+      <View style={styles.rowMain}>
+        <Text style={styles.rowValue}>{label}</Text>
+      </View>
+      <Chevron />
     </TouchableOpacity>
   );
 }
-
-function PhotoOption({ icon, label, destructive, onPress }) {
-  return (
-    <TouchableOpacity style={styles.photoOption} onPress={onPress} activeOpacity={0.7}>
-      <Ionicons name={icon} size={19} color={destructive ? colors.danger : colors.text} />
-      <Text style={[styles.photoOptionLabel, destructive && { color: colors.danger }]}>
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-const Divider = () => <View style={styles.divider} />;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: TAB_CONTENT_INSET },
-  pageTitle: { fontFamily: fonts.bold, fontSize: 28, color: colors.text, letterSpacing: -0.4 },
+  content: { paddingHorizontal: layout.gutter },
 
-  profileCard: { alignItems: "center", paddingVertical: spacing.md, gap: 5 },
+  profileCard: { alignItems: "center", paddingVertical: spacing.md, gap: spacing.xs + 2 },
   cameraBadge: {
     position: "absolute",
     right: -2,
     bottom: -2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: colors.primary,
+    // A solid ring, so the badge separates from the photo behind it. This was
+    // `colors.bg`, which is transparent — the ring never rendered.
     borderWidth: 2.5,
-    borderColor: colors.bg,
+    borderColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
   },
-  photoOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: radius.md,
-    marginBottom: 4,
-  },
-  photoOptionLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.text },
-  profileName: { fontFamily: fonts.bold, fontSize: 20, color: colors.text, marginTop: 4 },
+  profileName: { ...typography.h1, marginTop: spacing.xs },
   rolePill: {
     backgroundColor: colors.cardAlt,
     borderRadius: radius.pill,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md - 4,
     paddingVertical: 4,
   },
-  rolePillText: { fontFamily: fonts.semibold, fontSize: 11.5, color: colors.textMuted, letterSpacing: 0.3 },
+  rolePillText: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.textMuted,
+    letterSpacing: 0.3,
+  },
 
   statsRow: {
+    ...surface.sunken,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(238, 244, 250, 0.82)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.7)",
     borderRadius: radius.md,
     paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
   },
-  stat: { flex: 1, alignItems: "center" },
-  statValue: { fontFamily: fonts.bold, fontSize: 20, color: colors.text },
-  statLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted, marginTop: 1 },
-  statDivider: { width: 1, height: 26, backgroundColor: colors.border },
+  statDivider: { width: 1, height: 28, backgroundColor: colors.divider },
 
-  sectionLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 10.5,
-    color: colors.textMuted,
-    letterSpacing: 1.3,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
   group: {
-    backgroundColor: "rgba(255, 255, 255, 0.78)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.85)",
-    borderTopColor: "rgba(255, 255, 255, 0.95)",
-    borderBottomColor: "rgba(255, 255, 255, 0.45)",
+    ...surface.card,
     borderRadius: radius.md,
     overflow: "hidden",
-    shadowColor: "#1C4E80",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
   },
-  row: { flexDirection: "row", alignItems: "center", paddingVertical: 13, paddingHorizontal: 14 },
-  rowLabel: { fontFamily: fonts.regular, fontSize: 11.5, color: colors.textMuted },
-  rowValue: { fontFamily: fonts.medium, fontSize: 14.5, color: colors.text },
-  rowHint: {
-    fontFamily: fonts.regular,
-    fontSize: 11.5,
-    color: colors.textMuted,
-    lineHeight: 16,
-    marginTop: 2,
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: layout.row,
+    paddingVertical: spacing.md - 4,
+    paddingHorizontal: spacing.md,
   },
-  editLink: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
-  divider: { height: 1, backgroundColor: colors.border, marginLeft: 46 },
-  note: {
-    fontFamily: fonts.regular,
-    fontSize: 11.5,
-    color: colors.textMuted,
-    marginTop: 8,
-    lineHeight: 16,
-  },
+  rowMain: { flex: 1, minWidth: 0, gap: 1 },
+  rowLabel: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 15, color: colors.textMuted },
+  rowValue: { ...typography.body, fontFamily: fonts.medium },
+  rowHint: { ...typography.caption, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  note: { ...typography.caption, fontSize: 11, lineHeight: 15, marginTop: spacing.sm },
 
   logoutBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
+    gap: spacing.sm,
     marginTop: spacing.xl,
-    paddingVertical: 14,
+    minHeight: layout.touch,
+    paddingVertical: 13,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.dangerBg,
+    borderColor: colors.danger,
     backgroundColor: colors.dangerBg,
   },
-  logoutText: { fontFamily: fonts.bold, fontSize: 14.5, color: colors.danger },
-  version: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: colors.textMuted,
-    textAlign: "center",
-    marginTop: spacing.md,
-  },
+  logoutText: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.danger },
 
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-  },
-  sheetGrip: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: "center",
-    marginBottom: spacing.md,
-  },
-  sheetTitle: { fontFamily: fonts.bold, fontSize: 19, color: colors.text },
   sheetInput: {
+    minHeight: layout.touch + 4,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radius.pill,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.md - 4,
     fontFamily: fonts.medium,
     fontSize: 15,
+    lineHeight: 20,
     color: colors.text,
   },
-  saveBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.pill,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: spacing.md,
-  },
-  saveBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.white },
 });

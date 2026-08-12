@@ -11,10 +11,25 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
+import {
+  colors,
+  spacing,
+  typography,
+  radius,
+  fonts,
+  layout,
+  surface,
+  numeric,
+} from "../theme/theme";
+import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset";
 import GreetingHeader from "../components/GreetingHeader";
+import EdgeFade, { useScrolled } from "../components/EdgeFade";
+import SearchField from "../components/SearchField";
+import Segmented from "../components/Segmented";
+import FadeIn from "../components/FadeIn";
+import { SectionLabel, EmptyState, SecondaryButton, Row, StatusTag } from "../components/ui";
 import { NOW } from "../data/mockData";
+import { defaultsToOwnDuties } from "../domain/roles";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
 import { plural, fmtTime, fmtDuration } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
@@ -26,10 +41,29 @@ const SECTIONS = {
   DONE: "done",
 };
 
+// Every row type reserves the same leading slot, so the checkpoint names in
+// "Later today" and "Submitted" start at one shared left edge instead of two.
+const LEAD_W = 52;
+
+// Above this many rows the list stops being scannable and the search field
+// earns its space. A teacher's own day is 4–8 duties; the whole school's is 30+.
+const SEARCH_THRESHOLD = 8;
+
 export default function DutiesScreen({ navigation }) {
   const { user } = useAuth();
-  const { duties: allDuties, records, loading, error, refresh, studentsForDuty } = useSchoolData();
+  const {
+    duties: allDuties,
+    records,
+    loading,
+    error,
+    refresh,
+    studentsForDuty,
+    staffName,
+  } = useSchoolData();
   const [refreshing, setRefreshing] = useState(false);
+  const tabInset = useTabContentInset();
+  const topInset = useScreenTopInset();
+  const { scrolled, onScroll } = useScrolled();
 
   // Reload on focus so a coordinator's reassignment shows up when a teacher
   // returns to this tab, rather than only after an app restart.
@@ -45,12 +79,34 @@ export default function DutiesScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const isTeacher = user?.role === "teacher";
+  // Only a teacher gets the Mine/Everyone switch — a coordinator or MOD has
+  // no duties of their own to filter down to, so for them "mine" would be an
+  // empty list.
+  const ownFirst = defaultsToOwnDuties(user?.role);
 
-  const duties = useMemo(
-    () => (isTeacher ? allDuties.filter((d) => d.staffId === user.id) : allDuties),
-    [isTeacher, allDuties, user?.id]
+  // Teachers land on their own duties, but can switch to the whole day and
+  // mark a colleague's checkpoint — a duty teacher is regularly away and the
+  // window still has to be met.
+  const [scope, setScope] = useState("mine");
+  const [query, setQuery] = useState("");
+  const showingMine = ownFirst && scope === "mine";
+
+  const myDuties = useMemo(
+    () => allDuties.filter((d) => d.staffId === user?.id),
+    [allDuties, user?.id]
   );
+
+  const duties = useMemo(() => {
+    const base = showingMine ? myDuties : allDuties;
+    const q = query.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(
+      (d) =>
+        d.checkpoint.toLowerCase().includes(q) ||
+        d.group.toLowerCase().includes(q) ||
+        staffName(d.staffId).toLowerCase().includes(q)
+    );
+  }, [showingMine, myDuties, allDuties, query, staffName]);
 
   const { urgent, later, done } = useMemo(
     () => groupDuties(duties, records, NOW),
@@ -60,19 +116,30 @@ export default function DutiesScreen({ navigation }) {
   const sections = useMemo(
     () =>
       [
-        { key: SECTIONS.URGENT, title: "Needs attention", data: urgent },
-        { key: SECTIONS.LATER, title: "Later today", data: later },
-        { key: SECTIONS.DONE, title: "Submitted", data: done },
+        { key: SECTIONS.URGENT, title: "Needs attention", tone: "due", data: urgent },
+        { key: SECTIONS.LATER, title: "Later today", tone: "pending", data: later },
+        { key: SECTIONS.DONE, title: "Submitted", tone: "submitted", data: done },
       ].filter((s) => s.data.length > 0),
     [urgent, later, done]
   );
+
+  // Resolved once per duty rather than inside renderItem. Group resolution
+  // walks the whole 415-student register, and doing that per row per render
+  // was the reason this list stuttered while scrolling.
+  const countFor = useMemo(() => {
+    const map = {};
+    duties.forEach((d) => {
+      map[d.id] = studentsForDuty(d).length;
+    });
+    return map;
+  }, [duties, studentsForDuty]);
 
   const openDuty = (id) => navigation.navigate("DutyMarking", { dutyId: id });
 
   if (loading && duties.length === 0) {
     return (
-      <SafeAreaView style={[styles.screen, styles.centered]} edges={["top", "left", "right"]}>
-        <ActivityIndicator color={colors.text} />
+      <SafeAreaView style={[styles.screen, styles.centered]} edges={["left", "right"]}>
+        <ActivityIndicator color={colors.primary} />
         <Text style={styles.centeredText}>Loading today's duties…</Text>
       </SafeAreaView>
     );
@@ -80,61 +147,108 @@ export default function DutiesScreen({ navigation }) {
 
   if (error && duties.length === 0) {
     return (
-      <SafeAreaView style={[styles.screen, styles.centered]} edges={["top", "left", "right"]}>
-        <Ionicons name="cloud-offline-outline" size={26} color={colors.textMuted} />
-        <Text style={styles.centeredText}>{error}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={refresh} activeOpacity={0.8}>
-          <Text style={styles.retryText}>Try again</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={[styles.screen, styles.centered]} edges={["left", "right"]}>
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Can't reach the school server"
+          body={error}
+          action={<SecondaryButton title="Try again" onPress={refresh} style={styles.retryBtn} />}
+        />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
       <SectionList
         sections={sections}
         keyExtractor={(d) => d.id}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: topInset, paddingBottom: tabInset }]}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
         ListHeaderComponent={
           <DutiesHeader
             user={user}
-            scopeNote={isTeacher ? "Your duties today" : "All duties today"}
+            scopeNote={showingMine ? "Your duties today" : "All duties today"}
             done={done.length}
             total={duties.length}
             pending={urgent.length}
+            showScope={ownFirst}
+            coverHint={ownFirst && scope === "all" && allDuties.length <= myDuties.length}
+            scope={scope}
+            onScope={setScope}
+            mineCount={myDuties.length}
+            allCount={allDuties.length}
+            query={query}
+            onQuery={setQuery}
+            searchable={(showingMine ? myDuties : allDuties).length > SEARCH_THRESHOLD}
+            resultCount={duties.length}
           />
         }
-        ListEmptyComponent={<EmptyState />}
+        ListEmptyComponent={
+          <EmptyState
+            icon="checkmark-done-outline"
+            title="Nothing assigned today"
+            body="Duties appear here as the coordinator assigns them."
+          />
+        }
         renderSectionHeader={({ section }) => (
-          <View style={styles.sectionHeader}>
-            <Text style={typography.label}>{section.title.toUpperCase()}</Text>
-            <Text style={styles.sectionCount}>{section.data.length}</Text>
-          </View>
+          <SectionLabel count={section.data.length} tone={section.tone}>
+            {section.title}
+          </SectionLabel>
         )}
-        renderItem={({ item, section }) => {
-          const count = studentsForDuty(item).length;
+        renderItem={({ item, section, index }) => {
+          const count = countFor[item.id] ?? 0;
           const onPress = () => openDuty(item.id);
+          // Whose duty this is, shown only when it is not the reader's own.
+          const owner = item.staffId !== user?.id ? staffName(item.staffId) || null : null;
 
           if (section.key === SECTIONS.URGENT) {
-            return <UrgentCard duty={item} count={count} onPress={onPress} />;
+            return <UrgentCard duty={item} count={count} owner={owner} onPress={onPress} index={index} />;
           }
           if (section.key === SECTIONS.LATER) {
-            return <LaterRow duty={item} count={count} onPress={onPress} />;
+            return <LaterRow duty={item} count={count} owner={owner} onPress={onPress} index={index} />;
           }
           return (
-            <DoneRow duty={item} count={count} record={records[item.id]} onPress={onPress} />
+            <DoneRow
+              duty={item}
+              count={count}
+              owner={owner}
+              record={records[item.id]}
+              onPress={onPress}
+              index={index}
+            />
           );
         }}
       />
+
+      <EdgeFade top={0} height={topInset} visible={scrolled} />
     </SafeAreaView>
   );
 }
 
-function DutiesHeader({ user, scopeNote, done, total, pending }) {
+function DutiesHeader({
+  user,
+  scopeNote,
+  done,
+  total,
+  pending,
+  showScope,
+  coverHint,
+  scope,
+  onScope,
+  mineCount,
+  allCount,
+  query,
+  onQuery,
+  searchable,
+  resultCount,
+}) {
   const allDone = total > 0 && done === total;
 
   const badge =
@@ -145,19 +259,59 @@ function DutiesHeader({ user, scopeNote, done, total, pending }) {
       : null;
 
   return (
-    <GreetingHeader
-      user={user}
-      meta={`${scopeNote} · Friday, ${fmtTime(NOW)}`}
-      done={done}
-      total={total}
-      badge={badge}
-    />
+    <>
+      <GreetingHeader
+        user={user}
+        meta={`${scopeNote} · Friday, ${fmtTime(NOW)}`}
+        done={done}
+        total={total}
+        badge={badge}
+      />
+
+      {showScope && (
+        <Segmented
+          style={styles.scope}
+          value={scope}
+          onChange={onScope}
+          items={[
+            { key: "mine", label: "My duties", count: mineCount },
+            { key: "all", label: "Whole school", count: allCount },
+          ]}
+        />
+      )}
+
+      {/* "Whole school" returned nothing beyond this teacher's own duties. The
+          filtering happens in the database, so no amount of app code can widen
+          it — the cover-marking policy has not been applied to this project's
+          Supabase yet. Said plainly rather than showing a list that silently
+          looks identical to the one next to it. */}
+      {coverHint && (
+        <View style={styles.notice}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.warning} />
+          <Text style={styles.noticeText}>
+            Only your own duties are visible. Cover marking needs migration{" "}
+            <Text style={styles.noticeStrong}>005_cover_marking.sql</Text> to be run on the school
+            database.
+          </Text>
+        </View>
+      )}
+
+      {searchable && (
+        <SearchField
+          value={query}
+          onChangeText={onQuery}
+          placeholder="Search checkpoint, class or teacher"
+          hint={`${resultCount}`}
+          style={styles.search}
+        />
+      )}
+    </>
   );
 }
 
 /** Actionable duties carry the most visual weight: countdown, escalation
  *  state, and a real button. Everything else on the screen is quieter. */
-function UrgentCard({ duty, count, onPress }) {
+function UrgentCard({ duty, count, owner, onPress, index }) {
   const overdue = duty.status === DUTY_STATUS.OVERDUE;
   const esc = escalationStage(duty, NOW);
   const countdownText = overdue
@@ -165,6 +319,7 @@ function UrgentCard({ duty, count, onPress }) {
     : `Closes in ${fmtDuration(duty.end - NOW)}`;
 
   return (
+    <FadeIn index={index}>
     <View style={[styles.card, overdue && styles.cardOverdue]}>
       <View style={styles.cardTop}>
         <View style={styles.cardTitleCol}>
@@ -173,216 +328,219 @@ function UrgentCard({ duty, count, onPress }) {
           </Text>
           <Text style={typography.caption} numberOfLines={1}>
             {duty.group} · {plural(count, "student")}
+            {owner ? ` · ${owner}` : ""}
           </Text>
         </View>
-        <View style={[styles.timePill, overdue ? styles.timePillOverdue : styles.timePillDue]}>
-          <Ionicons
-            name={overdue ? "alert-circle" : "time-outline"}
-            size={12}
-            color={overdue ? colors.danger : colors.warning}
-          />
-          <Text style={[styles.timePillText, { color: overdue ? colors.danger : colors.warning }]}>
-            {countdownText}
-          </Text>
-        </View>
+        {/* Same tag vocabulary as every other row on the screen, carrying the
+            countdown as its label — one element instead of a state pill and a
+            timer sitting next to each other saying related things. */}
+        <StatusTag
+          tone={overdue ? "overdue" : "due"}
+          label={countdownText}
+          style={[styles.cardTag, overdue && styles.cardTagOnDanger]}
+        />
       </View>
 
       {esc && (
         <View style={styles.escRow}>
-          <Ionicons name="megaphone-outline" size={13} color={colors.textMuted} />
-          <Text style={styles.escText}>{esc.text}</Text>
+          <Ionicons name="megaphone-outline" size={14} color={colors.textMuted} />
+          <Text style={styles.escText} numberOfLines={1}>
+            {esc.text}
+          </Text>
         </View>
       )}
 
-      <TouchableOpacity style={styles.markBtn} onPress={onPress} activeOpacity={0.85}>
-        <Text style={styles.markBtnText}>Mark attendance</Text>
+      <TouchableOpacity
+        style={styles.markBtn}
+        onPress={onPress}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={
+          owner
+            ? `Mark attendance for ${duty.checkpoint}, ${duty.group}, on behalf of ${owner}`
+            : `Mark attendance for ${duty.checkpoint}, ${duty.group}`
+        }
+      >
+        <Text style={styles.markBtnText}>
+          {owner ? "Mark for them" : "Mark attendance"}
+        </Text>
         <Ionicons name="arrow-forward" size={16} color={colors.white} />
       </TouchableOpacity>
     </View>
+    </FadeIn>
   );
 }
 
 /** Nothing to do yet — a quiet row, led by its time. */
-function LaterRow({ duty, count, onPress }) {
+function LaterRow({ duty, count, owner, onPress, index }) {
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
-      <Text style={styles.rowTime}>{fmtTime(duty.start)}</Text>
+    <FadeIn index={index}>
+    <Row
+      style={styles.row}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${duty.checkpoint}, ${duty.group}, opens at ${fmtTime(duty.start)}${
+        owner ? `, assigned to ${owner}` : ""
+      }`}
+    >
+      <View style={styles.lead}>
+        <Text style={styles.rowTime}>{fmtTime(duty.start)}</Text>
+      </View>
       <View style={styles.rowMain}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {duty.checkpoint}
         </Text>
         <Text style={typography.caption} numberOfLines={1}>
           {duty.group} · {plural(count, "student")}
+          {owner ? ` · ${owner}` : ""}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.border} />
-    </TouchableOpacity>
+      {/* The tag replaces the chevron rather than joining it: a row can afford
+          one trailing element, and the state is worth more than an arrow that
+          only repeats "this is tappable". */}
+      <StatusTag tone="pending" />
+    </Row>
+    </FadeIn>
   );
 }
 
 /** Done — collapses to one line but keeps the counts the spec asks for (A2),
  *  and stays tappable for the read-only cross-check (A7). */
-function DoneRow({ duty, count, record, onPress }) {
+function DoneRow({ duty, count, owner, record, onPress, index }) {
   const { present, absent } = summarise(count, record?.statuses);
 
   return (
-    <TouchableOpacity style={[styles.row, styles.rowDone]} onPress={onPress} activeOpacity={0.6}>
-      <View style={styles.check}>
-        <Ionicons name="checkmark" size={13} color={colors.success} />
+    <FadeIn index={index}>
+    <Row
+      style={[styles.row, styles.rowDone]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${duty.checkpoint}, submitted, ${present} of ${count} present${
+        absent > 0 ? `, ${absent} absent` : ""
+      }`}
+    >
+      <View style={styles.lead}>
+        <View style={styles.check}>
+          <Ionicons name="checkmark" size={15} color={colors.success} />
+        </View>
       </View>
       <View style={styles.rowMain}>
         <Text style={styles.rowTitleDone} numberOfLines={1}>
           {duty.checkpoint}
         </Text>
         <Text style={typography.caption} numberOfLines={1}>
-          {present}/{count} present
-          {absent > 0 && <Text style={{ color: colors.danger }}> · {absent} absent</Text>}
+          <Text style={styles.doneCount}>
+            {present}/{count}
+          </Text>{" "}
+          present
+          {absent > 0 && (
+            <Text style={styles.doneAbsent}> · {absent} absent</Text>
+          )}
           {record?.at != null ? ` · ${fmtTime(record.at)}` : ""}
+          {owner ? ` · ${owner}` : ""}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.border} />
-    </TouchableOpacity>
-  );
-}
-
-function EmptyState() {
-  return (
-    <View style={styles.empty}>
-      <Ionicons name="checkmark-done-outline" size={30} color={colors.textMuted} />
-      <Text style={styles.emptyTitle}>Nothing assigned today</Text>
-      <Text style={styles.emptyBody}>Duties appear here as the coordinator assigns them.</Text>
-    </View>
+      <StatusTag tone="submitted" />
+    </Row>
+    </FadeIn>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: TAB_CONTENT_INSET },
+  content: { paddingHorizontal: layout.gutter },
 
+  scope: { marginTop: spacing.sm },
+  search: { marginTop: spacing.sm },
 
-
-  sectionHeader: {
+  notice: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: radius.sm,
+    padding: spacing.sm + 2,
+    marginTop: spacing.sm,
   },
-  sectionCount: { fontFamily: fonts.semibold, fontSize: 11, color: colors.border },
+  noticeText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.warning,
+  },
+  noticeStrong: { fontFamily: fonts.bold },
 
   card: {
-    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    ...surface.raised,
     borderWidth: 1.5,
     borderColor: colors.warning,
     borderRadius: radius.md,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: "#1C4E80",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
+    padding: spacing.md,
+    marginBottom: spacing.sm + 2,
   },
-  cardOverdue: { borderColor: colors.danger, backgroundColor: "rgba(254, 242, 242, 0.88)" },
+  cardOverdue: { borderColor: colors.danger, backgroundColor: colors.dangerBg },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   cardTitleCol: { flex: 1, minWidth: 0 },
-  cardTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginBottom: 2 },
+  cardTitle: { ...typography.h1, fontSize: 18, lineHeight: 24, marginBottom: 2 },
 
-  timePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    flexShrink: 0,
-  },
-  timePillDue: { backgroundColor: colors.warningBg },
-  timePillOverdue: { backgroundColor: colors.white },
-  timePillText: { fontFamily: fonts.bold, fontSize: 11 },
+  cardTag: { marginTop: 1, maxWidth: "56%" },
+  // On an overdue card the ground is already dangerBg, so the tag's own tint
+  // would disappear into it — white lifts it back off the card.
+  cardTagOnDanger: { backgroundColor: colors.white },
 
-  escRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: spacing.sm },
-  escText: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
+  escRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm + 2 },
+  escText: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.textMuted },
 
   markBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: spacing.sm,
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
+    minHeight: layout.touch,
     paddingVertical: 12,
-    marginTop: spacing.sm + 2,
-    shadowColor: "#1C4E80",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
+    marginTop: spacing.md,
   },
-  markBtnText: { fontFamily: fonts.bold, fontSize: 14, color: colors.white },
+  markBtnText: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.white },
 
   row: {
+    ...surface.card,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    backgroundColor: "rgba(255, 255, 255, 0.72)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.85)",
-    borderTopColor: "rgba(255, 255, 255, 0.95)",
-    borderBottomColor: "rgba(255, 255, 255, 0.45)",
     borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 8,
-    shadowColor: "#1C4E80",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    minHeight: layout.row,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
   },
-  rowDone: { backgroundColor: "rgba(238, 244, 250, 0.65)", borderColor: "rgba(255, 255, 255, 0.6)" },
-  rowMain: { flex: 1, minWidth: 0 },
-  rowTime: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: colors.textMuted,
-    width: 60,
-    fontVariant: ["tabular-nums"],
-  },
-  rowTitle: { fontFamily: fonts.semibold, fontSize: 14.5, color: colors.text, marginBottom: 1 },
-  rowTitleDone: { fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted, marginBottom: 1 },
+  rowDone: { backgroundColor: colors.cardAlt },
+  lead: { width: LEAD_W, justifyContent: "center" },
+  rowMain: { flex: 1, minWidth: 0, gap: 1 },
+  rowTime: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.textMuted, ...numeric },
+  rowTitle: { ...typography.bodyStrong },
+  // Submitted is a finished, verifiable record — it recedes by sitting on a
+  // tinted ground, not by having its own name greyed out. A checkpoint a
+  // teacher may need to re-read at 9pm has to stay readable.
+  rowTitleDone: { ...typography.bodyStrong },
+  doneCount: { fontFamily: fonts.bold, color: colors.text, ...numeric },
+  doneAbsent: { fontFamily: fonts.bold, color: colors.danger },
   check: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: colors.success,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  centered: { alignItems: "center", justifyContent: "center", gap: 10, padding: spacing.xl },
-  centeredText: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.textMuted,
-    textAlign: "center",
-    maxWidth: 260,
-  },
-  retryBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.text,
-  },
-  retryText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
-
-  empty: { alignItems: "center", paddingVertical: 56, gap: 6 },
-  emptyTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.text, marginTop: 4 },
-  emptyBody: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.textMuted,
-    textAlign: "center",
-    maxWidth: 240,
-  },
+  centered: { alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  centeredText: { ...typography.caption, fontSize: 13, lineHeight: 18, textAlign: "center" },
+  retryBtn: { marginTop: spacing.sm, paddingHorizontal: spacing.lg },
 });

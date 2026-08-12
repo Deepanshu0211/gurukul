@@ -23,6 +23,7 @@ import { loadHapticsPreference } from "./src/lib/haptics";
 import { AuthProvider } from "./src/context/AuthContext";
 import { SchoolDataProvider } from "./src/context/SchoolDataContext";
 import { DialogProvider } from "./src/components/Dialog";
+import { ToastProvider } from "./src/components/Toast";
 import RootNavigator from "./src/navigation/RootNavigator";
 
 // Hold the native splash until the fonts are ready, so text never flashes
@@ -53,7 +54,10 @@ export default function App() {
   if (!fontsLoaded) return null;
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+    // The root carries the artwork's own cream so that any pixel the image
+    // hasn't covered — behind a transparent system bar, or during the first
+    // frame — is light rather than black.
+    <View style={{ flex: 1, backgroundColor: "#FAF2E6" }} onLayout={onLayoutRootView}>
       <SafeAreaProvider style={{ backgroundColor: "transparent" }}>
         <ImageBackground
           source={require("./src/assets/bg.png")}
@@ -63,8 +67,12 @@ export default function App() {
           <AuthProvider>
             <SchoolDataProvider>
               <DialogProvider>
-                <StatusBar style="dark" backgroundColor="transparent" translucent />
-                <RootNavigator />
+                {/* Toast sits inside Dialog so a confirmation can be shown
+                    from a dialog's onConfirm handler. */}
+                <ToastProvider>
+                  <StatusBar style="dark" backgroundColor="transparent" translucent />
+                  <RootNavigator />
+                </ToastProvider>
               </DialogProvider>
             </SchoolDataProvider>
           </AuthProvider>

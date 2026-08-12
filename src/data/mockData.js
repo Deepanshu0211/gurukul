@@ -50,13 +50,13 @@ export const STATUS_META = {
   // purpose. Every other status means the school knows where the child is,
   // so they read as neutral greys in the minimal theme and are told apart
   // by their label, not their colour.
-  A: { label: "Absent", color: "#B91C1C" },
-  H: { label: "Home", color: "#404040" },
-  S: { label: "Sick", color: "#404040" },
-  V: { label: "Activity", color: "#404040" },
-  O: { label: "Outing", color: "#404040" },
-  G: { label: "Gita Nagari", color: "#404040" },
-  Y: { label: "Self study", color: "#404040" },
+  A: { label: "Absent", color: "#8E1F3C" },
+  H: { label: "Home", color: "#3E4F4D" },
+  S: { label: "Sick", color: "#3E4F4D" },
+  V: { label: "Activity", color: "#3E4F4D" },
+  O: { label: "Outing", color: "#3E4F4D" },
+  G: { label: "Gita Nagari", color: "#3E4F4D" },
+  Y: { label: "Self study", color: "#3E4F4D" },
 };
 export const SPANNING = ["H", "S", "O", "G"];
 
@@ -70,13 +70,8 @@ export const STAFF = [
   { id: "n1", name: "Sister Nurse", role: "nurse", email: "nurse@bgis.org" },
 ];
 
-export const ROLE_LABELS = {
-  teacher: "Teacher",
-  coordinator: "Coordinator",
-  management: "Management",
-  admin: "Admin",
-  nurse: "Nurse",
-};
+// ROLE_LABELS moved to domain/roles.js — it is presentation copy tied to what
+// each role may do, not mock data. Import it from there.
 
 // Simulated clock, so the demo always shows a mid-morning state with some
 // duties done, one due and one overdue. Replace with real time when the

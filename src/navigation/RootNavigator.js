@@ -28,7 +28,15 @@ const Tab = createBottomTabNavigator();
 
 function DutiesStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        // Both screens sit on the same background image, so an opaque card
+        // sliding over it showed a hard white edge mid-transition.
+        contentStyle: { backgroundColor: "transparent" },
+        animation: "slide_from_right",
+      }}
+    >
       <Stack.Screen name="DutiesList" component={DutiesScreen} />
       <Stack.Screen name="DutyMarking" component={DutyMarkingScreen} />
     </Stack.Navigator>
@@ -56,12 +64,18 @@ function RoleTabs({ role, hasClass }) {
       { name: "Dashboard", component: DashboardScreen },
       { name: "Account", component: AccountScreen },
     ],
+    // The MOD is on the floor during meal and night checkpoints and is one of
+    // the people expected to step in when a duty teacher is missing, so they
+    // need the marking screen — not just a dashboard telling them it is late.
     management: [
       { name: "Dashboard", component: DashboardScreen },
+      { name: "Duties", component: DutiesStack },
+      { name: "Roster", component: RosterScreen },
       { name: "Account", component: AccountScreen },
     ],
     admin: [
       { name: "Dashboard", component: DashboardScreen },
+      { name: "Duties", component: DutiesStack },
       { name: "Roster", component: RosterScreen },
       { name: "Account", component: AccountScreen },
     ],

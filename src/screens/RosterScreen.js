@@ -6,33 +6,82 @@ import {
   StyleSheet,
   SectionList,
   TouchableOpacity,
-  TextInput,
-  Modal,
-  Pressable,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, typography, radius, fonts } from "../theme/theme";
-import { TAB_CONTENT_INSET } from "../navigation/tabBarInset";
-import { STAFF, ROLE_LABELS, NOW } from "../data/mockData";
+import {
+  colors,
+  spacing,
+  typography,
+  radius,
+  fonts,
+  layout,
+  surface,
+  numeric,
+} from "../theme/theme";
+import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset";
+import ScreenHeader from "../components/ScreenHeader";
+import EdgeFade, { useScrolled } from "../components/EdgeFade";
+import SearchField from "../components/SearchField";
+import Segmented from "../components/Segmented";
+import FadeIn from "../components/FadeIn";
+import BottomSheet, { SheetOption } from "../components/BottomSheet";
+import {
+  SectionLabel,
+  Chevron,
+  TextAction,
+  EmptyState,
+  SecondaryButton,
+  StatusTag,
+  Row,
+} from "../components/ui";
+import { NOW } from "../data/mockData";
+import { roleLabel, canReassign } from "../domain/roles";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime, plural, initial } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
+import { useAuth } from "../context/AuthContext";
 import { useStudents } from "../lib/students";
 import { useDialog } from "../components/Dialog";
+import { useToast } from "../components/Toast";
 
 const TABS = [
-  { key: "duties", label: "Duties" },
-  { key: "staff", label: "Staff" },
-  { key: "students", label: "Students" },
+  { key: "duties", label: "Duties", placeholder: "Search checkpoint, group or staff" },
+  { key: "staff", label: "Staff", placeholder: "Search staff by name or role" },
+  { key: "students", label: "Students", placeholder: "Search name, admission no. or class" },
 ];
 
 export default function RosterScreen() {
-  const { duties: DUTIES, records, studentsForDuty, reassignDuty, refresh } = useSchoolData();
+  const {
+    duties: DUTIES,
+    staff: STAFF,
+    records,
+    studentsForDuty,
+    reassignDuty,
+    refresh,
+    staffName: nameOf,
+  } = useSchoolData();
+  const { user } = useAuth();
   const dialog = useDialog();
+  const toast = useToast();
   const [tab, setTab] = useState("duties");
+  const [query, setQuery] = useState("");
   const [reassigning, setReassigning] = useState(null);
+  const tabInset = useTabContentInset();
+  const topInset = useScreenTopInset();
+  const { scrolled, onScroll, reset } = useScrolled();
+  // Where the tab content starts, so the fade lands on its top edge.
+  const [headerH, setHeaderH] = useState(150);
+
+  // Each tab searches a different set, so a query carried across would show
+  // "no match" against a term that was never meant for this list.
+  const selectTab = (key) => {
+    setTab(key);
+    setQuery("");
+    reset();
+  };
+  const placeholder = TABS.find((t) => t.key === tab)?.placeholder;
 
   // Reload on focus so a submission made by a teacher shows here without an
   // app restart.
@@ -42,8 +91,8 @@ export default function RosterScreen() {
     }, [refresh])
   );
 
-  const staffById = (id) => STAFF.find((s) => s.id === id);
-  const staffName = (id) => staffById(id)?.name || "Unassigned";
+  const staffName = (id) => nameOf(id) || "Unassigned";
+  const mayReassign = canReassign(user?.role);
 
   // Writes to Supabase, so the teacher losing or gaining the duty sees it
   // too — this is a today-only override; the recurring default is untouched.
@@ -52,6 +101,7 @@ export default function RosterScreen() {
     setReassigning(null);
     try {
       await reassignDuty(duty.id, staffId);
+      toast.show(`${duty.checkpoint} reassigned to ${staffName(staffId)}`);
     } catch (e) {
       dialog.alert({
         icon: "alert-circle-outline",
@@ -63,23 +113,30 @@ export default function RosterScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <Text style={styles.pageTitle}>Roster</Text>
-        <Text style={typography.caption}>Friday, {fmtTime(NOW)}</Text>
+    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
+      <View
+        style={[styles.header, { paddingTop: topInset }]}
+        onLayout={(e) => {
+          const h = Math.round(e.nativeEvent.layout.height);
+          setHeaderH((prev) => (Math.abs(prev - h) > 1 ? h : prev));
+        }}
+      >
+        <ScreenHeader title="Roster" subtitle={`Friday, ${fmtTime(NOW)}`} />
 
-        <View style={styles.tabs}>
-          {TABS.map((t) => (
-            <TouchableOpacity
-              key={t.key}
-              onPress={() => setTab(t.key)}
-              style={[styles.tab, tab === t.key && styles.tabActive]}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Same control as the Duties scope switch — this screen used to draw
+            its own, with a white selected pill instead of a teal one. */}
+        <Segmented style={styles.tabs} items={TABS} value={tab} onChange={selectTab} />
+
+        {/* Pinned, not part of the list. Inside a ListHeaderComponent it
+            scrolled off on the first flick of a 415-row register, so changing
+            a query meant scrolling all the way back up first. */}
+        <SearchField
+          key={tab}
+          value={query}
+          onChangeText={setQuery}
+          placeholder={placeholder}
+          style={styles.search}
+        />
       </View>
 
       {tab === "duties" && (
@@ -88,95 +145,154 @@ export default function RosterScreen() {
           records={records}
           staffName={staffName}
           studentsForDuty={studentsForDuty}
-          onReassign={setReassigning}
+          onReassign={mayReassign ? setReassigning : null}
+          bottomInset={tabInset}
+          query={query}
+          onScroll={onScroll}
         />
       )}
-      {tab === "staff" && <StaffTab duties={DUTIES} />}
-      {tab === "students" && <StudentsTab />}
+      {tab === "staff" && (
+        <StaffTab
+          staff={STAFF}
+          duties={DUTIES}
+          bottomInset={tabInset}
+          query={query}
+          onScroll={onScroll}
+        />
+      )}
+      {tab === "students" && (
+        <StudentsTab bottomInset={tabInset} query={query} onScroll={onScroll} />
+      )}
 
-      <Modal
+      <EdgeFade top={headerH} visible={scrolled} />
+
+      <BottomSheet
         visible={!!reassigning}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setReassigning(null)}
+        onClose={() => setReassigning(null)}
+        title="Reassign duty"
+        subtitle={`${reassigning?.checkpoint ?? ""} · ${
+          reassigning?.group ?? ""
+        }. Applies to today only — the weekly default is unchanged.`}
       >
-        <Pressable style={styles.backdrop} onPress={() => setReassigning(null)} />
-        <View style={styles.sheet}>
-          <View style={styles.sheetGrip} />
-          <Text style={styles.sheetTitle}>Reassign duty</Text>
-          <Text style={[typography.caption, { marginBottom: spacing.md }]}>
-            {reassigning?.checkpoint} · {reassigning?.group}. Applies to today only — the weekly
-            default is unchanged.
-          </Text>
-          <ScrollableStaff
-            current={reassigning ? reassigning.staffId : null}
-            onPick={applyReassign}
+        {STAFF.map((s) => (
+          <SheetOption
+            key={s.id}
+            label={s.name}
+            hint={roleLabel(s.role)}
+            active={reassigning ? s.id === reassigning.staffId : false}
+            onPress={() => applyReassign(s.id)}
           />
-        </View>
-      </Modal>
+        ))}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
 
-function DutiesTab({ duties, records, staffName, studentsForDuty, onReassign }) {
-  const withStatus = duties.map((d) => ({ ...d, _status: dutyStatus(d, records, NOW) }));
+function DutiesTab({
+  duties,
+  records,
+  staffName,
+  studentsForDuty,
+  onReassign,
+  bottomInset,
+  query,
+  onScroll,
+}) {
+  const q = query.trim().toLowerCase();
+  const withStatus = duties
+    .map((d) => ({ ...d, _status: dutyStatus(d, records, NOW) }))
+    .filter(
+      (d) =>
+        !q ||
+        d.checkpoint.toLowerCase().includes(q) ||
+        d.group.toLowerCase().includes(q) ||
+        staffName(d.staffId).toLowerCase().includes(q)
+    );
   const pending = withStatus.filter((d) => d._status !== DUTY_STATUS.DONE);
   const done = withStatus.filter((d) => d._status === DUTY_STATUS.DONE);
 
   const sections = [
-    { title: "Not yet submitted", data: pending },
-    { title: "Submitted", data: done },
+    { title: "Not yet submitted", tone: "due", data: pending },
+    { title: "Submitted", tone: "submitted", data: done },
   ].filter((s) => s.data.length > 0);
 
   return (
     <SectionList
       sections={sections}
       keyExtractor={(d) => d.id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
       showsVerticalScrollIndicator={false}
       stickySectionHeadersEnabled={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      ListEmptyComponent={
+        q ? (
+          <EmptyState icon="search-outline" title="No match" body={`No duty matches “${query}”.`} compact />
+        ) : (
+          <EmptyState icon="calendar-outline" title="No duties today" body="Nothing is on the roster." />
+        )
+      }
       renderSectionHeader={({ section }) => (
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>{section.title.toUpperCase()}</Text>
-          <Text style={styles.sectionCount}>{section.data.length}</Text>
-        </View>
+        <SectionLabel count={section.data.length} tone={section.tone}>
+          {section.title}
+        </SectionLabel>
       )}
-      renderItem={({ item }) => {
+      renderItem={({ item, index }) => {
         const overdue = item._status === DUTY_STATUS.OVERDUE;
         const submitted = item._status === DUTY_STATUS.DONE;
         const total = studentsForDuty(item).length;
+        const due = item._status === DUTY_STATUS.DUE;
         return (
+          <FadeIn index={index}>
           <View style={[styles.card, overdue && styles.cardOverdue]}>
             <View style={styles.cardTop}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.checkpoint}</Text>
-                <Text style={typography.caption}>
-                  {item.group} · {total} student{total === 1 ? "" : "s"}
+              <View style={styles.cardTitleCol}>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {item.checkpoint}
+                </Text>
+                <Text style={typography.caption} numberOfLines={1}>
+                  {item.group} · {plural(total, "student")}
                 </Text>
               </View>
-              <Text style={styles.cardTime}>
-                {fmtTime(item.start)}–{fmtTime(item.end)}
-              </Text>
+              <View style={styles.cardMeta}>
+                <StatusTag
+                  tone={submitted ? "submitted" : overdue ? "overdue" : due ? "due" : "pending"}
+                  style={overdue ? styles.tagOnDanger : undefined}
+                />
+                <Text style={styles.cardTime}>
+                  {fmtTime(item.start)}–{fmtTime(item.end)}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.assignRow}>
               <View style={styles.assignAvatar}>
-                <Text style={styles.assignAvatarText}>{staffName(item.staffId).charAt(0)}</Text>
+                <Text style={styles.assignAvatarText}>{initial(staffName(item.staffId))}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.assignLabel}>ASSIGNED TO</Text>
-                <Text style={styles.assignName}>{staffName(item.staffId)}</Text>
+              <View style={styles.assignMain}>
+                <Text style={typography.label}>ASSIGNED TO</Text>
+                <Text style={styles.assignName} numberOfLines={1}>
+                  {staffName(item.staffId)}
+                </Text>
               </View>
               {submitted ? (
-                <View style={styles.doneTag}>
-                  <Ionicons name="checkmark" size={12} color={colors.success} />
-                  <Text style={styles.doneTagText}>Submitted</Text>
-                </View>
+                // The state is already on the card's status tag; repeating it
+                // here just crowded the row. What is useful at this point is
+                // why the Reassign button is gone.
+                <Text style={styles.lockedText}>Locked</Text>
+              ) : !onReassign ? (
+                // Management and nurse can read the roster but not move a duty
+                // — the database refuses it too (005's reassignment trigger).
+                <Text style={styles.lockedText}>Pending</Text>
               ) : (
                 <TouchableOpacity
                   style={styles.reassignBtn}
                   onPress={() => onReassign(item)}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Reassign ${item.checkpoint}, ${item.group}`}
                 >
                   <Text style={styles.reassignText}>Reassign</Text>
                 </TouchableOpacity>
@@ -185,54 +301,76 @@ function DutiesTab({ duties, records, staffName, studentsForDuty, onReassign }) 
 
             {overdue && (
               <View style={styles.warnRow}>
-                <Ionicons name="alert-circle" size={13} color={colors.danger} />
+                <Ionicons name="alert-circle" size={14} color={colors.danger} />
                 <Text style={styles.warnText}>Overdue — escalation sent</Text>
               </View>
             )}
           </View>
+          </FadeIn>
         );
       }}
     />
   );
 }
 
-function StaffTab({ duties }) {
+function StaffTab({ staff: STAFF, duties, bottomInset, query, onScroll }) {
   const dialog = useDialog();
   const dutiesFor = (id) => duties.filter((d) => d.staffId === id).length;
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? STAFF.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          roleLabel(s.role).toLowerCase().includes(q) ||
+          (s.email || "").toLowerCase().includes(q)
+      )
+    : STAFF;
+
   return (
     <SectionList
-      sections={[{ title: "", data: STAFF }]}
+      sections={[{ title: "", data: filtered }]}
       keyExtractor={(s) => s.id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      ListEmptyComponent={
+        <EmptyState icon="search-outline" title="No match" body={`No staff member matches “${query}”.`} compact />
+      }
       renderSectionHeader={() => (
-        <View style={styles.listHeaderRow}>
-          <Text style={styles.sectionLabel}>{STAFF.length} STAFF</Text>
-          <TouchableOpacity
-            onPress={() =>
-              dialog.alert({
-                icon: "person-add-outline",
-                title: "Add staff",
-                message: "Adding a staff member is an administrator action.",
-              })
-            }
-            hitSlop={8}
-          >
-            <Text style={styles.addLink}>+ Add</Text>
-          </TouchableOpacity>
-        </View>
+        <SectionLabel
+          action={
+            <TextAction
+              label="+ Add"
+              accessibilityLabel="Add staff member"
+              onPress={() =>
+                dialog.alert({
+                  icon: "person-add-outline",
+                  title: "Add staff",
+                  message: "Adding a staff member is an administrator action.",
+                })
+              }
+            />
+          }
+        >
+          {q ? `${filtered.length} of ${STAFF.length} staff` : `${STAFF.length} staff`}
+        </SectionLabel>
       )}
       renderItem={({ item }) => {
         const n = dutiesFor(item.id);
         return (
-          <TouchableOpacity
+          <Row
             style={styles.personRow}
-            activeOpacity={0.6}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name}, ${roleLabel(item.role)}`}
             onPress={() =>
               dialog.confirm({
                 icon: "person-outline",
                 title: item.name,
-                message: `${ROLE_LABELS[item.role]} · ${item.email}\n\nDeactivating flags their pending duties for reassignment.`,
+                message: `${roleLabel(item.role)} · ${item.email}\n\nDeactivating flags their pending duties for reassignment.`,
                 cancelLabel: "Close",
                 confirmLabel: "Deactivate",
                 destructive: true,
@@ -240,17 +378,19 @@ function StaffTab({ duties }) {
             }
           >
             <View style={styles.personAvatar}>
-              <Text style={styles.personAvatarText}>{item.name.charAt(0)}</Text>
+              <Text style={styles.personAvatarText}>{initial(item.name)}</Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.personName}>{item.name}</Text>
-              <Text style={typography.caption}>
-                {ROLE_LABELS[item.role]}
+            <View style={styles.personMain}>
+              <Text style={styles.personName} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <Text style={typography.caption} numberOfLines={1}>
+                {roleLabel(item.role)}
                 {n > 0 ? ` · ${n} dut${n === 1 ? "y" : "ies"} today` : ""}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.border} />
-          </TouchableOpacity>
+            <Chevron />
+          </Row>
         );
       }}
     />
@@ -264,10 +404,23 @@ const TYPE_LABEL = {
   B: "Day boarding",
 };
 
-function StudentsTab() {
+function StudentsTab({ bottomInset, query, onScroll }) {
   const dialog = useDialog();
   const { students, loading, error, reload } = useStudents();
-  const [query, setQuery] = useState("");
+
+  // Stable identity, so the memoised rows below aren't invalidated on every
+  // keystroke in the search field.
+  const showStudent = useCallback(
+    (s) =>
+      dialog.alert({
+        icon: "school-outline",
+        title: s.name,
+        message: `Admission no. ${s.adm}\nClass ${s.label} · Roll ${s.roll || "—"}\n${
+          TYPE_LABEL[s.type]
+        }${s.remedial ? "\nRemedial batch" : ""}`,
+      }),
+    [dialog]
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -293,7 +446,7 @@ function StudentsTab() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={colors.text} />
+        <ActivityIndicator color={colors.primary} />
         <Text style={styles.centeredText}>Loading register…</Text>
       </View>
     );
@@ -301,13 +454,12 @@ function StudentsTab() {
 
   if (error) {
     return (
-      <View style={styles.centered}>
-        <Ionicons name="cloud-offline-outline" size={26} color={colors.textMuted} />
-        <Text style={styles.centeredText}>{error}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={reload} activeOpacity={0.8}>
-          <Text style={styles.retryText}>Try again</Text>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon="cloud-offline-outline"
+        title="Can't load the register"
+        body={error}
+        action={<SecondaryButton title="Try again" onPress={reload} style={{ marginTop: spacing.sm }} />}
+      />
     );
   }
 
@@ -315,19 +467,21 @@ function StudentsTab() {
     <SectionList
       sections={sections}
       keyExtractor={(s) => s.id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
       showsVerticalScrollIndicator={false}
       stickySectionHeadersEnabled={false}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
       initialNumToRender={20}
       windowSize={11}
       ListHeaderComponent={
-        <View>
-          <View style={styles.listHeaderRow}>
-            <Text style={styles.sectionLabel}>
-              {query ? `${filtered.length} OF ${students.length}` : `${students.length} STUDENTS`}
-            </Text>
-            <TouchableOpacity
+        <SectionLabel
+          action={
+            <TextAction
+              label="+ Add"
+              accessibilityLabel="Add student"
               onPress={() =>
                 dialog.alert({
                   icon: "person-add-outline",
@@ -335,252 +489,169 @@ function StudentsTab() {
                   message: "Add individually, or bulk-import the Excel register.",
                 })
               }
-              hitSlop={8}
-            >
-              <Text style={styles.addLink}>+ Add</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.searchRow}>
-            <Ionicons name="search" size={16} color={colors.textMuted} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search name, admission no. or class"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={styles.searchInput}
             />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={() => setQuery("")} hitSlop={8}>
-                <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+          }
+        >
+          {query ? `${filtered.length} of ${students.length}` : `${students.length} students`}
+        </SectionLabel>
       }
       ListEmptyComponent={
-        <View style={styles.centered}>
-          <Text style={styles.centeredText}>No student matches “{query}”.</Text>
-        </View>
+        <EmptyState
+          icon="search-outline"
+          title="No match"
+          body={`No student matches “${query}”.`}
+          compact
+        />
       }
       renderSectionHeader={({ section }) => (
         <Text style={styles.classHeader}>
           Class {section.title} · {section.data.length}
         </Text>
       )}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={styles.personRow}
-          activeOpacity={0.6}
-          onPress={() =>
-            dialog.alert({
-              icon: "school-outline",
-              title: item.name,
-              message: `Admission no. ${item.adm}\nClass ${item.label} · Roll ${item.roll || "—"}\n${
-                TYPE_LABEL[item.type]
-              }${item.remedial ? "\nRemedial batch" : ""}`,
-            })
-          }
-        >
-          <View style={styles.rollBadge}>
-            <Text style={styles.rollText}>{item.roll || "–"}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.personName}>{item.name}</Text>
-            <Text style={typography.caption}>
-              {item.adm} · {TYPE_LABEL[item.type]}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.border} />
-        </TouchableOpacity>
-      )}
+      renderItem={({ item }) => <StudentRow student={item} onOpen={showStudent} />}
     />
   );
 }
 
-function ScrollableStaff({ current, onPick }) {
+/** 415 rows. Memoised so typing in the search box re-renders the list rather
+ *  than every row inside it. */
+const StudentRow = React.memo(function StudentRow({ student, onOpen }) {
   return (
-    <View>
-      {STAFF.map((s) => {
-        const active = s.id === current;
-        return (
-          <TouchableOpacity
-            key={s.id}
-            style={[styles.pickRow, active && styles.pickRowActive]}
-            onPress={() => onPick(s.id)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.personAvatar}>
-              <Text style={styles.personAvatarText}>{s.name.charAt(0)}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.personName}>{s.name}</Text>
-              <Text style={typography.caption}>{ROLE_LABELS[s.role]}</Text>
-            </View>
-            {active && <Ionicons name="checkmark-circle" size={19} color={colors.text} />}
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+    <Row
+      style={styles.personRow}
+      accessibilityRole="button"
+      accessibilityLabel={`${student.name}, class ${student.label}, roll ${student.roll || "none"}`}
+      onPress={() => onOpen(student)}
+    >
+      <View style={styles.rollBadge}>
+        <Text style={styles.rollText}>{student.roll || "–"}</Text>
+      </View>
+      <View style={styles.personMain}>
+        <Text style={styles.personName} numberOfLines={1}>
+          {student.name}
+        </Text>
+        <Text style={typography.caption} numberOfLines={1}>
+          {student.adm} · {TYPE_LABEL[student.type]}
+        </Text>
+      </View>
+      <Chevron />
+    </Row>
   );
-}
+});
+
+// The leading badge/avatar on every person row. One constant so the Staff and
+// Students tabs put their names at exactly the same left edge.
+const LEAD = 38;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 2 },
-  pageTitle: { fontFamily: fonts.bold, fontSize: 28, color: colors.text, letterSpacing: -0.4 },
+  header: { paddingHorizontal: layout.gutter, paddingBottom: spacing.xs },
 
-  tabs: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: spacing.sm,
-    backgroundColor: "rgba(238, 244, 250, 0.75)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.6)",
-    borderRadius: radius.pill,
-    padding: 4,
-  },
-  tab: { flex: 1, paddingVertical: 8, borderRadius: radius.pill, alignItems: "center" },
-  tabActive: { backgroundColor: "rgba(255, 255, 255, 0.9)" },
-  tabText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.textMuted },
-  tabTextActive: { color: colors.text },
+  tabs: { marginTop: spacing.sm },
 
-  list: { paddingHorizontal: spacing.md, paddingBottom: TAB_CONTENT_INSET },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  listHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  sectionLabel: { fontFamily: fonts.semibold, fontSize: 10.5, letterSpacing: 1.3, color: colors.textMuted },
-  sectionCount: { fontFamily: fonts.semibold, fontSize: 11, color: colors.border },
-  addLink: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  list: { paddingHorizontal: layout.gutter },
   classHeader: {
     fontFamily: fonts.semibold,
     fontSize: 12,
+    lineHeight: 16,
     color: colors.textMuted,
     marginTop: spacing.md,
-    marginBottom: 6,
+    marginBottom: spacing.sm,
   },
 
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.75)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.8)",
-    borderRadius: radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: spacing.xs,
-  },
-  searchInput: { flex: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.text, padding: 0 },
+  search: { marginTop: spacing.sm },
 
-  centered: { alignItems: "center", justifyContent: "center", paddingVertical: 64, gap: 10 },
-  centeredText: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.textMuted,
-    textAlign: "center",
-    maxWidth: 260,
-  },
-  retryBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.text,
-  },
-  retryText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.text },
+  centered: { alignItems: "center", justifyContent: "center", paddingVertical: 64, gap: spacing.sm },
+  centeredText: { ...typography.caption, fontSize: 13, textAlign: "center" },
 
   card: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...surface.card,
     borderRadius: radius.md,
-    padding: 13,
-    marginBottom: 8,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
   cardOverdue: { borderColor: colors.danger, borderWidth: 1.5 },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  cardTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.text, marginBottom: 1 },
+  cardTitleCol: { flex: 1, minWidth: 0, gap: 1 },
+  cardTitle: { ...typography.h2 },
+  // State on top, window underneath: a coordinator scanning the roster asks
+  // "is it in?" before "when was it?".
+  cardMeta: { alignItems: "flex-end", gap: 4, flexShrink: 0 },
+  tagOnDanger: { backgroundColor: colors.white },
   cardTime: {
     fontFamily: fonts.semibold,
-    fontSize: 11.5,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textMuted,
-    fontVariant: ["tabular-nums"],
+    ...numeric,
   },
 
   assignRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginTop: 10,
-    paddingTop: 9,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    gap: spacing.md - 4,
+    marginTop: spacing.md - 4,
+    paddingTop: spacing.md - 4,
+    borderTopWidth: StyleSheet.hairlineWidth * 2,
+    borderTopColor: colors.divider,
   },
   assignAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: LEAD,
+    height: LEAD,
+    borderRadius: LEAD / 2,
     backgroundColor: colors.cardAlt,
     alignItems: "center",
     justifyContent: "center",
   },
-  assignAvatarText: { fontFamily: fonts.bold, fontSize: 14, color: colors.text },
-  assignLabel: { fontFamily: fonts.semibold, fontSize: 9.5, letterSpacing: 1, color: colors.textMuted },
-  assignName: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
+  assignAvatarText: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.text },
+  assignMain: { flex: 1, minWidth: 0, gap: 1 },
+  assignName: { ...typography.body, fontFamily: fonts.medium },
   reassignBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.text,
+    borderColor: colors.primary,
   },
-  reassignText: { fontFamily: fonts.semibold, fontSize: 12.5, color: colors.text },
-  doneTag: { flexDirection: "row", alignItems: "center", gap: 4 },
-  doneTagText: { fontFamily: fonts.semibold, fontSize: 11.5, color: colors.success },
+  reassignText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colors.primary },
+  lockedText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.textMuted,
+    flexShrink: 0,
+  },
 
-  warnRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: spacing.sm },
-  warnText: { fontFamily: fonts.medium, fontSize: 12, color: colors.danger },
+  warnRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm },
+  warnText: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.danger },
 
   personRow: {
+    ...surface.card,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: spacing.md - 4,
     borderRadius: radius.md,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    marginBottom: 7,
+    minHeight: layout.row,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md - 4,
+    marginBottom: spacing.sm,
   },
   personAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: LEAD,
+    height: LEAD,
+    borderRadius: LEAD / 2,
     backgroundColor: colors.cardAlt,
     alignItems: "center",
     justifyContent: "center",
   },
-  personAvatarText: { fontFamily: fonts.bold, fontSize: 15, color: colors.text },
-  personName: { fontFamily: fonts.semibold, fontSize: 14.5, color: colors.text },
+  personAvatarText: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.text },
+  personMain: { flex: 1, minWidth: 0, gap: 1 },
+  personName: { ...typography.bodyStrong },
   rollBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: LEAD,
+    height: LEAD,
+    borderRadius: LEAD / 2,
     backgroundColor: colors.cardAlt,
     alignItems: "center",
     justifyContent: "center",
@@ -588,39 +659,8 @@ const styles = StyleSheet.create({
   rollText: {
     fontFamily: fonts.semibold,
     fontSize: 12,
+    lineHeight: 16,
     color: colors.textMuted,
-    fontVariant: ["tabular-nums"],
+    ...numeric,
   },
-
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xl,
-    maxHeight: "80%",
-  },
-  sheetGrip: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: "center",
-    marginBottom: spacing.md,
-  },
-  sheetTitle: { fontFamily: fonts.bold, fontSize: 19, color: colors.text },
-  pickRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: "transparent",
-    marginBottom: 5,
-  },
-  pickRowActive: { borderColor: colors.text, backgroundColor: colors.cardAlt },
 });

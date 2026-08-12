@@ -11,7 +11,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#EBF4F2",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -25,7 +25,7 @@
     },
     "androidNavigationBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#FFFFFF"
+      "backgroundColor": "#00000000"
     },
     "web": {
       "favicon": "./assets/favicon.png"

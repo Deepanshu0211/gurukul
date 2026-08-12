@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radius, spacing, loginFonts } from "../theme/theme";
+import { colors, radius, spacing, layout, loginFonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -196,12 +196,14 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [notification, setNotification] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const triggerNotification = (msg) => {
     setNotification(msg);
   };
 
   const handleContinue = async () => {
+    if (submitting) return;
     if (!email.trim() && !password) {
       triggerNotification("Please enter both your email and password.");
       return;
@@ -215,34 +217,42 @@ export default function LoginScreen() {
       return;
     }
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+    setSubmitting(true);
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-    if (authError) {
-      const msg = (authError.message || "").toLowerCase();
-      if (msg.includes("invalid login") || msg.includes("credentials")) {
-        triggerNotification("Incorrect email or password.");
-      } else if (msg.includes("rate") || msg.includes("too many")) {
-        triggerNotification("Too many attempts. Wait a minute and try again.");
-      } else if (msg.includes("network") || msg.includes("fetch")) {
-        triggerNotification("No connection. Check the device's internet and retry.");
-      } else {
-        triggerNotification(authError.message);
+      if (authError) {
+        const msg = (authError.message || "").toLowerCase();
+        if (msg.includes("invalid login") || msg.includes("credentials")) {
+          triggerNotification("Incorrect email or password.");
+        } else if (msg.includes("rate") || msg.includes("too many")) {
+          triggerNotification("Too many attempts. Wait a minute and try again.");
+        } else if (msg.includes("network") || msg.includes("fetch")) {
+          triggerNotification("No connection. Check the device's internet and retry.");
+        } else {
+          triggerNotification(authError.message);
+        }
+        return;
       }
-      return;
+
+      const { data: staffRow, error: staffError } = await supabase
+        .from("staff")
+        .select("*")
+        .eq("email", email.trim())
+        .single();
+      if (staffError || !staffRow) {
+        // This path used to call an undefined `setError`, which crashed the
+        // screen instead of telling the user what went wrong.
+        triggerNotification("Signed in, but no staff record found for this account.");
+        return;
+      }
+      login(staffRow);
+    } finally {
+      setSubmitting(false);
     }
-    const { data: staffRow, error: staffError } = await supabase
-      .from("staff")
-      .select("*")
-      .eq("email", email.trim())
-      .single();
-    if (staffError || !staffRow) {
-      setError("Signed in, but no staff record found for this account.");
-      return;
-    }
-    login(staffRow);
   };
 
   return (
@@ -264,79 +274,102 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-        <Image
-            source={require("../assets/krishna-bgis-blend.png")}
-            style={[styles.heroImage, { width: 290, height: 200, marginTop: 12, marginBottom: 12 }]}
-            resizeMode="contain"
-          />
-
-
-          <Text style={styles.brandTitle}>BGIS</Text>
-          <Text style={[styles.brandSubtitle, { marginBottom: spacing.md }]}>
-            Bhaktivedanta Gurukula & International School
-          </Text>
-
-          <Text style={styles.fieldLabel}>EMAIL</Text>
-          <View style={[styles.inputRow, focusedField === "email" && styles.inputRowFocused]}>
-            <Ionicons
-              name="mail-outline"
-              size={18}
-              color={focusedField === "email" ? colors.primary : colors.textMuted}
-              style={{ marginRight: 8 }}
+          <View style={styles.form}>
+            <Image
+              source={require("../assets/krishna-bgis-blend.png")}
+              style={styles.heroImage}
+              resizeMode="contain"
+              accessibilityLabel="Bhaktivedanta Gurukula and International School"
             />
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              onFocus={() => setFocusedField("email")}
-              onBlur={() => setFocusedField(null)}
-              placeholder="you@bgis.org"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-            />
-          </View>
 
-          <Text style={[styles.fieldLabel, { marginTop: spacing.sm }]}>PASSWORD</Text>
-          <View style={[styles.inputRow, focusedField === "password" && styles.inputRowFocused]}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={18}
-              color={focusedField === "password" ? colors.primary : colors.textMuted}
-              style={{ marginRight: 8 }}
-            />
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              onFocus={() => setFocusedField("password")}
-              onBlur={() => setFocusedField(null)}
-              placeholder="••••••••"
-              placeholderTextColor={colors.textMuted}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="password"
-              style={styles.input}
-            />
-            <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
-              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={colors.textMuted} />
+            <Text style={styles.brandTitle}>BGIS</Text>
+            <Text style={styles.brandSubtitle}>
+              Bhaktivedanta Gurukula & International School
+            </Text>
+
+            <Text style={styles.fieldLabel}>EMAIL</Text>
+            <View style={[styles.inputRow, focusedField === "email" && styles.inputRowFocused]}>
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color={focusedField === "email" ? colors.primary : colors.textMuted}
+              />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
+                placeholder="you@bgis.org"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                textContentType="username"
+                autoComplete="email"
+                returnKeyType="next"
+                style={styles.input}
+                accessibilityLabel="Email"
+              />
+            </View>
+
+            <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>PASSWORD</Text>
+            <View style={[styles.inputRow, focusedField === "password" && styles.inputRowFocused]}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color={focusedField === "password" ? colors.primary : colors.textMuted}
+              />
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusedField("password")}
+                onBlur={() => setFocusedField(null)}
+                placeholder="••••••••"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+                autoComplete="password"
+                returnKeyType="go"
+                onSubmitEditing={handleContinue}
+                style={styles.input}
+                accessibilityLabel="Password"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword((v) => !v)}
+                hitSlop={layout.hitSlop}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.forgotBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Forgot password"
+            >
+              <Text style={styles.forgotLink}>Forgot password?</Text>
             </TouchableOpacity>
+
+            <PrimaryButton
+              title={submitting ? "Signing in…" : "Sign in"}
+              onPress={handleContinue}
+              disabled={submitting}
+              style={styles.signInBtn}
+              textStyle={{ fontFamily: loginFonts.bold }}
+            />
+
+            <Text style={styles.helpText}>
+              Need help? <Text style={styles.helpLink}>Contact the school office</Text>
+            </Text>
           </View>
-
-          <TouchableOpacity style={{ alignSelf: "flex-end", marginTop: 10 }}>
-            <Text style={styles.forgotLink}>Forgot password?</Text>
-          </TouchableOpacity>
-
-          <PrimaryButton
-            title="Sign in"
-            onPress={handleContinue}
-            style={styles.signInBtn}
-            textStyle={{ fontFamily: loginFonts.bold }}
-          />
-
-          <Text style={styles.helpText}>
-            Need help? <Text style={styles.helpLink}>Contact the school office</Text>
-          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -346,24 +379,31 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
 
+  // One block, one measure, centred. The image, the wordmark, both fields and
+  // the button all share this column so nothing on the screen has its own
+  // left edge.
+  form: { width: "100%", maxWidth: 400, alignSelf: "center" },
+
   heroImage: {
-    width: HERO_SIZE,
-    height: HERO_SIZE,
+    width: "100%",
+    height: Math.min(220, HERO_SIZE * 0.62),
     alignSelf: "center",
-    marginTop: -HERO_SIZE * 0.150,
-    marginBottom: -HERO_SIZE * 0.1,
+    marginBottom: spacing.sm,
   },
   // Login has its own label style so app-wide typography changes can't
   // alter this screen.
   fieldLabel: {
     fontFamily: loginFonts.semibold,
     fontSize: 11,
+    lineHeight: 15,
     color: colors.textMuted,
-    letterSpacing: 1.1,
+    letterSpacing: 1.2,
   },
+  fieldLabelSpaced: { marginTop: spacing.md - 4 },
   brandTitle: {
     fontFamily: loginFonts.display,
     fontSize: 30,
+    lineHeight: 38,
     color: colors.text,
     letterSpacing: -0.5,
     textAlign: "center",
@@ -371,15 +411,17 @@ const styles = StyleSheet.create({
   brandSubtitle: {
     fontFamily: loginFonts.regular,
     fontSize: 14,
+    lineHeight: 19,
     color: colors.textMuted,
-    marginTop: 4,
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
     textAlign: "center",
   },
 
   sheet: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: 0,
-    paddingBottom: spacing.md,
+    // Same gutter as every other screen in the app.
+    paddingHorizontal: layout.gutter,
+    paddingVertical: spacing.md,
     flexGrow: 1,
     // Centres the whole block in whatever space is left, so there's no dead
     // void at the bottom on tall phones. On short phones the content simply
@@ -392,33 +434,35 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    gap: spacing.sm,
+    minHeight: layout.touch + 8,
+    backgroundColor: colors.card,
     borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.88)",
-    borderTopColor: "rgba(255, 255, 255, 0.95)",
-    borderBottomColor: "rgba(255, 255, 255, 0.45)",
+    borderColor: colors.hairline,
+    borderTopColor: colors.hairlineTop,
+    borderBottomColor: colors.hairlineBottom,
     borderRadius: radius.pill,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
-    marginTop: 6,
-    shadowColor: "#1C4E80",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    paddingHorizontal: spacing.md + 2,
+    marginTop: spacing.sm - 2,
   },
   inputRowFocused: { borderColor: colors.primary },
-  input: { flex: 1, fontSize: 15, fontFamily: loginFonts.medium, color: colors.text, padding: 0 },
-
-  signInBtn: {
-    marginTop: spacing.md,
-    paddingVertical: 15,
-    borderRadius: radius.pill,
+  input: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: loginFonts.medium,
+    color: colors.text,
+    padding: 0,
   },
 
-  forgotLink: { fontSize: 12.5, color: colors.text, fontFamily: loginFonts.semibold },
+  signInBtn: { marginTop: spacing.md },
+
+  forgotBtn: { alignSelf: "flex-end", minHeight: layout.touch, justifyContent: "center" },
+  forgotLink: { fontSize: 13, lineHeight: 18, color: colors.primary, fontFamily: loginFonts.semibold },
 
   helpText: {
     fontSize: 13,
+    lineHeight: 18,
     fontFamily: loginFonts.regular,
     color: colors.textMuted,
     textAlign: "center",
@@ -428,39 +472,36 @@ const styles = StyleSheet.create({
 
   toastContainer: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 14 : 14,
-    left: spacing.lg,
-    right: spacing.lg,
+    left: layout.gutter,
+    right: layout.gutter,
     zIndex: 9999,
-    elevation: 9999,
   },
   toastContent: {
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
-    borderRadius: radius.pill,
-    paddingTop: 6,
-    paddingBottom: 0,
-    paddingHorizontal: 16,
+    backgroundColor: colors.overlay,
+    borderRadius: radius.lg,
+    paddingTop: spacing.sm - 2,
+    paddingHorizontal: spacing.md,
     borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.95)",
-    shadowColor: "#1C4E80",
+    borderColor: colors.hairlineTop,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.16,
     shadowRadius: 16,
-    elevation: 6,
     overflow: "hidden",
   },
   swipeHandle: {
     width: 28,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: "#E5E5E5",
+    backgroundColor: colors.border,
     alignSelf: "center",
-    marginBottom: 6,
+    marginBottom: spacing.sm - 2,
   },
   toastMainRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingBottom: 10,
+    gap: spacing.sm + 2,
+    paddingBottom: spacing.sm + 2,
   },
   toastIconBg: {
     width: 28,
@@ -469,7 +510,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerBg,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
   },
   toastText: {
     fontSize: 13,
@@ -477,20 +517,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 17,
   },
-  toastCloseBtn: {
-    padding: 4,
-    marginLeft: 6,
-  },
+  toastCloseBtn: { padding: spacing.xs },
   progressTrack: {
-    height: 2.5,
+    height: 3,
     backgroundColor: colors.dangerBg,
-    marginHorizontal: -16,
+    // Bleeds to the toast's edges, so it reads as a countdown on the card
+    // rather than a stray line inside it.
+    marginHorizontal: -spacing.md,
   },
-  progressBar: {
-    height: "100%",
-    backgroundColor: colors.danger,
-    borderRadius: 1.5,
-  },
-
-  footNote: { textAlign: "center", color: colors.textMuted, fontSize: 12, marginTop: spacing.md },
+  progressBar: { height: "100%", backgroundColor: colors.danger },
 });

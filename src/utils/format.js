@@ -40,3 +40,43 @@ export const initial = (name) => (name || "?").trim().charAt(0).toUpperCase() ||
 
 /** Percentage guarded against divide-by-zero. */
 export const percent = (done, total) => (total > 0 ? Math.round((done / total) * 100) : 0);
+
+/** Today as the "YYYY-MM-DD" the `duties.day` column stores. Built from the
+ *  local date parts, not toISOString(), which shifts the day in any timezone
+ *  ahead of UTC — India is +5:30, so the naive version rolls over early. */
+export const todayISO = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** Parsed as local midnight, so a date-only string never lands on the day
+ *  before in timezones behind UTC. */
+const parseDay = (iso) => {
+  const [y, m, d] = (iso || "").split("-").map(Number);
+  return y ? new Date(y, m - 1, d) : null;
+};
+
+const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-08-11" -> "Tuesday, 11 Aug". Today and yesterday get named instead. */
+export const fmtDay = (iso) => {
+  const d = parseDay(iso);
+  if (!d) return "—";
+  if (iso === todayISO()) return "Today";
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return `${WEEKDAY[d.getDay()]}, ${d.getDate()} ${MONTH[d.getMonth()]}`;
+};
+
+/** Two short lines for a date chip: { top: "FRI", bottom: "8 Aug" }. */
+export const fmtDayChip = (iso) => {
+  const d = parseDay(iso);
+  if (!d) return { top: "—", bottom: "" };
+  return {
+    top: iso === todayISO() ? "TODAY" : WEEKDAY[d.getDay()].slice(0, 3).toUpperCase(),
+    bottom: `${d.getDate()} ${MONTH[d.getMonth()]}`,
+  };
+};
