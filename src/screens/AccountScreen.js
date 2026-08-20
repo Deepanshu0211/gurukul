@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,7 +33,7 @@ const ICON = 18;
 // same number so the hairline begins exactly under the label above it.
 const ROW_INSET = spacing.md + ICON + spacing.sm;
 
-export default function AccountScreen() {
+export default function AccountScreen({ navigation }) {
   const { user, logout, updateUser } = useAuth();
   const { duties, records } = useSchoolData();
   const dialog = useDialog();
@@ -225,6 +226,15 @@ export default function AccountScreen() {
             />
           </View>
         </View> */}
+
+        <SectionLabel>Records</SectionLabel>
+        <View style={styles.group}>
+          <ActionRow
+            icon="receipt-outline"
+            label="Activity log"
+            onPress={() => navigation.navigate("Activity")}
+          />
+        </View>
 
         <SectionLabel>Security</SectionLabel>
         <View style={styles.group}>
@@ -472,5 +482,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     color: colors.text,
+    // See SearchField.js — same Android top-alignment clipping fix.
+    textAlignVertical: "center",
+    ...Platform.select({ android: { includeFontPadding: false }, default: {} }),
   },
 });

@@ -4,10 +4,8 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -15,67 +13,52 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius, fonts, layout, typography, numeric } from "../theme/theme";
 import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset";
 import ScreenHeader from "../components/ScreenHeader";
-import EdgeFade, { useScrolled } from "../components/EdgeFade";
+import BottomSheet, { SheetOption } from "../components/BottomSheet";
+import CalendarSheet from "../components/CalendarSheet";
 import { EmptyState } from "../components/ui";
-import { fmtTime, fmtDay, fmtDayChip, plural, todayISO } from "../utils/format";
+import { fmtTime, fmtDay, fmtDayCompact, fmtClock, plural, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
-import { useDayAttendance, useDutyDays } from "../lib/history";
+import { useDayAttendance, useMarkingTotals } from "../lib/history";
+import { resolveGroup } from "../lib/duties";
+import { useStudentHistory, RANGES } from "../lib/studentHistory";
+import { buildReport, printReport, shareReport } from "../lib/report";
+import { useDialog } from "../components/Dialog";
+import { useToast } from "../components/Toast";
+import { STATUS_META } from "../data/mockData";
 
 /**
- * SRS A8 — a class teacher sees their OWN students across every checkpoint
- * marked on a given day, by any duty teacher, to cross-check and follow up.
+ * Reading attendance back: pick a day, pick a checkpoint, see the whole group
+ * that checkpoint covered and where every child was.
  *
- * Today is the default, but the date strip lets a teacher read back through
- * earlier days: "was he at dinner on Tuesday?" is the question that actually
- * gets asked when a child's attendance is being discussed with a parent.
+ * Scope is the CHECKPOINT'S group, not the reader's own class. Mangalarati
+ * covers every residential student, so it lists all ~300 of them; a
+ * class-section duty lists that section. An earlier version intersected the
+ * group with the signed-in teacher's class, which quietly turned a 300-child
+ * roll call into 14 rows and made the count on screen wrong rather than
+ * merely narrow.
  *
- * This is a dense table, not a list of cards: the whole value is seeing a
- * class of 25-30 in one or two screenfuls. Row height is kept tight for that
- * reason — spacing that suits a card list makes this view useless.
+ * This replaced a student × checkpoint matrix. The matrix fitted a whole day
+ * on one screen, but every cell was a 24px dot with no room for a name, a
+ * time, or who marked it — and the question a teacher actually arrives with
+ * is about ONE roll call ("was he at Mangalarati on Tuesday?"), not the grid.
+ *
+ * The three numbers at the top are the reader's own marking record: they
+ * answer "how much have I done", which nothing else in the app reported.
  */
 
-const ROW_H = 46;
-// Fixed so the fade below can be positioned without a second measurement:
-// the column headings sit between the page header and the scrolling rows.
-const HEAD_ROW_H = 34;
-// Columns size themselves to the screen. With only two checkpoints marked a
-// fixed width leaves a dead strip down the right-hand side; with all ten it
-// has to scroll. These bounds cover both.
-const MIN_CELL_W = 52;
-const MAX_CELL_W = 86;
-const MIN_NAME_W = 132;
+/** Fixed so the list can skip measuring 300 rows and jump straight to an
+ *  offset. Must match `styles.row.height` exactly. */
+const ROW_H = layout.row;
 
-/** Column widths that fill the screen when they can, and scroll when they can't. */
-function useColumnWidths(screenWidth, count) {
-  return useMemo(() => {
-    // Both the header row and the body rows are indented by one gutter, so the
-    // table's left edge lines up with every other screen's content.
-    const pad = layout.gutter;
-    if (!count) return { cellW: MIN_CELL_W, nameW: MIN_NAME_W, totalW: screenWidth };
-    const forCells = screenWidth - pad - MIN_NAME_W;
-    const cellW = Math.max(MIN_CELL_W, Math.min(MAX_CELL_W, forCells / count));
-    // Any width the cells don't need goes to the name column, so long names
-    // get more room rather than the table leaving a gap.
-    const nameW = Math.max(MIN_NAME_W, screenWidth - pad - cellW * count);
-    return { cellW, nameW, totalW: pad + nameW + cellW * count };
-  }, [screenWidth, count]);
-}
+const statusLabel = (code) => (code === "P" ? "Present" : STATUS_META[code]?.label || code);
 
-/** "Breakfast prasadam" -> "BFAST". Full names never fit a 54px column. */
-const SHORT = {
-  Mangalarati: "MANG",
-  "Breakfast prasadam": "BFAST",
-  "Morning attendance": "MORN",
-  "Morning self study": "M.STUDY",
-  "Lunch prasadam": "LUNCH",
-  "Evening sports": "SPORTS",
-  "Remedial class": "REMED",
-  "Evening self study": "E.STUDY",
-  "Dinner prasadam": "DINNER",
-  "Night attendance": "NIGHT",
+/** "Today" and "Yesterday" are adverbs; a date needs a preposition. Without
+ *  this the sheet read "Submitted on Yesterday". */
+const onDay = (iso) => {
+  const named = fmtDay(iso);
+  return named === "Today" || named === "Yesterday" ? named.toLowerCase() : `on ${named}`;
 };
-const shortLabel = (name) => SHORT[name] || (name || "").slice(0, 5).toUpperCase();
 
 export default function ClassDayScreen() {
   const { user } = useAuth();
@@ -83,15 +66,11 @@ export default function ClassDayScreen() {
     students,
     duties: liveDuties,
     records: liveRecords,
-    studentsForDuty,
+    staffName,
     refresh,
   } = useSchoolData();
-  const { width: screenWidth } = useWindowDimensions();
   const tabInset = useTabContentInset();
   const topInset = useScreenTopInset();
-  const { scrolled, onScroll } = useScrolled();
-  // Where the table starts, so the fade lands on its top edge.
-  const [headerH, setHeaderH] = useState(190);
 
   // The day the app is currently working on. Usually today, but the duty
   // generator does not run yet, so the live set can be the most recent day
@@ -99,25 +78,31 @@ export default function ClassDayScreen() {
   const liveDay = liveDuties[0]?.day || todayISO();
   // null means "the live day", so the default view needs no fetch at all.
   const [selectedDay, setSelectedDay] = useState(null);
-  const isPast = !!selectedDay && selectedDay !== liveDay;
+  const [selectedDutyId, setSelectedDutyId] = useState(null);
 
-  const { days } = useDutyDays();
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [infoFor, setInfoFor] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const dialog = useDialog();
+  const toast = useToast();
+
+  const isPast = !!selectedDay && selectedDay !== liveDay;
   const past = useDayAttendance(isPast ? selectedDay : null);
 
   const duties = isPast ? past.duties : liveDuties;
   const records = isPast ? past.records : liveRecords;
   const day = selectedDay || liveDay;
 
+  // Re-tallied whenever a checkpoint is submitted — the record count is what
+  // changes then, not the duty count, which is fixed for the day.
+  const totals = useMarkingTotals(user?.id, Object.keys(liveRecords).length);
+
   useFocusEffect(
     useCallback(() => {
       if (!isPast) refresh();
     }, [refresh, isPast])
-  );
-
-  const classKey = user?.classKey;
-  const myStudents = useMemo(
-    () => students.filter((s) => s.key === classKey),
-    [students, classKey]
   );
 
   // Only submitted checkpoints have anything to show. A duty has a record
@@ -127,245 +112,583 @@ export default function ClassDayScreen() {
     [duties, records]
   );
 
-  // Precompute each duty's member set once, rather than scanning the group
-  // for every student × checkpoint cell.
-  const memberSets = useMemo(
-    () => new Map(submitted.map((d) => [d.id, new Set(studentsForDuty(d).map((s) => s.id))])),
-    [submitted, studentsForDuty]
+  // Falling back to the first checkpoint rather than tracking the day change
+  // in an effect: when the teacher moves to a day that has no 'morn-4A', the
+  // selection simply stops matching and the earliest checkpoint takes over.
+  const activeDuty = useMemo(
+    () => submitted.find((d) => d.id === selectedDutyId) || submitted[0] || null,
+    [submitted, selectedDutyId]
   );
 
-  const statusFor = useCallback(
-    (student, duty) => {
-      if (!memberSets.get(duty.id)?.has(student.id)) return "-";
-      return records[duty.id]?.statuses[student.id] || "P";
-    },
-    [memberSets, records]
+  // Everyone the checkpoint covered — the same set the duty teacher marked,
+  // in the same order, so the two screens can be read against each other.
+  const roster = useMemo(
+    () => (activeDuty ? resolveGroup(activeDuty, students) : []),
+    [activeDuty, students]
   );
 
-  const needsFollowUp = useMemo(
-    () => myStudents.filter((s) => submitted.some((d) => statusFor(s, d) === "A")),
-    [myStudents, submitted, statusFor]
+  const statusOf = useCallback(
+    (studentId, duty) => (duty ? records[duty.id]?.statuses[studentId] || "P" : null),
+    [records]
   );
 
-  const { cellW, nameW, totalW } = useColumnWidths(screenWidth, submitted.length);
+  const tally = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let elsewhere = 0;
+    roster.forEach((s) => {
+      const code = statusOf(s.id, activeDuty);
+      if (code === "A") absent += 1;
+      else if (code === "P") present += 1;
+      else elsewhere += 1;
+    });
+    return { present, absent, elsewhere };
+  }, [roster, activeDuty, statusOf]);
 
-  const dayOptions = days.length ? days : [liveDay];
+  /**
+   * Every submitted checkpoint's verdict for the student whose sheet is open.
+   * Memoised because `resolveGroup` filters and sorts the whole 415-student
+   * register once per checkpoint — recomputing that on every render while a
+   * sheet sits open is ten full passes for a list that cannot have changed.
+   */
+  const infoEntries = useMemo(() => {
+    if (!infoFor) return [];
+    return submitted.map((d) => ({
+      duty: d,
+      code: resolveGroup(d, students).some((s) => s.id === infoFor.id)
+        ? statusOf(infoFor.id, d)
+        : null,
+    }));
+  }, [infoFor, submitted, students, statusOf]);
 
-  if (!classKey) {
-    return (
-      <SafeAreaView style={styles.screen} edges={["left", "right"]}>
-        <EmptyState
-          icon="people-outline"
-          title="No class assigned"
-          body="This view is for class teachers tracking their own students through the day."
-        />
-      </SafeAreaView>
-    );
-  }
+  const renderStudent = useCallback(
+    ({ item }) => (
+      <StudentRow
+        student={item}
+        code={statusOf(item.id, activeDuty)}
+        onInfo={() => setInfoFor(item)}
+      />
+    ),
+    [statusOf, activeDuty]
+  );
 
-  return (
-    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
-      <View
-        style={[styles.header, { paddingTop: topInset }]}
-        onLayout={(e) => {
-          const h = Math.round(e.nativeEvent.layout.height);
-          setHeaderH((prev) => (Math.abs(prev - h) > 1 ? h : prev));
-        }}
-      >
-        <ScreenHeader
-          eyebrow="My class"
-          title={user.classLabel}
-          subtitle={`${fmtDay(day)} · ${plural(myStudents.length, "student")} · ${
-            submitted.length
-          } checkpoint${submitted.length === 1 ? "" : "s"} marked`}
-        />
+  const rec = activeDuty ? records[activeDuty.id] : null;
 
-        <DayStrip
-          days={dayOptions}
-          selected={day}
-          liveDay={liveDay}
-          onSelect={(d) => setSelectedDay(d === liveDay ? null : d)}
-        />
+  /** Builds the sheet, then either prints it or hands it to the share sheet. */
+  const runExport = async (mode, action) => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const report = await buildReport({ mode, day, generatedBy: user?.name });
+      if (report.empty) {
+        setExportOpen(false);
+        dialog.alert({
+          icon: "document-outline",
+          title: "Nothing to print",
+          message:
+            mode === "week"
+              ? "No checkpoint was submitted in this week."
+              : "No checkpoint was submitted on this day.",
+        });
+        return;
+      }
+      if (action === "print") await printReport(report.html);
+      else await shareReport(report.html, report.name);
+      setExportOpen(false);
+    } catch (e) {
+      dialog.alert({
+        icon: "alert-circle-outline",
+        title: "Could not create the PDF",
+        message: e.message || "Something went wrong building the report.",
+        destructive: true,
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
-        {needsFollowUp.length > 0 && (
-          <View style={styles.followUp}>
-            <Ionicons name="warning" size={14} color={colors.danger} />
-            <Text style={styles.followUpText} numberOfLines={2}>
-              <Text style={styles.followUpStrong}>
-                {plural(needsFollowUp.length, "student")} {isPast ? "were" : "was"} absent
-              </Text>
-              {" — "}
-              {needsFollowUp.map((s) => s.name.split(" ")[0]).join(", ")}
-            </Text>
-          </View>
-        )}
+  const header = (
+    <View style={styles.header}>
+      <ScreenHeader
+        eyebrow="Attendance"
+        title="Records"
+        subtitle={
+          activeDuty
+            ? `${activeDuty.group} · ${plural(roster.length, "student")}`
+            : "Pick a day to read back"
+        }
+        right={
+          <TouchableOpacity
+            onPress={() => setExportOpen(true)}
+            activeOpacity={0.7}
+            style={styles.printBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Print or share attendance"
+          >
+            <Ionicons name="print-outline" size={20} color={colors.primary} />
+          </TouchableOpacity>
+        }
+      />
 
-        {/* The key sits above the table, not pinned under it: as a fixed footer
-            it was permanently hidden behind the floating tab bar. */}
-        <View style={styles.legend}>
-          <LegendItem code="P" label="Present" />
-          <LegendItem code="A" label="Absent" />
-          <LegendItem code="H" label="Elsewhere" />
-          <LegendItem code="-" label="Not in group" />
-        </View>
+      <StatStrip totals={totals} />
+
+      {/* One joined control, full width, split by a hairline. As two separate
+          content-width pills this row ended in a band of empty background
+          that read as a layout mistake; as two halves of one bar the date
+          takes what it needs and the checkpoint centres itself in the rest,
+          so the slack becomes padding around the name instead of a gap
+          after it. */}
+      <View style={styles.controls}>
+        <TouchableOpacity
+          onPress={() => setCalendarOpen(true)}
+          activeOpacity={0.7}
+          style={styles.control}
+          accessibilityRole="button"
+          accessibilityLabel={`Date: ${fmtDay(day)}. Choose another`}
+        >
+          <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+          <Text style={styles.controlText} numberOfLines={1}>
+            {fmtDayCompact(day)}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.controlDivider} />
+
+        <TouchableOpacity
+          onPress={() => setPickerOpen(true)}
+          disabled={submitted.length === 0}
+          activeOpacity={0.7}
+          style={[styles.control, styles.controlGrow, !submitted.length && styles.controlOff]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: submitted.length === 0 }}
+          accessibilityLabel={
+            activeDuty
+              ? `Checkpoint: ${activeDuty.checkpoint}. Choose another`
+              : "No checkpoints to choose"
+          }
+        >
+          <Text style={styles.controlText} numberOfLines={1}>
+            {activeDuty ? activeDuty.checkpoint : "No checkpoints"}
+          </Text>
+          <Ionicons name="chevron-down" size={14} color={colors.icon} />
+        </TouchableOpacity>
       </View>
 
-      {past.loading ? (
+      {activeDuty && (
+        <View style={styles.context}>
+          <Text style={styles.contextTitle} numberOfLines={2}>
+            {activeDuty.checkpoint} · {fmtTime(activeDuty.start)}
+          </Text>
+          <Text style={styles.contextMeta} numberOfLines={2}>
+            {`Marked by ${staffName(rec?.submittedBy) || "a colleague"}`}
+            {rec?.submittedAt ? ` · ${fmtClock(rec.submittedAt)}` : ""}
+          </Text>
+
+          {/* An overrule leaves the original submitter on the record, so
+              without this line a corrected checkpoint is indistinguishable
+              from one nobody touched. */}
+          {!!rec?.correctedBy && (
+            <View style={styles.corrected}>
+              <Ionicons name="create-outline" size={13} color={colors.warning} />
+              <Text style={styles.correctedText} numberOfLines={2}>
+                Overruled by {staffName(rec.correctedBy) || "an overseer"}
+                {rec.correctedAt ? ` · ${fmtClock(rec.correctedAt)}` : ""}
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.tally}>
+            <TallyChip value={tally.present} label="present" tone="success" />
+            {tally.absent > 0 && <TallyChip value={tally.absent} label="absent" tone="danger" />}
+            {tally.elsewhere > 0 && (
+              <TallyChip value={tally.elsewhere} label="elsewhere" tone="neutral" />
+            )}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
+  // Null when there ARE rows to show. Built once and reused for both the
+  // empty component and the decision to pass an empty list.
+  const placeholder = (() => {
+    if (past.loading) {
+      return (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} />
           <Text style={styles.centeredText}>Loading {fmtDay(day)}…</Text>
         </View>
-      ) : past.error ? (
-        <EmptyState icon="cloud-offline-outline" title="Can't load that day" body={past.error} />
-      ) : submitted.length === 0 ? (
+      );
+    }
+    if (past.error) {
+      return <EmptyState icon="cloud-offline-outline" title="Can't load that day" body={past.error} />;
+    }
+    if (!activeDuty) {
+      return (
         <EmptyState
           icon="time-outline"
           title={isPast ? "Nothing was marked" : "Nothing marked yet"}
           body={
             isPast
-              ? "No checkpoint was submitted on this day."
+              ? "No checkpoint was submitted on this day. Pick another date above."
               : "Statuses appear here as duty teachers submit each checkpoint."
           }
         />
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          bounces={false}
-          // Only scrolls when the table is genuinely wider than the screen.
-          scrollEnabled={totalW > screenWidth}
-        >
-          <View style={{ width: Math.max(totalW, screenWidth) }}>
-            <View style={styles.headRow}>
-              <View style={{ width: nameW, paddingRight: spacing.sm }}>
-                <Text style={styles.colLabel}>STUDENT</Text>
-              </View>
-              {submitted.map((d) => (
-                <View key={d.id} style={[styles.cell, { width: cellW }]}>
-                  <Text style={styles.colLabel} numberOfLines={1}>
-                    {shortLabel(d.checkpoint)}
-                  </Text>
-                  <Text style={styles.colTime}>{fmtTime(d.start)}</Text>
-                </View>
-              ))}
-            </View>
+      );
+    }
+    if (roster.length === 0) {
+      return (
+        <EmptyState
+          icon="people-outline"
+          title="Nobody in this group"
+          body={`${activeDuty.checkpoint} covers ${activeDuty.group}, which no student in the register matches.`}
+        />
+      );
+    }
+    return null;
+  })();
 
-            <FlatList
-              data={myStudents}
-              keyExtractor={(s) => s.id}
-              contentContainerStyle={{ paddingBottom: tabInset }}
-              showsVerticalScrollIndicator={false}
-              onScroll={onScroll}
-              scrollEventThrottle={16}
-              // Fixed row height lets the list skip measurement, which keeps
-              // a 30-row table smooth on a low-end phone.
-              getItemLayout={(_, index) => ({
-                length: ROW_H,
-                offset: ROW_H * index,
-                index,
-              })}
-              renderItem={({ item, index }) => (
-                <View style={[styles.row, index % 2 === 1 && styles.rowAlt]}>
-                  <View style={{ width: nameW, paddingRight: spacing.sm }}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                  </View>
-                  {submitted.map((d) => (
-                    <View key={d.id} style={[styles.cell, { width: cellW }]}>
-                      <StatusDot code={statusFor(item, d)} />
-                    </View>
-                  ))}
-                </View>
-              )}
-            />
+  return (
+    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
+      <FlatList
+        data={placeholder ? [] : roster}
+        keyExtractor={(s) => s.id}
+        renderItem={renderStudent}
+        ListHeaderComponent={header}
+        ListEmptyComponent={placeholder}
+        contentContainerStyle={{ paddingTop: topInset, paddingBottom: tabInset }}
+        showsVerticalScrollIndicator={false}
+        // Deliberately NO getItemLayout, even though rows are a fixed height:
+        // ListMetricsAggregator returns its offsets verbatim and never adds
+        // the ListHeaderComponent's height, so with a header this tall every
+        // cell offset would be understated by ~300px and the visible window
+        // would be computed against the wrong part of the list.
+        initialNumToRender={14}
+        maxToRenderPerBatch={12}
+        windowSize={11}
+      />
+
+      <CalendarSheet
+        visible={calendarOpen}
+        selected={day}
+        onSelect={(d) => {
+          setSelectedDay(d === liveDay ? null : d);
+          // The new day has its own checkpoints; keeping the old id would just
+          // fail to match and silently fall back anyway.
+          setSelectedDutyId(null);
+        }}
+        onClose={() => setCalendarOpen(false)}
+      />
+
+      <BottomSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title="Checkpoint"
+        subtitle={`Submitted ${onDay(day)}`}
+        showClose
+      >
+        {submitted.map((d) => (
+          <SheetOption
+            key={d.id}
+            label={d.checkpoint}
+            hint={`${fmtTime(d.start)} · ${d.group}`}
+            active={activeDuty?.id === d.id}
+            onPress={() => {
+              setSelectedDutyId(d.id);
+              setPickerOpen(false);
+            }}
+          />
+        ))}
+      </BottomSheet>
+
+      <BottomSheet
+        visible={exportOpen}
+        onClose={() => !exporting && setExportOpen(false)}
+        title="Print attendance"
+        subtitle={`${fmtDay(day)} · fits on a few A4 pages whatever the roll`}
+        showClose
+      >
+        {exporting ? (
+          <View style={styles.exportBusy}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={typography.caption}>Building the sheet…</Text>
           </View>
-        </ScrollView>
-      )}
+        ) : (
+          <>
+            <SheetOption
+              icon="today-outline"
+              label="This day"
+              hint="Every checkpoint, the full register, and who was not present"
+              onPress={() => runExport("day", "share")}
+            />
+            <SheetOption
+              icon="calendar-outline"
+              label="This week"
+              hint="Monday to Sunday — totals per day and every exception"
+              onPress={() => runExport("week", "share")}
+            />
+            <SheetOption
+              icon="print-outline"
+              label="Print this day"
+              hint="Opens the printer dialog, which can also save a PDF"
+              onPress={() => runExport("day", "print")}
+            />
+          </>
+        )}
+      </BottomSheet>
 
-      {/* Sits below the column headings, so student rows dissolve into the
-          header block instead of being sliced through. */}
-      {submitted.length > 0 && (
-        <EdgeFade top={headerH + HEAD_ROW_H} height={22} visible={scrolled} />
-      )}
+      <StudentInfoSheet
+        student={infoFor}
+        day={day}
+        entries={infoEntries}
+        onClose={() => setInfoFor(null)}
+      />
     </SafeAreaView>
   );
 }
 
-/**
- * Newest day first, scrolled to the left edge — the common case is "today" or
- * "the last day or two", not a calendar hunt. A full date picker was the
- * alternative and it costs two taps to reach yesterday.
- */
-function DayStrip({ days, selected, liveDay, onSelect }) {
+/** The teacher's own marking record, all-time. */
+function StatStrip({ totals }) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.strip}
-    >
-      {days.map((d) => {
-        const active = d === selected;
-        const chip = fmtDayChip(d);
-        return (
-          <TouchableOpacity
-            key={d}
-            onPress={() => onSelect(d)}
-            activeOpacity={0.7}
-            style={[styles.dayChip, active && styles.dayChipActive]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={`Show ${fmtDay(d)}`}
-          >
-            <Text style={[styles.dayChipTop, active && styles.dayChipTextActive]}>
-              {d === liveDay && chip.top !== "TODAY" ? "LATEST" : chip.top}
-            </Text>
-            <Text style={[styles.dayChipBottom, active && styles.dayChipTextActive]}>
-              {chip.bottom}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.strip}>
+      <StripCell value={totals.taken} label="Attendance taken" loading={totals.loading} />
+      <View style={styles.stripDivider} />
+      <StripCell value={totals.marked} label="Students marked" loading={totals.loading} />
+      <View style={styles.stripDivider} />
+      <StripCell
+        value={totals.absent}
+        label="Absences found"
+        tone={totals.absent > 0 ? colors.danger : undefined}
+        loading={totals.loading}
+      />
+    </View>
   );
 }
 
-const DOT_LABEL = { P: "Present", A: "Absent", "-": "Not in this group" };
-
-function StatusDot({ code }) {
-  if (code === "-") {
-    return (
-      <Text style={styles.dash} accessibilityLabel={DOT_LABEL["-"]}>
-        –
+function StripCell({ value, label, tone, loading }) {
+  return (
+    <View style={styles.stripCell}>
+      <Text style={[styles.stripValue, !!tone && { color: tone }]}>{loading ? "—" : value}</Text>
+      <Text style={styles.stripLabel} numberOfLines={2}>
+        {label}
       </Text>
-    );
-  }
+    </View>
+  );
+}
+
+function TallyChip({ value, label, tone }) {
+  const fg =
+    tone === "danger" ? colors.danger : tone === "success" ? colors.success : colors.textMuted;
+  const bg =
+    tone === "danger" ? colors.dangerBg : tone === "success" ? colors.successBg : colors.cardAlt;
+  return (
+    <View style={[styles.tallyChip, { backgroundColor: bg }]}>
+      <Text style={[styles.tallyValue, { color: fg }]}>{value}</Text>
+      <Text style={[styles.tallyLabel, { color: fg }]}>{label}</Text>
+    </View>
+  );
+}
+
+const StudentRow = React.memo(function StudentRow({ student, code, onInfo }) {
+  const absent = code === "A";
+  const elsewhere = code !== "A" && code !== "P";
+
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowMain}>
+        <Text style={styles.name} numberOfLines={1}>
+          {student.name}
+        </Text>
+        <Text style={typography.caption} numberOfLines={1}>
+          Roll {student.roll} · {student.type === "D" ? "Day scholar" : "Residential"}
+        </Text>
+      </View>
+
+      <StatusBadge code={code} />
+
+      <TouchableOpacity
+        onPress={onInfo}
+        hitSlop={layout.hitSlop}
+        activeOpacity={0.6}
+        style={styles.infoBtn}
+        accessibilityRole="button"
+        accessibilityLabel={`About ${student.name}. Currently ${statusLabel(code)}`}
+      >
+        <Ionicons
+          name="information-circle-outline"
+          size={22}
+          color={absent || elsewhere ? colors.primary : colors.icon}
+        />
+      </TouchableOpacity>
+    </View>
+  );
+});
+
+function StatusBadge({ code }) {
   if (code === "P") {
     return (
-      <View style={[styles.dot, styles.dotPresent]} accessibilityLabel={DOT_LABEL.P}>
-        <Ionicons name="checkmark" size={12} color={colors.success} />
+      <View style={[styles.badge, styles.badgePresent]}>
+        <Ionicons name="checkmark" size={13} color={colors.success} />
+        <Text style={[styles.badgeText, { color: colors.success }]}>Present</Text>
       </View>
     );
   }
   if (code === "A") {
     return (
-      <View style={[styles.dot, styles.dotAbsent]} accessibilityLabel={DOT_LABEL.A}>
-        <Text style={styles.dotAbsentText}>A</Text>
+      <View style={[styles.badge, styles.badgeAbsent]}>
+        <Text style={[styles.badgeText, { color: colors.white }]}>Absent</Text>
       </View>
     );
   }
   return (
-    <View style={[styles.dot, styles.dotOther]}>
-      <Text style={styles.dotOtherText}>{code}</Text>
+    <View style={[styles.badge, styles.badgeOther]}>
+      <Text style={[styles.badgeText, { color: colors.text }]}>{statusLabel(code)}</Text>
     </View>
   );
 }
 
-function LegendItem({ code, label }) {
+/**
+ * One student's whole day. The (i) exists because a status code alone does
+ * not settle anything — "absent at breakfast but present at Mangalarati an
+ * hour earlier" is the sort of thing a teacher rings a parent about, and it
+ * is invisible while looking at a single checkpoint.
+ */
+function StudentInfoSheet({ student, day, entries, onClose }) {
+  const [days, setDays] = useState(30);
+  // Safe to call with a null student — the hook returns an empty record and
+  // makes no request, so hook order stays identical whether the sheet is open
+  // or closed.
+  const history = useStudentHistory(student?.id, days);
+  const absences = entries.filter((e) => e.code === "A").length;
+
   return (
-    <View style={styles.legendItem}>
-      <StatusDot code={code} />
-      <Text style={styles.legendText}>{label}</Text>
+    <BottomSheet
+      visible={!!student}
+      onClose={onClose}
+      title={student?.name || ""}
+      subtitle={
+        student
+          ? `Roll ${student.roll} · Class ${student.label} · ${
+              student.type === "D" ? "Day scholar" : "Residential"
+            }`
+          : ""
+      }
+      showClose
+    >
+      {!!student && (
+        <>
+          {student.remedial && (
+            <View style={styles.flag}>
+              <Ionicons name="book-outline" size={14} color={colors.primary} />
+              <Text style={styles.flagText}>On the remedial list</Text>
+            </View>
+          )}
+
+          <View style={styles.infoHead}>
+            <Text style={styles.infoHeadText}>{fmtDay(day)}</Text>
+            {absences > 0 && (
+              <Text style={styles.infoHeadWarn}>
+                {plural(absences, "absence")} today
+              </Text>
+            )}
+          </View>
+
+          {entries.length === 0 ? (
+            <Text style={styles.infoEmpty}>Nothing was submitted on this day.</Text>
+          ) : (
+            entries.map(({ duty, code }) => (
+              <View key={duty.id} style={styles.infoRow}>
+                <View style={styles.infoRowMain}>
+                  <Text style={styles.infoCheckpoint} numberOfLines={1}>
+                    {duty.checkpoint}
+                  </Text>
+                  <Text style={typography.caption}>{fmtTime(duty.start)}</Text>
+                </View>
+                {code === null ? (
+                  <Text style={styles.infoNotIn}>Not in group</Text>
+                ) : (
+                  <StatusBadge code={code} />
+                )}
+              </View>
+            ))
+          )}
+
+          {/* The day above answers "where was he this morning". This answers
+              "is this a pattern", which is the question that actually decides
+              whether anyone rings home. */}
+          <View style={styles.histHead}>
+            <Text style={typography.label}>Record</Text>
+            <View style={styles.rangeRow}>
+              {RANGES.map((r) => (
+                <TouchableOpacity
+                  key={r.key}
+                  onPress={() => setDays(r.key)}
+                  activeOpacity={0.7}
+                  style={[styles.rangeChip, days === r.key && styles.rangeChipOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: days === r.key }}
+                >
+                  <Text style={[styles.rangeText, days === r.key && styles.rangeTextOn]}>
+                    {r.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {history.loading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.md }} />
+          ) : history.error ? (
+            <Text style={styles.infoEmpty}>{history.error}</Text>
+          ) : !history.summary || Number(history.summary.checkpoints) === 0 ? (
+            <Text style={styles.infoEmpty}>No checkpoints recorded in this period.</Text>
+          ) : (
+            <>
+              <View style={styles.histStrip}>
+                <HistCell value={`${history.summary.pct_present}%`} label="present" />
+                <HistCell value={history.summary.checkpoints} label="checkpoints" />
+                <HistCell
+                  value={history.summary.absent}
+                  label="absent"
+                  tone={Number(history.summary.absent) > 0 ? colors.danger : undefined}
+                />
+                <HistCell value={history.summary.elsewhere} label="elsewhere" />
+              </View>
+
+              {history.marks
+                .filter((m) => !m.present)
+                .slice(0, 8)
+                .map((m, i) => (
+                  <View key={`${m.day}-${m.checkpoint}-${i}`} style={styles.histRow}>
+                    <Text style={styles.histDay}>{fmtDay(m.day)}</Text>
+                    <Text style={styles.histCheckpoint} numberOfLines={1}>
+                      {m.checkpoint}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.histStatus,
+                        m.status === "A" && { color: colors.danger },
+                      ]}
+                    >
+                      {m.status_label}
+                    </Text>
+                  </View>
+                ))}
+            </>
+          )}
+        </>
+      )}
+    </BottomSheet>
+  );
+}
+
+function HistCell({ value, label, tone }) {
+  return (
+    <View style={styles.histCell}>
+      <Text style={[styles.histValue, !!tone && { color: tone }]}>{value}</Text>
+      <Text style={styles.histLabel} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -375,108 +698,225 @@ const styles = StyleSheet.create({
 
   header: { paddingHorizontal: layout.gutter, paddingBottom: spacing.sm },
 
-  // Bleeds to both screen edges so the strip reads as scrollable, while the
-  // first chip still starts on the page's shared left edge.
-  strip: { gap: spacing.sm, paddingVertical: spacing.sm - 2, paddingRight: spacing.md },
-  dayChip: {
-    minWidth: 62,
-    minHeight: layout.touch,
-    paddingHorizontal: spacing.md - 4,
-    paddingVertical: spacing.sm - 2,
-    borderRadius: radius.sm,
+  strip: {
+    flexDirection: "row",
+    alignItems: "stretch",
     backgroundColor: colors.cardAlt,
     borderWidth: 1,
-    borderColor: colors.hairline,
-    alignItems: "center",
-    justifyContent: "center",
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md - 4,
+    marginTop: spacing.sm,
   },
-  dayChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  dayChipTop: {
+  stripCell: { flex: 1, alignItems: "center", paddingHorizontal: spacing.xs },
+  stripDivider: { width: 1, backgroundColor: colors.borderStrong, marginVertical: spacing.xs },
+  stripValue: {
     fontFamily: fonts.bold,
-    fontSize: 10,
-    lineHeight: 13,
-    letterSpacing: 0.8,
-    color: colors.textMuted,
-  },
-  dayChipBottom: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 21,
+    lineHeight: 26,
     color: colors.text,
     ...numeric,
   },
-  dayChipTextActive: { color: colors.white },
+  stripLabel: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.textMuted,
+    textAlign: "center",
+    marginTop: 2,
+  },
 
-  followUp: {
+  controls: {
+    flexDirection: "row",
+    // Stretch, so the divider spans the bar's full height rather than only
+    // the height of the taller label.
+    alignItems: "stretch",
+    marginTop: spacing.md - 4,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    // Keeps the Android ripple inside the rounded edge instead of painting a
+    // square over the corners.
+    overflow: "hidden",
+  },
+  control: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm - 2,
-    backgroundColor: colors.dangerBg,
-    borderWidth: 1,
-    borderColor: colors.danger,
-    paddingHorizontal: spacing.md - 4,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
+    justifyContent: "center",
+    gap: spacing.sm - 3,
+    minHeight: layout.touch,
+    paddingHorizontal: spacing.md,
+  },
+  // Only the checkpoint half expands; the date half stays at its natural
+  // width so a short "Today" never stretches into a wide empty segment.
+  controlGrow: { flex: 1, minWidth: 0 },
+  controlOff: { opacity: 0.5 },
+  controlDivider: {
+    width: 1,
+    backgroundColor: colors.borderStrong,
+    marginVertical: spacing.sm,
+  },
+  controlText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    lineHeight: 18,
+    color: colors.text,
+    flexShrink: 1,
+  },
+
+  context: { marginTop: spacing.md - 4 },
+  contextTitle: { ...typography.h3 },
+  contextMeta: { ...typography.caption, marginTop: 1 },
+  corrected: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs + 1,
     marginTop: spacing.xs,
   },
-  followUpText: {
+  correctedText: {
     flex: 1,
-    fontFamily: fonts.regular,
+    fontFamily: fonts.medium,
     fontSize: 12,
     lineHeight: 16,
-    color: colors.danger,
+    color: colors.warning,
   },
-  followUpStrong: { fontFamily: fonts.bold },
 
-  legend: {
+  tally: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm - 3, marginTop: spacing.sm },
+  tallyChip: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md - 4,
-    marginTop: spacing.md - 4,
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
   },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: spacing.xs + 1 },
-  legendText: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 15, color: colors.textMuted },
+  tallyValue: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 17, ...numeric },
+  tallyLabel: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16 },
 
-  headRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    height: HEAD_ROW_H,
-    paddingLeft: layout.gutter,
-    paddingBottom: spacing.sm - 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: layout.gutter,
+    gap: spacing.sm,
     height: ROW_H,
+    paddingHorizontal: layout.gutter,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
   },
-  // Zebra striping instead of borders — at this density, a line under every
-  // row turns the table into a grid of noise.
-  rowAlt: { backgroundColor: colors.cardAlt },
-
-  cell: { alignItems: "center" },
-  colLabel: { ...typography.label, fontSize: 10, letterSpacing: 0.6 },
-  // Was `colors.border`, which put near-white text on a near-white ground.
-  colTime: {
-    fontFamily: fonts.regular,
-    fontSize: 10,
-    lineHeight: 13,
-    color: colors.icon,
-    marginTop: 1,
-    ...numeric,
+  rowMain: { flex: 1, minWidth: 0 },
+  name: { ...typography.bodyStrong, fontSize: 15 },
+  infoBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  name: { ...typography.body, fontFamily: fonts.medium },
 
-  dot: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  dotPresent: { backgroundColor: colors.successBg, borderWidth: 1, borderColor: colors.success },
-  dotAbsent: { backgroundColor: colors.danger },
-  dotOther: { backgroundColor: colors.cardAlt, borderWidth: 1, borderColor: colors.border },
-  dotAbsentText: { fontFamily: fonts.bold, fontSize: 11, lineHeight: 14, color: colors.white },
-  dotOtherText: { fontFamily: fonts.bold, fontSize: 10, lineHeight: 13, color: colors.text },
-  dash: { fontFamily: fonts.regular, fontSize: 14, color: colors.icon },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 1,
+    borderRadius: radius.pill,
+  },
+  badgePresent: { backgroundColor: colors.successBg, borderWidth: 1, borderColor: colors.success },
+  badgeAbsent: { backgroundColor: colors.danger },
+  badgeOther: { backgroundColor: colors.cardAlt, borderWidth: 1, borderColor: colors.borderStrong },
+  badgeText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16 },
 
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  flag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm - 3,
+    backgroundColor: colors.infoBg,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm - 3,
+    marginBottom: spacing.sm,
+  },
+  flagText: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.primary },
+
+  infoHead: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  infoHeadText: { ...typography.label },
+  infoHeadWarn: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.danger },
+  infoEmpty: { ...typography.caption, paddingVertical: spacing.md },
+
+  printBtn: {
+    width: layout.touch,
+    height: layout.touch,
+    borderRadius: radius.pill,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  exportBusy: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.lg },
+
+  histHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  rangeRow: { flexDirection: "row", gap: spacing.xs },
+  rangeChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.cardAlt,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  rangeChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  rangeText: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 15, color: colors.textMuted },
+  rangeTextOn: { color: colors.white },
+
+  histStrip: {
+    flexDirection: "row",
+    backgroundColor: colors.cardAlt,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  histCell: { flex: 1, alignItems: "center" },
+  histValue: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.text, ...numeric },
+  histLabel: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 13, color: colors.textMuted },
+
+  histRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+  },
+  histDay: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: colors.textMuted, width: 96 },
+  histCheckpoint: { flex: 1, minWidth: 0, fontFamily: fonts.regular, fontSize: 12, lineHeight: 16, color: colors.text },
+  histStatus: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.textMuted },
+
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+  },
+  infoRowMain: { flex: 1, minWidth: 0 },
+  infoCheckpoint: { ...typography.bodyStrong },
+  infoNotIn: { ...typography.caption, fontSize: 12 },
+
+  centered: { alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingTop: spacing.xl },
   centeredText: { ...typography.caption, fontSize: 13, textAlign: "center" },
 });

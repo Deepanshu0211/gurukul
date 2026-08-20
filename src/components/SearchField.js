@@ -116,8 +116,16 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: colors.text,
     paddingVertical: 0,
-    // react-native-web only; ignored on native.
-    ...Platform.select({ web: { outlineStyle: "none" }, default: {} }),
+    // Android defaults TextInput to textAlignVertical: "top" — paired with an
+    // explicit lineHeight and no vertical padding, that renders glyphs above
+    // centre and clips their tops against the pill's rounded edge.
+    textAlignVertical: "center",
+    ...Platform.select({
+      android: { includeFontPadding: false },
+      // react-native-web only; ignored on native.
+      web: { outlineStyle: "none" },
+      default: {},
+    }),
   },
   hint: {
     fontFamily: fonts.semibold,

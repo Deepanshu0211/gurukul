@@ -73,11 +73,10 @@ export const STAFF = [
 // ROLE_LABELS moved to domain/roles.js — it is presentation copy tied to what
 // each role may do, not mock data. Import it from there.
 
-// Simulated clock, so the demo always shows a mid-morning state with some
-// duties done, one due and one overdue. Replace with real time when the
-// backend lands. Formatting helpers live in utils/format.js; duty rules live
-// in domain/duties.js — this file holds DATA only.
-export const NOW = 7 * 60 + 42; // 7:42 AM
+// The simulated 7:42 AM clock that used to live here is gone — the app reads
+// the real one via `useNow()` in src/lib/clock.js. Formatting helpers live in
+// utils/format.js; duty rules live in domain/duties.js — this file holds
+// DATA only.
 
 // `mandatoryEscalation` mirrors checkpoints.mandatory_escalation in the real
 // schema (SRS C2): meal and night checkpoints escalate straight to the

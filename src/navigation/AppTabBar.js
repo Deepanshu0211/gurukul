@@ -15,7 +15,7 @@ import { haptics } from "../lib/haptics";
 
 const ICONS = {
   Duties: { on: "checkbox", off: "checkbox-outline" },
-  "My Class": { on: "school", off: "school-outline" },
+  Records: { on: "calendar", off: "calendar-outline" },
   Dashboard: { on: "grid", off: "grid-outline" },
   Roster: { on: "people", off: "people-outline" },
   Account: { on: "person-circle", off: "person-circle-outline" },
@@ -33,7 +33,7 @@ export default function AppTabBar({ state, descriptors, navigation }) {
   const dragHoverIndexRef = useRef(null);
 
   const focusedOptions = descriptors[state.routes[state.index].key]?.options;
-  if (focusedOptions?.tabBarStyle?.display === "none") return null;
+  const hidden = focusedOptions?.tabBarStyle?.display === "none";
 
   const bottomInset = Math.max(insets.bottom, spacing.sm);
   const totalTabs = state.routes.length;
@@ -117,6 +117,8 @@ export default function AppTabBar({ state, descriptors, navigation }) {
 
   // Effective highlighted index: hover index if actively dragging, else state.index
   const currentHighlightIndex = activeHoverIndex !== null ? activeHoverIndex : state.index;
+
+  if (hidden) return null;
 
   return (
     <View style={[styles.container, { paddingBottom: bottomInset }]}>

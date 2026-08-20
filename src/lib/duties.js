@@ -35,6 +35,8 @@ export const fromRow = (r) => ({
   state: r.state,
   submittedBy: r.submitted_by || null,
   submittedAt: r.submitted_at || null,
+  correctedBy: r.corrected_by || null,
+  correctedAt: r.corrected_at || null,
   mandatoryEscalation: !!r.mandatory_escalation,
 });
 
@@ -143,6 +145,46 @@ export async function submitDuty({ dutyId, students, statuses, staffId }) {
     })
     .eq("id", dutyId);
   if (dutyErr) throw new Error(dutyErr.message);
+}
+
+/**
+ * Overrule a submitted record (SRS A6).
+ *
+ * Writes only the marks that actually CHANGED. `submitDuty` writes a row per
+ * student, so re-writing all of them would put one audit row per child in the
+ * group for a correction that touched one — and the log is the whole point of
+ * the feature, so it has to stay readable.
+ *
+ * `submitted_by` is left alone on purpose: the teacher who marked the
+ * checkpoint stays its author, and `corrected_by` records who amended it.
+ * Collapsing the two would erase who originally got it wrong, which is
+ * exactly what a correction trail exists to preserve.
+ *
+ * Returns the number of marks changed, for the confirmation message.
+ */
+export async function overrideAttendance({ dutyId, students, statuses, before, staffId }) {
+  const changed = students.filter(
+    (s) => (statuses[s.id] || null) !== (before[s.id] || null)
+  );
+  if (!changed.length) return 0;
+
+  const { error } = await supabase.from("attendance").upsert(
+    changed.map((s) => ({
+      duty_id: dutyId,
+      admission_no: s.adm,
+      status: statuses[s.id] || null, // null = Present
+    })),
+    { onConflict: "duty_id,admission_no" }
+  );
+  if (error) throw new Error(error.message);
+
+  const { error: dutyErr } = await supabase
+    .from("duties")
+    .update({ corrected_by: staffId, corrected_at: new Date().toISOString() })
+    .eq("id", dutyId);
+  if (dutyErr) throw new Error(dutyErr.message);
+
+  return changed.length;
 }
 
 /** Reassign a duty for today only; the recurring default is untouched (B2). */

@@ -249,6 +249,10 @@ export default function LoginScreen() {
         triggerNotification("Signed in, but no staff record found for this account.");
         return;
       }
+      // Recorded server-side from the caller's own token, so a client can
+      // only ever log its own sign-in. Never blocks the login: a failed audit
+      // write must not keep a teacher out of the app before a checkpoint.
+      supabase.rpc("log_sign_in").catch(() => {});
       login(staffRow);
     } finally {
       setSubmitting(false);

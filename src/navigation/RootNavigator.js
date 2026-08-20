@@ -14,6 +14,7 @@ import DashboardScreen from "../screens/DashboardScreen";
 import RosterScreen from "../screens/RosterScreen";
 import AccountScreen from "../screens/AccountScreen";
 import ClassDayScreen from "../screens/ClassDayScreen";
+import ActivityScreen from "../screens/ActivityScreen";
 
 const navTheme = {
   ...DefaultTheme,
@@ -44,25 +45,48 @@ function DutiesStack() {
 }
 
 /**
+ * The activity log hangs off Account rather than taking a tab of its own: it
+ * is read occasionally, every role needs it, and the two roles with four tabs
+ * already have no room for a fifth.
+ */
+function AccountStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: "transparent" },
+        animation: "slide_from_right",
+      }}
+    >
+      <Stack.Screen name="AccountHome" component={AccountScreen} />
+      <Stack.Screen name="Activity" component={ActivityScreen} />
+    </Stack.Navigator>
+  );
+}
+
+/**
  * Marking is a focused task with its own sticky footer, so the tab bar is
  * hidden there — it would otherwise sit on top of the Submit button.
  */
 const hideTabBarOn = ["DutyMarking"];
 
-function RoleTabs({ role, hasClass }) {
+function RoleTabs({ role }) {
   const tabsByRole = {
-    // "My Class" is the SRS A8 view — only meaningful for a class teacher,
-    // so it's hidden from duty staff who have no class of their own.
+    // "Records" reads any checkpoint's attendance back, for the whole group
+    // that checkpoint covered. It was once class-scoped and hidden from duty
+    // staff with no class of their own; it no longer looks at the reader's
+    // class at all, so gating it on having one would hide a screen from the
+    // people who most often need to check a past roll call.
     teacher: [
       { name: "Duties", component: DutiesStack },
-      ...(hasClass ? [{ name: "My Class", component: ClassDayScreen }] : []),
-      { name: "Account", component: AccountScreen },
+      { name: "Records", component: ClassDayScreen },
+      { name: "Account", component: AccountStack },
     ],
     coordinator: [
       { name: "Duties", component: DutiesStack },
       { name: "Roster", component: RosterScreen },
       { name: "Dashboard", component: DashboardScreen },
-      { name: "Account", component: AccountScreen },
+      { name: "Account", component: AccountStack },
     ],
     // The MOD is on the floor during meal and night checkpoints and is one of
     // the people expected to step in when a duty teacher is missing, so they
@@ -71,17 +95,17 @@ function RoleTabs({ role, hasClass }) {
       { name: "Dashboard", component: DashboardScreen },
       { name: "Duties", component: DutiesStack },
       { name: "Roster", component: RosterScreen },
-      { name: "Account", component: AccountScreen },
+      { name: "Account", component: AccountStack },
     ],
     admin: [
       { name: "Dashboard", component: DashboardScreen },
       { name: "Duties", component: DutiesStack },
       { name: "Roster", component: RosterScreen },
-      { name: "Account", component: AccountScreen },
+      { name: "Account", component: AccountStack },
     ],
     nurse: [
       { name: "Dashboard", component: DashboardScreen },
-      { name: "Account", component: AccountScreen },
+      { name: "Account", component: AccountStack },
     ],
   };
   const tabs = tabsByRole[role] || tabsByRole.teacher;
@@ -119,7 +143,7 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      {user ? <RoleTabs role={user.role} hasClass={!!user.classKey} /> : <LoginScreen />}
+      {user ? <RoleTabs role={user.role} /> : <LoginScreen />}
     </NavigationContainer>
   );
 }

@@ -28,10 +28,10 @@ import SearchField from "../components/SearchField";
 import Segmented from "../components/Segmented";
 import FadeIn from "../components/FadeIn";
 import { SectionLabel, EmptyState, SecondaryButton, Row, StatusTag } from "../components/ui";
-import { NOW } from "../data/mockData";
+import { useNow } from "../lib/clock";
 import { defaultsToOwnDuties } from "../domain/roles";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
-import { plural, fmtTime, fmtDuration } from "../utils/format";
+import { plural, fmtTime, fmtDuration, weekdayName} from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 
@@ -64,6 +64,7 @@ export default function DutiesScreen({ navigation }) {
   const tabInset = useTabContentInset();
   const topInset = useScreenTopInset();
   const { scrolled, onScroll } = useScrolled();
+  const now = useNow();
 
   // Reload on focus so a coordinator's reassignment shows up when a teacher
   // returns to this tab, rather than only after an app restart.
@@ -108,9 +109,11 @@ export default function DutiesScreen({ navigation }) {
     );
   }, [showingMine, myDuties, allDuties, query, staffName]);
 
+  // `now` in the deps, so the list regroups as a checkpoint's window opens
+  // and closes rather than only when the data changes.
   const { urgent, later, done } = useMemo(
-    () => groupDuties(duties, records, NOW),
-    [duties, records]
+    () => groupDuties(duties, records, now),
+    [duties, records, now]
   );
 
   const sections = useMemo(
@@ -249,6 +252,7 @@ function DutiesHeader({
   searchable,
   resultCount,
 }) {
+  const now = useNow();
   const allDone = total > 0 && done === total;
 
   const badge =
@@ -262,7 +266,7 @@ function DutiesHeader({
     <>
       <GreetingHeader
         user={user}
-        meta={`${scopeNote} · Friday, ${fmtTime(NOW)}`}
+        meta={`${scopeNote} · ${weekdayName()}, ${fmtTime(now)}`}
         done={done}
         total={total}
         badge={badge}
@@ -312,11 +316,14 @@ function DutiesHeader({
 /** Actionable duties carry the most visual weight: countdown, escalation
  *  state, and a real button. Everything else on the screen is quieter. */
 function UrgentCard({ duty, count, owner, onPress, index }) {
+  // Subscribes to the same shared ticker as every other caller, so the
+  // countdown on each card counts down rather than freezing at mount.
+  const now = useNow();
   const overdue = duty.status === DUTY_STATUS.OVERDUE;
-  const esc = escalationStage(duty, NOW);
+  const esc = escalationStage(duty, now);
   const countdownText = overdue
-    ? `Overdue by ${fmtDuration(NOW - duty.end)}`
-    : `Closes in ${fmtDuration(duty.end - NOW)}`;
+    ? `Overdue by ${fmtDuration(now - duty.end)}`
+    : `Closes in ${fmtDuration(duty.end - now)}`;
 
   return (
     <FadeIn index={index}>

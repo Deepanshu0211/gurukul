@@ -27,14 +27,15 @@ import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import FadeIn from "../components/FadeIn";
 import { SectionLabel, Stat, Divider, Card, StatusTag } from "../components/ui";
-import { NOW } from "../data/mockData";
+import { useNow } from "../lib/clock";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
-import { fmtTime, plural } from "../utils/format";
+import { fmtTime, fmtClock, plural, weekdayName } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
-import { useAuth } from "../context/AuthContext";
+import { useResolutions, resolveAlert } from "../lib/alerts";
 import { canCloseAlerts } from "../domain/roles";
 import { useToast } from "../components/Toast";
+import { useDialog } from "../components/Dialog";
 import { haptics } from "../lib/haptics";
 
 // Left edge of the checkpoint rows' text, so the dividers between them start
@@ -53,6 +54,7 @@ export default function DashboardScreen() {
   const { students, duties, records, studentsForDuty, refresh } = useSchoolData();
   const { user } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   // Closing an alert is a written, attributable act (SRS F4) — the nurse can
   // see the board but the remark has to come from a coordinator or above.
   const mayClose = canCloseAlerts(user?.role);
@@ -61,12 +63,14 @@ export default function DashboardScreen() {
   const topInset = useScreenTopInset();
   const { scrolled, onScroll } = useScrolled();
 
-  // Resolutions are local for now. There is no `alerts` table yet, so these
-  // are lost on restart — the remark must persist and be audit-logged before
-  // the pilot (SRS F4).
-  const [resolved, setResolved] = useState({});
+  // Persisted in `alert_resolutions` (migrations/008). These were React state
+  // until then, which meant a child marked "found — in the sick bay" was an
+  // open alert again after the next app launch.
+  const day = duties[0]?.day || null;
+  const { resolutions: resolved, apply } = useResolutions(day);
   const [resolving, setResolving] = useState(null);
   const [remark, setRemark] = useState("");
+  const [savingRemark, setSavingRemark] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -80,27 +84,50 @@ export default function DashboardScreen() {
     setRefreshing(false);
   };
 
+  const now = useNow();
+
   const alerts = useMemo(
-    () => deriveAlerts(duties, records, studentsForDuty, NOW),
-    [duties, records, studentsForDuty]
+    () => deriveAlerts(duties, records, studentsForDuty, now),
+    [duties, records, studentsForDuty, now]
   );
 
   const open = alerts.filter((a) => !resolved[a.id]);
   const closed = alerts.filter((a) => resolved[a.id]);
 
-  const submitted = duties.filter((d) => dutyStatus(d, records, NOW) === DUTY_STATUS.DONE);
-  const overdue = duties.filter((d) => dutyStatus(d, records, NOW) === DUTY_STATUS.OVERDUE);
+  const submitted = duties.filter((d) => dutyStatus(d, records, now) === DUTY_STATUS.DONE);
+  const overdue = duties.filter((d) => dutyStatus(d, records, now) === DUTY_STATUS.OVERDUE);
 
-  const resolve = (reason) => {
-    if (!reason?.trim()) return;
-    haptics.success();
-    setResolved((prev) => ({
-      ...prev,
-      [resolving.id]: { remark: reason.trim(), at: fmtTime(NOW) },
-    }));
-    toast.show(`${resolving.student.name} accounted for`);
-    setResolving(null);
-    setRemark("");
+  const resolve = async (reason) => {
+    if (!reason?.trim() || savingRemark) return;
+    const alert = resolving;
+    setSavingRemark(true);
+    try {
+      const saved = await resolveAlert({
+        dutyId: alert.duty.id,
+        admissionNo: alert.student.id,
+        kind: alert.kind,
+        remark: reason.trim(),
+        staffId: user.id,
+      });
+      apply(saved);
+      haptics.success();
+      toast.show(`${alert.student.name} accounted for`);
+      setResolving(null);
+      setRemark("");
+    } catch (e) {
+      // Stay on the sheet. Losing this remark is the specific failure this
+      // whole table was added to prevent.
+      dialog.alert({
+        icon: "alert-circle-outline",
+        title: "Not saved",
+        message: `${e.message || "Something went wrong recording this."}
+
+The alert is still open. Please try again.`,
+        destructive: true,
+      });
+    } finally {
+      setSavingRemark(false);
+    }
   };
 
   return (
@@ -116,7 +143,9 @@ export default function DashboardScreen() {
       >
         <ScreenHeader
           title="Today"
-          subtitle={`Bhaktivedanta Gurukula & International School · Friday, ${fmtTime(NOW)}`}
+          subtitle={`Bhaktivedanta Gurukula & International School · ${weekdayName()}, ${fmtTime(
+            now
+          )}`}
         />
 
         {/* The safety number leads: it is the reason the system exists. */}
@@ -184,7 +213,7 @@ export default function DashboardScreen() {
         <SectionLabel>Checkpoints</SectionLabel>
         <Card style={styles.group}>
           {duties.map((d, i) => {
-            const status = dutyStatus(d, records, NOW);
+            const status = dutyStatus(d, records, now);
             const total = studentsForDuty(d).length;
             const { present } = summarise(total, records[d.id]?.statuses);
             return (
@@ -231,7 +260,7 @@ export default function DashboardScreen() {
                     {resolved[a.id].remark}
                   </Text>
                 </View>
-                <Text style={styles.closedTime}>{resolved[a.id].at}</Text>
+                <Text style={styles.closedTime}>{fmtClock(resolved[a.id].resolvedAt)}</Text>
               </View>
             ))}
           </>

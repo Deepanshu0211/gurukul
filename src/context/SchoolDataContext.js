@@ -6,6 +6,7 @@ import {
   fetchAttendance,
   resolveGroup,
   submitDuty as submitDutyToDb,
+  overrideAttendance as overrideAttendanceInDb,
   reassignDuty as reassignDutyInDb,
 } from "../lib/duties";
 
@@ -51,6 +52,8 @@ export function SchoolDataProvider({ children }) {
             statuses: await fetchAttendance(d.id),
             submittedBy: d.submittedBy,
             submittedAt: d.submittedAt,
+            correctedBy: d.correctedBy,
+            correctedAt: d.correctedAt,
           },
         ])
       );
@@ -111,6 +114,40 @@ export function SchoolDataProvider({ children }) {
     [duties, students]
   );
 
+  /**
+   * Amend a record that is already submitted (SRS A6). Kept separate from
+   * `submitDuty` rather than folded into it: the two write different columns,
+   * only one of them is audit-logged, and a caller must not be able to reach
+   * for the wrong one by passing a different argument.
+   */
+  const overrideDuty = useCallback(
+    async (dutyId, statuses, staffId) => {
+      const duty = duties.find((d) => d.id === dutyId);
+      if (!duty) throw new Error("That duty no longer exists.");
+
+      const changed = await overrideAttendanceInDb({
+        dutyId,
+        students: resolveGroup(duty, students),
+        statuses,
+        before: records[dutyId]?.statuses || {},
+        staffId,
+      });
+
+      const correctedAt = new Date().toISOString();
+      setRecords((prev) => ({
+        ...prev,
+        [dutyId]: { ...prev[dutyId], statuses, correctedBy: staffId, correctedAt },
+      }));
+      setDuties((prev) =>
+        prev.map((d) =>
+          d.id === dutyId ? { ...d, correctedBy: staffId, correctedAt } : d
+        )
+      );
+      return changed;
+    },
+    [duties, students, records]
+  );
+
   const reassignDuty = useCallback(async (dutyId, staffId) => {
     await reassignDutyInDb(dutyId, staffId);
     setDuties((prev) => prev.map((d) => (d.id === dutyId ? { ...d, staffId } : d)));
@@ -134,6 +171,7 @@ export function SchoolDataProvider({ children }) {
       staffById,
       staffName,
       submitDuty,
+      overrideDuty,
       reassignDuty,
     }),
     [
@@ -148,6 +186,7 @@ export function SchoolDataProvider({ children }) {
       staffById,
       staffName,
       submitDuty,
+      overrideDuty,
       reassignDuty,
     ]
   );

@@ -50,6 +50,20 @@ export const canMark = (role) => role !== ROLES.NURSE;
 /** Moving a duty to a different teacher for the day (SRS B2). */
 export const canReassign = (role) => role === ROLES.COORDINATOR || role === ROLES.ADMIN;
 
+/**
+ * Overruling a teacher's already-submitted attendance (SRS A6).
+ *
+ * Deliberately wider than `canReassign`: correcting a mark and moving a duty
+ * to a different teacher are different authorities. The MOD and the
+ * Principal's office are the people an absence escalates to and the people a
+ * parent rings, so they can fix a record but still cannot re-roster anyone.
+ *
+ * Enforced independently by `can_override()` in migrations/006 — every change
+ * is written to `audit_log` by a trigger there, so an override is never
+ * silent whatever the app does.
+ */
+export const canOverride = (role) => isOversight(role);
+
 /** Closing a safety alert with a written remark (SRS F4). */
 export const canCloseAlerts = (role) => isOversight(role);
 

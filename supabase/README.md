@@ -12,6 +12,10 @@ staging copy, or recovery if the current one is lost.
 | `migrations/003_storage_avatars.sql` | Storage policies for profile photos |
 | `migrations/004_class_teacher_history.sql` | Class-teacher history + its read policies |
 | `migrations/005_cover_marking.sql` | Any teacher may mark any pending checkpoint |
+| `migrations/006_attendance_override.sql` | Oversight roles may overrule a submitted record; `audit_log` |
+| `migrations/007_audit_visibility.sql` | Logs submissions and reassignments too; lets staff read their own entries |
+| `migrations/008_activity_and_alerts.sql` | Every staff action logged, tiered by severity; `alert_resolutions` |
+| `migrations/009_reporting.sql` | `attendance_detail` view + per-student history functions |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
 | `../docs/data/students_415_insert.sql` | The 415-student register |
 
@@ -20,7 +24,7 @@ staging copy, or recovery if the current one is lost.
 **1. Create the project** — region Mumbai (closest to the school; keeps latency
 low and data in-country, which SRS §14 P2 asks for).
 
-**2. Run the migrations in order** in the SQL Editor: `001` … `005`.
+**2. Run the migrations in order** in the SQL Editor: `001` … `009`.
 
 `005` is what makes the app's "Whole school" view and cover marking work. Until
 it is run, the database still answers with only the signed-in teacher's own
@@ -68,6 +72,16 @@ reason. After applying, sign in as a real user and confirm both directions:
 | User uploads a photo to their own folder | succeeds |
 | User uploads into another user's folder | **rejected** |
 | User lists another user's folder | **empty** |
+| Teacher edits a *submitted* attendance row | **rejected** |
+| Management edits the same row | succeeds |
+| …and `audit_log` gains a row naming them | yes |
+| Anyone inserts into `audit_log` directly | **rejected** |
+| Teacher reads `audit_log` after submitting | their own entry only |
+| Teacher reads an entry for a duty that is not theirs | **empty** |
+| Teacher B covers A's duty; A reads the log | sees B's submission |
+| Teacher changes their phone | logged `routine`; coordinator can't see it, admin can |
+| Coordinator resolves an alert; app restarts | the remark is still there |
+| Teacher resolves an alert on a duty not theirs | **rejected** |
 
 A quick way to run these is `curl` against the REST API with a token from
 `POST /auth/v1/token?grant_type=password`.
@@ -109,9 +123,24 @@ npx supabase db push                                  # applies migrations/ in o
 does not run `seed.sql` — that stays manual, which is what you want, since
 seeding a live database twice is rarely intended.
 
+## Reports and the data model
+
+Every table, who writes to it and who can read it:
+[`docs/reference/data-model.md`](../docs/reference/data-model.md).
+
+Ready-made SQL for the office — per-student records, class summaries, repeat
+absentees, unresolved absences, health checks:
+[`docs/reference/reports.sql`](../docs/reference/reports.sql).
+
 ## Not built yet
 
-The SRS also calls for `spanning_statuses`, `alerts`, `audit_log`, and the
-Module F tables (`gate_passes`, `sickbay_admissions`). Schemas for all of them
-are in `docs/reference/self-build-guide.md` §3. Add them as `004_*.sql` when
-that work starts — creating them early avoids reworking the schema later.
+The SRS also calls for `spanning_statuses`, `alerts`, and the Module F tables
+(`gate_passes`, `sickbay_admissions`). Schemas for all of them are in
+`docs/reference/self-build-guide.md` §3. Add them as the next numbered
+migration when that work starts — creating them early avoids reworking the
+schema later.
+
+`audit_log` (`006`–`008`) now records submissions, cover marking,
+reassignments, overrules, alert resolutions, profile and role changes, and
+sign-ins. `alert_resolutions` (`008`) persists the remark; the alert itself
+stays derived from attendance and is not stored.

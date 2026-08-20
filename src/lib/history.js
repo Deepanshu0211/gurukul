@@ -12,25 +12,6 @@ import { fromRow as dutyFromRow } from "./duties";
  * demand here rather than being kept in that shared state.
  */
 
-/** Days that have duties, newest first — the only days worth offering. */
-export async function fetchDutyDays(limit = 21) {
-  // Postgrest has no DISTINCT, so take an ordered window and dedupe. A school
-  // day has roughly ten duties, so 400 rows covers about six weeks.
-  const { data, error } = await supabase
-    .from("duties")
-    .select("day")
-    .order("day", { ascending: false })
-    .limit(400);
-  if (error) throw new Error(error.message);
-
-  const seen = [];
-  for (const row of data || []) {
-    if (row.day && !seen.includes(row.day)) seen.push(row.day);
-    if (seen.length >= limit) break;
-  }
-  return seen;
-}
-
 /**
  * Every duty on `day`, plus the marks of the ones that were submitted.
  * Returns the same shape the rest of the app already understands:
@@ -61,7 +42,13 @@ export async function fetchDayAttendance(day) {
 
   const records = {};
   submitted.forEach((d) => {
-    records[d.id] = { statuses: {}, submittedBy: d.submittedBy, submittedAt: d.submittedAt };
+    records[d.id] = {
+      statuses: {},
+      submittedBy: d.submittedBy,
+      submittedAt: d.submittedAt,
+      correctedBy: d.correctedBy,
+      correctedAt: d.correctedAt,
+    };
   });
   // A null status means Present, which is stored as the absence of a value.
   (marks || []).forEach((m) => {
@@ -109,20 +96,81 @@ export function useDayAttendance(day) {
   return state;
 }
 
-/** Days that have duties, for the date picker. */
-export function useDutyDays() {
-  const [days, setDays] = useState([]);
-  const [error, setError] = useState(null);
+/**
+ * A teacher's own marking record, all-time: how many checkpoints they have
+ * submitted, how many student marks that came to, and how many of those were
+ * absences.
+ *
+ * `submitDuty` writes one attendance row per student INCLUDING present ones
+ * (present is stored as a null status), so counting rows is a true count of
+ * children checked — not just the exceptions.
+ */
+export async function fetchMarkingTotals(staffId) {
+  const empty = { taken: 0, marked: 0, absent: 0 };
+  if (!staffId) return empty;
+
+  const { data: dutyRows, error } = await supabase
+    .from("duties")
+    .select("id")
+    .eq("submitted_by", staffId)
+    .eq("state", "submitted");
+  if (error) throw new Error(error.message);
+
+  const ids = (dutyRows || []).map((d) => d.id);
+  if (!ids.length) return empty;
+
+  // `head: true` asks Postgrest for the count without shipping the rows —
+  // a term's marking is thousands of rows and none of them are needed here.
+  const counted = (q) => q.select("*", { count: "exact", head: true }).in("duty_id", ids);
+
+  const [{ count: marked, error: mErr }, { count: absent, error: aErr }] = await Promise.all([
+    counted(supabase.from("attendance")),
+    counted(supabase.from("attendance")).eq("status", "A"),
+  ]);
+  if (mErr) throw new Error(mErr.message);
+  if (aErr) throw new Error(aErr.message);
+
+  return { taken: ids.length, marked: marked || 0, absent: absent || 0 };
+}
+
+/** The stat strip at the top of Records. Refetched whenever `nonce` changes. */
+export function useMarkingTotals(staffId, nonce = 0) {
+  const [totals, setTotals] = useState({ taken: 0, marked: 0, absent: 0, loading: true });
 
   useEffect(() => {
     let cancelled = false;
-    fetchDutyDays()
-      .then((d) => !cancelled && setDays(d))
-      .catch((e) => !cancelled && setError(e.message || "Could not load past days"));
+    setTotals((t) => ({ ...t, loading: true }));
+    fetchMarkingTotals(staffId)
+      .then((res) => !cancelled && setTotals({ ...res, loading: false }))
+      // A failed tally is not worth an error state on the whole screen — the
+      // list below it is the part the teacher came for.
+      .catch(() => !cancelled && setTotals({ taken: 0, marked: 0, absent: 0, loading: false }));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [staffId, nonce]);
 
-  return { days, error };
+  return totals;
+}
+
+/**
+ * Which days in a calendar month have a submitted checkpoint, so the picker
+ * can mark them rather than offering 31 identical-looking dates.
+ * `month` is 0-indexed, matching JS Date.
+ */
+export async function fetchMarkedDaysInMonth(year, month) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const from = `${year}-${pad(month + 1)}-01`;
+  // Day 0 of the next month is the last day of this one.
+  const to = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
+
+  const { data, error } = await supabase
+    .from("duties")
+    .select("day")
+    .eq("state", "submitted")
+    .gte("day", from)
+    .lte("day", to);
+  if (error) throw new Error(error.message);
+
+  return new Set((data || []).map((r) => r.day));
 }
