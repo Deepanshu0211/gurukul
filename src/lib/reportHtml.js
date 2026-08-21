@@ -6,27 +6,37 @@ import { fmtTime, fmtDay } from "../utils/format";
  * A pure function from data to an HTML string — no React, no side effects —
  * so the layout can be reasoned about and checked without a device.
  *
- * THE CONSTRAINT: five A4 pages for 700 students, one or two for 100. That
- * rules out a card per child and rules out one row per child in a single
- * column (700 rows is nine pages before anything else is on them). What fits
- * is a multi-column grid, and the column count and type size have to adapt to
- * the roster rather than being fixed — a 100-student sheet set at 700-student
- * density is unreadable for no reason.
+ * ONE FIXED TYPE SCALE, ONE COLUMN, ALWAYS.
  *
- * Working from A4 at 9mm margins (192 × 279mm usable):
+ * An earlier version chose its type size and column count from the size of
+ * the roster, to hold every report to five pages. It met that budget and was
+ * the wrong trade: body text landed anywhere between 6.5pt and 8pt, the
+ * register ran in two, three or four columns, and every heading was sized
+ * relative to the body — so two reports printed on the same morning did not
+ * look like the same document, and the large ones were too small to read
+ * comfortably.
  *
- *   students  type    columns   rows/page   students/page
- *   ≤150      8pt     3–4       ~73         ~250
- *   ≤400      7pt     3         ~82         ~245
- *   >400      6.5pt   2–3       ~87         ~260
+ * Page count is now whatever it needs to be. A single column at 10pt fits
+ * about 45 students per page: a class of 30 is one page, the whole school is
+ * fifteen. Fifteen readable pages beat five that need good light and a steady
+ * hand, and a sheet that always looks the same is one people can learn to
+ * read at a glance.
  *
- * 700 students with eight checkpoints lands at three columns of 6.5pt: about
- * 2.7 pages of grid, plus one for the summary and exceptions.
- *
- * Present is printed as a middle dot, not a tick. Almost every cell is
- * present, and 5,600 ticks is a page of noise that hides the twelve marks
- * anyone is actually looking for.
+ * Checkpoints are numbered rather than abbreviated. Two-letter codes collide
+ * on a real timetable — "Mangalarati" and "Morning attendance" are both MA —
+ * and the numbers key back to the table directly above them.
  */
+
+/** The whole scale. Nothing here is computed from anything else. */
+const TYPE = {
+  h1: 15,
+  h2: 11,
+  body: 10,
+  small: 9,
+};
+
+/** A4 portrait at 12mm margins leaves 186 × 273mm. */
+const PAGE_MARGIN_MM = 12;
 
 const esc = (v) =>
   String(v ?? "")
@@ -35,247 +45,185 @@ const esc = (v) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-/** Long names cost width in every one of N columns, so they are clipped. */
-const clip = (s, n) => {
+/** Guards the one-line row height. Generous — there is room in one column. */
+const clip = (s, n = 34) => {
   const t = String(s ?? "");
   return t.length <= n ? t : `${t.slice(0, n - 1)}…`;
 };
 
-/** One character per mark. Blank means the checkpoint did not cover them. */
-const cell = (mark) => {
-  if (!mark) return "";
-  if (mark.present) return "·";
-  return esc(mark.status);
+/**
+ * Every cell carries a letter, including present ones. A dot for present and
+ * letters for everything else meant two kinds of mark in one grid, which is
+ * exactly the inconsistency this rewrite is removing. P is quiet enough in
+ * grey; only the exceptions are set in black.
+ */
+const markCell = (mark) => {
+  if (!mark) return { text: "—", cls: "none" };
+  if (mark.present) return { text: "P", cls: "present" };
+  if (mark.status === "A") return { text: "A", cls: "absent" };
+  return { text: esc(mark.status), cls: "other" };
 };
 
-/**
- * Type size and column count, chosen from the roster and how many checkpoints
- * each block has to carry.
- */
-function density(studentCount, checkpointCount) {
-  const font = studentCount > 400 ? 6.5 : studentCount > 150 ? 7 : 8;
-
-  // Derived from the type size rather than fixed: a flat 4mm-per-checkpoint
-  // estimate dropped a ten-checkpoint day to two columns and six pages, when
-  // at 6.5pt a single character needs barely three. 1pt = 0.3528mm; 0.55 is
-  // about the average glyph advance for this face, 1.4 leaves a centred
-  // character room to breathe.
-  const charMm = font * 0.3528 * 0.55;
-  const cellMm = Math.max(3, font * 0.3528 * 1.4);
-  const ROLL_MM = 5;
-  const GAP_MM = 4;
-  const USABLE_MM = 192; // A4 width less 9mm margins
-  const MIN_NAME_CHARS = 12; // below this, names stop being recognisable
-
-  // Most columns that still leave a readable name. Fewer, wider columns are
-  // easy to read and run to too many pages; this takes the tightest layout
-  // that has not crossed into unreadable.
-  let columns = 2;
-  let nameMm = MIN_NAME_CHARS * charMm;
-  for (let n = 4; n >= 2; n -= 1) {
-    const block = (USABLE_MM - GAP_MM * (n - 1)) / n;
-    const avail = block - ROLL_MM - checkpointCount * cellMm;
-    if (avail >= MIN_NAME_CHARS * charMm || n === 2) {
-      columns = n;
-      nameMm = Math.max(avail, MIN_NAME_CHARS * charMm);
-      break;
-    }
-  }
-
-  return {
-    font,
-    columns,
-    nameChars: Math.max(MIN_NAME_CHARS, Math.floor(nameMm / charMm)),
-    cellMm: Math.round(cellMm * 10) / 10,
-  };
-}
-
-const SHEET_CSS = (font) => `
-  @page { size: A4 portrait; margin: 9mm; }
+const CSS = `
+  @page { size: A4 portrait; margin: ${PAGE_MARGIN_MM}mm; }
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
-    font-size: ${font}pt;
-    line-height: 1.2;
-    color: #111;
+    font-size: ${TYPE.body}pt;
+    line-height: 1.3;
+    color: #000;
     margin: 0;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  h1 { font-size: ${font + 5}pt; margin: 0 0 1mm; }
+
+  h1 { font-size: ${TYPE.h1}pt; font-weight: 700; margin: 0 0 2mm; }
   h2 {
-    font-size: ${font + 1}pt;
-    margin: 4mm 0 1.5mm;
-    padding-bottom: 0.8mm;
-    border-bottom: 0.4mm solid #111;
+    font-size: ${TYPE.h2}pt;
+    font-weight: 700;
+    margin: 5mm 0 2mm;
+    padding-bottom: 1mm;
+    border-bottom: 0.5mm solid #000;
     /* A heading stranded at the foot of a page is worse than an early break. */
     page-break-after: avoid;
   }
-  .sub { color: #555; margin: 0 0 3mm; }
+  .sub { font-size: ${TYPE.body}pt; color: #444; margin: 0 0 2mm; }
+
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   thead { display: table-header-group; }
   th {
-    font-size: ${font - 0.5}pt;
+    font-size: ${TYPE.small}pt;
+    font-weight: 700;
     text-align: left;
-    border-bottom: 0.3mm solid #111;
-    padding: 0.6mm 0.8mm;
+    border-bottom: 0.4mm solid #000;
+    padding: 1mm 1.5mm;
     white-space: nowrap;
   }
-  td { padding: 0.5mm 0.8mm; overflow: hidden; white-space: nowrap; }
+  td {
+    font-size: ${TYPE.body}pt;
+    padding: 0.9mm 1.5mm;
+    border-bottom: 0.2mm solid #ddd;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   tbody tr { page-break-inside: avoid; }
-  /* Zebra rather than a rule under every row: at this density a line per row
-     turns the grid into a screen of hatching. */
-  tbody tr:nth-child(even) td { background: #f2f2f2; }
-  .num { text-align: right; color: #555; }
-  .c { text-align: center; }
-  .dim { color: #999; }
-  .absent { font-weight: 700; color: #fff; background: #000; }
-  .other { font-weight: 700; }
-  .sep { border-left: 0.3mm solid #ccc; }
-  .summary td, .summary th { padding: 1mm 1.5mm; }
-  .summary { margin-bottom: 2mm; }
-  .legend { margin-top: 2.5mm; color: #555; font-size: ${font - 0.5}pt; }
-  .foot { margin-top: 4mm; padding-top: 1.5mm; border-top: 0.3mm solid #ccc; color: #777; font-size: ${font - 1}pt; }
-  .none { color: #555; padding: 2mm 0; }
+
+  .num { text-align: right; }
+  .c   { text-align: center; }
+
+  /* Present is the background state and is set back in grey; an exception is
+     black and bold, so a page of marks can be scanned for trouble alone. */
+  .present { color: #888; }
+  .none    { color: #bbb; }
+  .absent  { font-weight: 700; color: #000; }
+  .other   { font-weight: 700; color: #000; }
+
+  .legend {
+    margin-top: 3mm;
+    font-size: ${TYPE.small}pt;
+    color: #444;
+    line-height: 1.5;
+  }
+  .foot {
+    margin-top: 6mm;
+    padding-top: 2mm;
+    border-top: 0.3mm solid #999;
+    font-size: ${TYPE.small}pt;
+    color: #555;
+  }
+  .none-row { font-size: ${TYPE.body}pt; color: #444; padding: 3mm 0; }
 `;
 
-const header = (title, sub) =>
-  `<h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div>`;
+const header = (title, sub) => `<h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div>`;
 
 const footer = (by) =>
-  `<div class="foot">Generated ${esc(
-    new Date().toLocaleString()
-  )}${by ? ` by ${esc(by)}` : ""} · Bhaktivedanta Gurukula &amp; International School</div>`;
+  `<div class="foot">Generated ${esc(new Date().toLocaleString())}${
+    by ? ` by ${esc(by)}` : ""
+  } · Bhaktivedanta Gurukula &amp; International School</div>`;
+
+const page = (bodyHtml) => `<style>${CSS}</style>${bodyHtml}`;
 
 /** Marks that are not "present", listed in full — the actionable part. */
 function exceptionsTable(rows, { showDay = false } = {}) {
   if (!rows.length) {
-    return `<div class="none">Every student was present at every checkpoint.</div>`;
+    return `<div class="none-row">Every student was present at every checkpoint.</div>`;
   }
-  const head = `
-    <tr>
-      ${showDay ? "<th style='width:16%'>Day</th>" : ""}
-      <th style="width:8%">Roll</th>
-      <th style="width:${showDay ? 30 : 38}%">Student</th>
-      <th style="width:10%">Class</th>
-      <th style="width:${showDay ? 22 : 28}%">Checkpoint</th>
-      <th style="width:16%">Status</th>
-    </tr>`;
-
-  const body = rows
-    .map(
-      (r) => `
-    <tr>
-      ${showDay ? `<td>${esc(fmtDay(r.day))}</td>` : ""}
-      <td class="num">${esc(r.roll_no ?? "")}</td>
-      <td>${esc(r.student)}</td>
-      <td>${esc(r.grade)} ${esc(r.section)}</td>
-      <td>${esc(r.checkpoint)}</td>
-      <td class="${r.status === "A" ? "other" : ""}">${esc(r.status_label)}</td>
-    </tr>`
-    )
-    .join("");
-
-  return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  return `<table>
+    <thead><tr>
+      ${showDay ? '<th style="width:16%">Day</th>' : ""}
+      <th style="width:9%">Roll</th>
+      <th style="width:${showDay ? 29 : 37}%">Student</th>
+      <th style="width:11%">Class</th>
+      <th style="width:${showDay ? 21 : 27}%">Checkpoint</th>
+      <th style="width:14%">Status</th>
+    </tr></thead>
+    <tbody>${rows
+      .map(
+        (r) => `<tr>
+          ${showDay ? `<td>${esc(fmtDay(r.day))}</td>` : ""}
+          <td class="num">${esc(r.roll_no ?? "")}</td>
+          <td>${esc(clip(r.student))}</td>
+          <td>${esc(r.grade)} ${esc(r.section)}</td>
+          <td>${esc(clip(r.checkpoint, 24))}</td>
+          <td class="${r.status === "A" ? "absent" : "other"}">${esc(r.status_label)}</td>
+        </tr>`
+      )
+      .join("")}</tbody>
+  </table>`;
 }
 
 /**
- * The full student × checkpoint grid, laid out in `columns` side-by-side
- * blocks. One flat table with fixed widths rather than CSS multi-column: a
- * table breaks across pages predictably and repeats its header, which
- * `column-count` does not do reliably in print.
+ * The full student × checkpoint grid. One column, one row per student, so the
+ * sheet reads top to bottom like a register and the row a name sits on is the
+ * row its marks sit on.
  */
-function rosterGrid(students, checkpoints, { columns, nameChars, cellMm }) {
-  const per = Math.ceil(students.length / columns);
-  // Down each column, then across — so a column reads as a continuous run of
-  // roll numbers instead of every fourth child.
-  const blocks = Array.from({ length: columns }, (_, i) =>
-    students.slice(i * per, (i + 1) * per)
-  );
+function registerTable(students, checkpoints) {
+  // Numbered columns, keyed by the checkpoint table above. 7mm holds a single
+  // bold character at 10pt with room either side.
+  const heads = checkpoints
+    .map((_, i) => `<th class="c" style="width:7mm">${i + 1}</th>`)
+    .join("");
 
-  const colHead = (first) => `
-    <th class="num ${first ? "" : "sep"}" style="width:6mm">#</th>
-    <th>Student</th>
-    ${checkpoints
-      .map(
-        (c) =>
-          `<th class="c" style="width:${cellMm}mm" title="${esc(c.name)}">${esc(
-            initials(c.name)
-          )}</th>`
-      )
-      .join("")}`;
+  const rows = students
+    .map((s) => {
+      const cells = checkpoints
+        .map((c) => {
+          const m = markCell(s.marks[c.dutyId]);
+          return `<td class="c ${m.cls}">${m.text}</td>`;
+        })
+        .join("");
+      return `<tr>
+        <td class="num">${esc(s.roll ?? "")}</td>
+        <td>${esc(clip(s.name))}</td>
+        <td>${esc(s.classLabel)}</td>
+        ${cells}
+      </tr>`;
+    })
+    .join("");
 
-  const head = `<tr>${blocks.map((_, i) => colHead(i === 0)).join("")}</tr>`;
-
-  const rows = Array.from({ length: per }, (_, row) => {
-    const tds = blocks
-      .map((block, i) => {
-        const s = block[row];
-        if (!s) {
-          return `<td class="${i === 0 ? "" : "sep"}"></td><td></td>${checkpoints
-            .map(() => "<td></td>")
-            .join("")}`;
-        }
-        const marks = checkpoints
-          .map((c) => {
-            const m = s.marks[c.dutyId];
-            const text = cell(m);
-            const cls = !m
-              ? "dim"
-              : m.present
-                ? "dim"
-                : m.status === "A"
-                  ? "absent"
-                  : "other";
-            return `<td class="c ${cls}">${text}</td>`;
-          })
-          .join("");
-        return `<td class="num ${i === 0 ? "" : "sep"}">${esc(s.roll ?? "")}</td><td>${esc(
-          clip(s.name, nameChars)
-        )}</td>${marks}`;
-      })
-      .join("");
-    return `<tr>${tds}</tr>`;
-  }).join("");
-
-  return `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+  return `<table>
+    <thead><tr>
+      <th class="num" style="width:12mm">Roll</th>
+      <th>Student</th>
+      <th style="width:16mm">Class</th>
+      ${heads}
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
-/** "Breakfast prasadam" -> "BP". Column headings are 4mm wide. */
-function initials(name) {
-  const words = String(name || "").split(/\s+/).filter(Boolean);
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return words
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-}
+const LEGEND = `<div class="legend">
+  <b>P</b> present &nbsp;&nbsp; <b>A</b> absent &nbsp;&nbsp; <b>H</b> home &nbsp;&nbsp;
+  <b>S</b> sick &nbsp;&nbsp; <b>O</b> outing &nbsp;&nbsp; <b>G</b> Gita Nagari &nbsp;&nbsp;
+  <b>V</b> activity &nbsp;&nbsp; <b>Y</b> self study &nbsp;&nbsp;
+  <b>—</b> not in that checkpoint's group
+</div>`;
 
-/** One day: summary, exceptions, then the full grid. */
+/** One day: the checkpoint key, who was not present, then the full register. */
 export function dayReportHtml({ day, checkpoints, students }, { generatedBy } = {}) {
-  const d = density(students.length, checkpoints.length);
-
-  const exceptions = [];
-  students.forEach((s) => {
-    checkpoints.forEach((c) => {
-      const m = s.marks[c.dutyId];
-      if (m && !m.present) {
-        exceptions.push({
-          roll_no: s.roll,
-          student: s.name,
-          grade: s.grade,
-          section: s.section,
-          checkpoint: c.name,
-          status: m.status,
-          status_label: m.label,
-        });
-      }
-    });
-  });
-
   const summaryRows = checkpoints
-    .map((c) => {
+    .map((c, i) => {
       let marked = 0;
       let absent = 0;
       let elsewhere = 0;
@@ -287,9 +235,10 @@ export function dayReportHtml({ day, checkpoints, students }, { generatedBy } = 
         else if (!m.present) elsewhere += 1;
       });
       return `<tr>
-        <td><b>${esc(initials(c.name))}</b> ${esc(c.name)}</td>
+        <td class="c"><b>${i + 1}</b></td>
+        <td>${esc(c.name)}</td>
         <td>${esc(fmtTime(c.startMin))}</td>
-        <td>${esc(clip(c.group, 28))}</td>
+        <td>${esc(clip(c.group, 26))}</td>
         <td class="num">${marked}</td>
         <td class="num">${marked - absent - elsewhere}</td>
         <td class="num">${absent}</td>
@@ -298,39 +247,42 @@ export function dayReportHtml({ day, checkpoints, students }, { generatedBy } = 
     })
     .join("");
 
-  return `<style>${SHEET_CSS(d.font)}</style>
-${header("Attendance", `${fmtDay(day)} · ${students.length} students · ${checkpoints.length} checkpoints`)}
+  return page(
+    `${header(
+      "Attendance",
+      `${fmtDay(day)} · ${students.length} students · ${checkpoints.length} checkpoints`
+    )}
 
 <h2>Checkpoints</h2>
-<table class="summary">
+<table>
   <thead><tr>
-    <th style="width:30%">Checkpoint</th><th style="width:12%">Time</th>
-    <th style="width:26%">Group</th><th class="num" style="width:8%">Marked</th>
-    <th class="num" style="width:8%">Present</th><th class="num" style="width:8%">Absent</th>
-    <th class="num" style="width:8%">Elsewhere</th>
+    <th class="c" style="width:8mm">#</th>
+    <th style="width:28%">Checkpoint</th>
+    <th style="width:14%">Time</th>
+    <th style="width:22%">Group</th>
+    <th class="num" style="width:9%">Marked</th>
+    <th class="num" style="width:9%">Present</th>
+    <th class="num" style="width:9%">Absent</th>
+    <th class="num" style="width:9%">Else</th>
   </tr></thead>
   <tbody>${summaryRows}</tbody>
 </table>
 
-<h2>Not present (${exceptions.length})</h2>
-${exceptionsTable(exceptions)}
-
-<h2>Full register</h2>
-${rosterGrid(students, checkpoints, d)}
-<div class="legend">
-  · present &nbsp;·&nbsp; <span class="absent">A</span> absent &nbsp;·&nbsp;
-  H home, S sick, O outing, G Gita Nagari, V activity, Y self study &nbsp;·&nbsp;
-  blank = not in that checkpoint's group
-</div>
-${footer(generatedBy)}`;
+<h2>Register</h2>
+${registerTable(students, checkpoints)}
+${LEGEND}
+${footer(generatedBy)}`
+  );
 }
 
 /**
  * A date range. Only students with something to report are listed: a week of
- * 700 all-present children is forty thousand dots and nothing to act on.
+ * 700 all-present children is forty thousand cells and nothing to act on.
  */
-export function rangeReportHtml({ from, to, days, exceptions, totalMarks, students }, { generatedBy } = {}) {
-  const d = density(students.length, days.length);
+export function rangeReportHtml(
+  { from, to, days, exceptions, totalMarks, students },
+  { generatedBy } = {}
+) {
   const absent = exceptions.filter((e) => e.status === "A").length;
 
   const perDay = days
@@ -347,57 +299,60 @@ export function rangeReportHtml({ from, to, days, exceptions, totalMarks, studen
   const grid = students.length
     ? `<table>
         <thead><tr>
-          <th class="num" style="width:6mm">#</th>
-          <th style="width:34%">Student</th>
-          <th style="width:8%">Class</th>
-          ${days.map((day) => `<th class="c">${esc(fmtDay(day).slice(0, 3))}</th>`).join("")}
-          <th class="num" style="width:8%">Abs</th>
+          <th class="num" style="width:12mm">Roll</th>
+          <th>Student</th>
+          <th style="width:16mm">Class</th>
+          ${days.map((d) => `<th class="c" style="width:11mm">${esc(fmtDay(d).slice(0, 3))}</th>`).join("")}
+          <th class="num" style="width:14mm">Absent</th>
         </tr></thead>
         <tbody>${students
           .map(
             (s) => `<tr>
               <td class="num">${esc(s.roll ?? "")}</td>
-              <td>${esc(clip(s.name, 30))}</td>
+              <td>${esc(clip(s.name))}</td>
               <td>${esc(s.classLabel)}</td>
               ${days
-                .map((day) =>
-                  s.days[day]
-                    ? `<td class="c other">${s.days[day]}</td>`
-                    : `<td class="c dim">·</td>`
+                .map((d) =>
+                  s.days[d]
+                    ? `<td class="c other">${s.days[d]}</td>`
+                    : `<td class="c present">P</td>`
                 )
                 .join("")}
-              <td class="num"><b>${s.absent}</b></td>
+              <td class="num absent">${s.absent}</td>
             </tr>`
           )
           .join("")}</tbody>
       </table>`
-    : `<div class="none">Every student was present at every checkpoint in this period.</div>`;
+    : `<div class="none-row">Every student was present at every checkpoint in this period.</div>`;
 
-  const pct = totalMarks
-    ? (100 - (100 * exceptions.length) / totalMarks).toFixed(1)
-    : "—";
+  const pct = totalMarks ? (100 - (100 * exceptions.length) / totalMarks).toFixed(1) : "—";
 
-  return `<style>${SHEET_CSS(d.font)}</style>
-${header(
-  "Attendance summary",
-  `${fmtDay(from)} to ${fmtDay(to)} · ${totalMarks} marks · ${pct}% present`
-)}
+  return page(
+    `${header(
+      "Attendance summary",
+      `${fmtDay(from)} to ${fmtDay(to)} · ${totalMarks} marks · ${pct}% present`
+    )}
 
 <h2>By day</h2>
-<table class="summary">
-  <thead><tr><th style="width:50%">Day</th><th class="num">Absent</th><th class="num">Elsewhere</th></tr></thead>
+<table>
+  <thead><tr>
+    <th style="width:50%">Day</th>
+    <th class="num" style="width:25%">Absent</th>
+    <th class="num" style="width:25%">Elsewhere</th>
+  </tr></thead>
   <tbody>${perDay}</tbody>
 </table>
 
 <h2>Students with exceptions (${students.length})</h2>
 ${grid}
 <div class="legend">
-  A number is how many checkpoints that student missed that day; · means present at all of them.
-  &nbsp;·&nbsp; ${absent} absences and ${exceptions.length - absent} accounted-for
+  A number is how many checkpoints that student missed that day; <b>P</b> means present
+  at all of them. ${absent} absences and ${exceptions.length - absent} accounted-for
   absences in this period.
 </div>
 
 <h2>Every exception</h2>
 ${exceptionsTable(exceptions, { showDay: true })}
-${footer(generatedBy)}`;
+${footer(generatedBy)}`
+  );
 }

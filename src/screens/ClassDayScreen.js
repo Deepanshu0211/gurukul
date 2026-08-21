@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -15,14 +16,15 @@ import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset
 import ScreenHeader from "../components/ScreenHeader";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import CalendarSheet from "../components/CalendarSheet";
-import { EmptyState } from "../components/ui";
+import SearchField from "../components/SearchField";
+import { EmptyState, PrimaryButton } from "../components/ui";
 import { fmtTime, fmtDay, fmtDayCompact, fmtClock, plural, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDayAttendance, useMarkingTotals } from "../lib/history";
 import { resolveGroup } from "../lib/duties";
 import { useStudentHistory, RANGES } from "../lib/studentHistory";
-import { buildReport, printReport, shareReport } from "../lib/report";
+import { buildReport, printReport, weekStart, addDays } from "../lib/report";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import { STATUS_META } from "../data/mockData";
@@ -50,6 +52,13 @@ import { STATUS_META } from "../data/mockData";
 /** Fixed so the list can skip measuring 300 rows and jump straight to an
  *  offset. Must match `styles.row.height` exactly. */
 const ROW_H = layout.row;
+
+/** SearchField's own minHeight. The header reserves exactly this much, so
+ *  nothing shifts when the field lifts out of the flow to be positioned
+ *  absolutely. The gap above it is the slot's MARGIN, not part of its height —
+ *  onLayout reports y after the margin, so the measurement lands on the
+ *  field's true top rather than the top of the gap. */
+const SEARCH_H = layout.touch + 2;
 
 const statusLabel = (code) => (code === "P" ? "Present" : STATUS_META[code]?.label || code);
 
@@ -83,8 +92,23 @@ export default function ClassDayScreen() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [infoFor, setInfoFor] = useState(null);
-  const [exportOpen, setExportOpen] = useState(false);
+  // One sheet at a time: null | "export" | "range" | "from" | "to". Stacking a
+  // calendar modal on top of the sheet that opened it is unreliable on
+  // Android and confusing anywhere, so the flow steps between them instead.
+  const [sheet, setSheet] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [range, setRange] = useState({ from: null, to: null });
+  const [query, setQuery] = useState("");
+  // Which status floats to the top. null = the register's own order, which is
+  // by roll number and is what a teacher reading down a printed list expects.
+  const [sortBy, setSortBy] = useState(null);
+
+  // Where the inline search sits inside the scrolling header. Measured rather
+  // than guessed: the header's height changes with the checkpoint name, the
+  // group label and whether the "overruled by" line is showing.
+  const [searchTop, setSearchTop] = useState(0);
+  const scrollY = useRef(new Animated.Value(0)).current;
+
   const dialog = useDialog();
   const toast = useToast();
 
@@ -146,6 +170,35 @@ export default function ClassDayScreen() {
   }, [roster, activeDuty, statusOf]);
 
   /**
+   * Search, then sort. Both derived rather than held in state, so the list can
+   * never disagree with the roster behind it.
+   *
+   * The sort is stable and only lifts one group: `roster` arrives in roll
+   * order, so tapping "absent" gives absentees in roll order followed by
+   * everyone else in roll order. A full re-sort would scramble the second
+   * group for no reason, and the roll order is the one a teacher can check
+   * against a paper list.
+   */
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const found = q
+      ? roster.filter(
+          (s) => s.name.toLowerCase().includes(q) || String(s.roll || "").includes(q)
+        )
+      : roster;
+
+    if (!sortBy) return found;
+
+    const first = (s) => {
+      const code = statusOf(s.id, activeDuty);
+      if (sortBy === "P") return code === "P";
+      if (sortBy === "A") return code === "A";
+      return code !== "P" && code !== "A"; // elsewhere
+    };
+    return [...found].sort((a, b) => (first(b) ? 1 : 0) - (first(a) ? 1 : 0));
+  }, [roster, query, sortBy, statusOf, activeDuty]);
+
+  /**
    * Every submitted checkpoint's verdict for the student whose sheet is open.
    * Memoised because `resolveGroup` filters and sorts the whole 415-student
    * register once per checkpoint — recomputing that on every render while a
@@ -175,26 +228,25 @@ export default function ClassDayScreen() {
   const rec = activeDuty ? records[activeDuty.id] : null;
 
   /** Builds the sheet, then either prints it or hands it to the share sheet. */
-  const runExport = async (mode, action) => {
+  const runExport = async (from, to) => {
     if (exporting) return;
     setExporting(true);
     try {
-      const report = await buildReport({ mode, day, generatedBy: user?.name });
+      const report = await buildReport({ from, to, generatedBy: user?.name });
       if (report.empty) {
-        setExportOpen(false);
+        setSheet(null);
         dialog.alert({
           icon: "document-outline",
           title: "Nothing to print",
           message:
-            mode === "week"
-              ? "No checkpoint was submitted in this week."
-              : "No checkpoint was submitted on this day.",
+            from === to
+              ? "No checkpoint was submitted on this day."
+              : "No checkpoint was submitted between these dates.",
         });
         return;
       }
-      if (action === "print") await printReport(report.html);
-      else await shareReport(report.html, report.name);
-      setExportOpen(false);
+      await printReport(report.html);
+      setSheet(null);
     } catch (e) {
       dialog.alert({
         icon: "alert-circle-outline",
@@ -205,6 +257,45 @@ export default function ClassDayScreen() {
     } finally {
       setExporting(false);
     }
+  };
+
+  const thisWeek = { from: weekStart(day), to: addDays(weekStart(day), 6) };
+
+  // Purely native-driven now: nothing about this animation needs a value read
+  // back on the JS thread, so there is no listener and no per-frame setState.
+  const onScroll = useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+        useNativeDriver: true,
+      }),
+    [scrollY]
+  );
+
+  // The field's screen position: it starts at its place in the header and
+  // travels up with the content until it reaches the top inset, then stays.
+  // `extrapolate: "clamp"` is what makes it stop rather than keep going.
+  // inputRange must strictly increase, hence the guard before it is measured.
+  const travel = Math.max(searchTop, 1);
+  const pinStyle = {
+    transform: [
+      {
+        translateY: scrollY.interpolate({
+          inputRange: [0, travel],
+          outputRange: [topInset + travel, topInset],
+          extrapolate: "clamp",
+        }),
+      },
+    ],
+  };
+
+  // Fades in over the last 24px of that travel, so the bar lands rather than
+  // appears. Opacity is native-driver safe; backgroundColor would not be.
+  const backdropStyle = {
+    opacity: scrollY.interpolate({
+      inputRange: [Math.max(travel - 24, 0), travel],
+      outputRange: [0, 1],
+      extrapolate: "clamp",
+    }),
   };
 
   const header = (
@@ -219,7 +310,7 @@ export default function ClassDayScreen() {
         }
         right={
           <TouchableOpacity
-            onPress={() => setExportOpen(true)}
+            onPress={() => setSheet("export")}
             activeOpacity={0.7}
             style={styles.printBtn}
             accessibilityRole="button"
@@ -297,15 +388,56 @@ export default function ClassDayScreen() {
             </View>
           )}
 
+          {/* The tallies double as the sort control: tapping one lifts that
+              group to the top, tapping it again drops back to roll order.
+              A separate row of sort buttons would say the same numbers twice. */}
           <View style={styles.tally}>
-            <TallyChip value={tally.present} label="present" tone="success" />
-            {tally.absent > 0 && <TallyChip value={tally.absent} label="absent" tone="danger" />}
+            <TallyChip
+              value={tally.present}
+              label="present"
+              tone="success"
+              active={sortBy === "P"}
+              onPress={() => setSortBy((v) => (v === "P" ? null : "P"))}
+            />
+            {tally.absent > 0 && (
+              <TallyChip
+                value={tally.absent}
+                label="absent"
+                tone="danger"
+                active={sortBy === "A"}
+                onPress={() => setSortBy((v) => (v === "A" ? null : "A"))}
+              />
+            )}
             {tally.elsewhere > 0 && (
-              <TallyChip value={tally.elsewhere} label="elsewhere" tone="neutral" />
+              <TallyChip
+                value={tally.elsewhere}
+                label="elsewhere"
+                tone="neutral"
+                active={sortBy === "E"}
+                onPress={() => setSortBy((v) => (v === "E" ? null : "E"))}
+              />
             )}
           </View>
+
         </View>
       )}
+
+      {/* A hole the search field sits in, not a second field: the field is
+          rendered once, over the list, and slides up with the content until
+          it reaches the top.
+
+          A DIRECT child of the header on purpose. onLayout reports y relative
+          to the immediate parent, so nested inside the context block it
+          measured ~60 instead of its true offset and the field parked near the
+          top from the start. The header is at content offset 0, so measured
+          here the number IS the scroll position at which it should stop. */}
+      <View
+        style={styles.searchSlot}
+        onLayout={(e) => {
+          const y = Math.round(e.nativeEvent.layout.y);
+          setSearchTop((prev) => (Math.abs(prev - y) > 1 ? y : prev));
+        }}
+      />
     </View>
   );
 
@@ -336,6 +468,18 @@ export default function ClassDayScreen() {
         />
       );
     }
+    // A query that matches nobody is not the same as a checkpoint with nobody
+    // in it — saying "nobody in this group" here would read as a data problem.
+    if (roster.length > 0 && visible.length === 0) {
+      return (
+        <EmptyState
+          icon="search-outline"
+          title="No match"
+          body={`No student in this group matches “${query.trim()}”.`}
+          compact
+        />
+      );
+    }
     if (roster.length === 0) {
       return (
         <EmptyState
@@ -350,14 +494,16 @@ export default function ClassDayScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right"]}>
-      <FlatList
-        data={placeholder ? [] : roster}
+      <Animated.FlatList
+        data={placeholder ? [] : visible}
         keyExtractor={(s) => s.id}
         renderItem={renderStudent}
         ListHeaderComponent={header}
         ListEmptyComponent={placeholder}
         contentContainerStyle={{ paddingTop: topInset, paddingBottom: tabInset }}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         // Deliberately NO getItemLayout, even though rows are a fixed height:
         // ListMetricsAggregator returns its offsets verbatim and never adds
         // the ListHeaderComponent's height, so with a header this tall every
@@ -367,6 +513,23 @@ export default function ClassDayScreen() {
         maxToRenderPerBatch={12}
         windowSize={11}
       />
+
+      {/* The backdrop appears only once the field has landed, so while it is
+          still travelling with the content the page shows through behind it. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.pinBackdrop, { height: topInset + SEARCH_H + spacing.sm }, backdropStyle]}
+      />
+
+      <Animated.View style={[styles.pinned, pinStyle]}>
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Find a name or roll number"
+          hint={`${visible.length}/${roster.length}`}
+          accessibilityLabel="Find a student in this group"
+        />
+      </Animated.View>
 
       <CalendarSheet
         visible={calendarOpen}
@@ -402,10 +565,56 @@ export default function ClassDayScreen() {
       </BottomSheet>
 
       <BottomSheet
-        visible={exportOpen}
-        onClose={() => !exporting && setExportOpen(false)}
+        visible={sheet === "export"}
+        onClose={() => !exporting && setSheet(null)}
         title="Print attendance"
-        subtitle={`${fmtDay(day)} · fits on a few A4 pages whatever the roll`}
+        subtitle="A4 · one row per student"
+        showClose
+      >
+        {exporting ? (
+          <View style={styles.exportBusy}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={typography.caption}>Building the sheet…</Text>
+          </View>
+        ) : (
+          <>
+            {/* Each row says the dates it will use, so nothing depends on
+                remembering what the screen behind the sheet is set to. The
+                print dialog is also where "Save as PDF" lives, so one verb
+                covers printing and saving. */}
+            <SheetOption
+              icon="today-outline"
+              label="Print this day"
+              hint={fmtDay(day)}
+              onPress={() => runExport(day, day)}
+            />
+            <SheetOption
+              icon="calendar-outline"
+              label="Print this week"
+              hint={`${fmtDayCompact(thisWeek.from)} to ${fmtDayCompact(thisWeek.to)}`}
+              onPress={() => runExport(thisWeek.from, thisWeek.to)}
+            />
+            <SheetOption
+              icon="calendar-number-outline"
+              label="Choose dates"
+              hint="Any two days"
+              onPress={() => {
+                setRange({ from: day, to: day });
+                setSheet("range");
+              }}
+            />
+          </>
+        )}
+      </BottomSheet>
+
+      {/* Two dates and one button. Deliberately not a tap-start-then-tap-end
+          range calendar: that mode has no visible state between the two taps,
+          and getting it wrong looks like the app ignoring you. */}
+      <BottomSheet
+        visible={sheet === "range"}
+        onClose={() => !exporting && setSheet(null)}
+        title="Choose dates"
+        subtitle="Both days are included"
         showClose
       >
         {exporting ? (
@@ -416,26 +625,36 @@ export default function ClassDayScreen() {
         ) : (
           <>
             <SheetOption
-              icon="today-outline"
-              label="This day"
-              hint="Every checkpoint, the full register, and who was not present"
-              onPress={() => runExport("day", "share")}
+              icon="calendar-outline"
+              label="From"
+              hint={fmtDay(range.from || day)}
+              onPress={() => setSheet("from")}
             />
             <SheetOption
               icon="calendar-outline"
-              label="This week"
-              hint="Monday to Sunday — totals per day and every exception"
-              onPress={() => runExport("week", "share")}
+              label="To"
+              hint={fmtDay(range.to || day)}
+              onPress={() => setSheet("to")}
             />
-            <SheetOption
+            <PrimaryButton
+              title="Print"
               icon="print-outline"
-              label="Print this day"
-              hint="Opens the printer dialog, which can also save a PDF"
-              onPress={() => runExport("day", "print")}
+              onPress={() => runExport(range.from || day, range.to || day)}
+              style={{ marginTop: spacing.md }}
             />
           </>
         )}
       </BottomSheet>
+
+      <CalendarSheet
+        visible={sheet === "from" || sheet === "to"}
+        selected={(sheet === "from" ? range.from : range.to) || day}
+        onSelect={(picked) => {
+          setRange((prev) => ({ ...prev, [sheet]: picked }));
+          setSheet("range");
+        }}
+        onClose={() => setSheet("range")}
+      />
 
       <StudentInfoSheet
         student={infoFor}
@@ -476,16 +695,32 @@ function StripCell({ value, label, tone, loading }) {
   );
 }
 
-function TallyChip({ value, label, tone }) {
+function TallyChip({ value, label, tone, active, onPress }) {
   const fg =
     tone === "danger" ? colors.danger : tone === "success" ? colors.success : colors.textMuted;
   const bg =
     tone === "danger" ? colors.dangerBg : tone === "success" ? colors.successBg : colors.cardAlt;
+
   return (
-    <View style={[styles.tallyChip, { backgroundColor: bg }]}>
-      <Text style={[styles.tallyValue, { color: fg }]}>{value}</Text>
-      <Text style={[styles.tallyLabel, { color: fg }]}>{label}</Text>
-    </View>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      // The selected chip inverts rather than merely gaining a border: at this
+      // size a 1px outline is not a state change you notice across the room.
+      style={[
+        styles.tallyChip,
+        { backgroundColor: active ? fg : bg, borderColor: fg },
+        active && styles.tallyChipActive,
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!active }}
+      accessibilityLabel={`${value} ${label}. ${
+        active ? "Sorted to the top. Tap to restore roll order" : "Tap to sort to the top"
+      }`}
+    >
+      <Text style={[styles.tallyValue, { color: active ? colors.white : fg }]}>{value}</Text>
+      <Text style={[styles.tallyLabel, { color: active ? colors.white : fg }]}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -781,6 +1016,33 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: colors.warning,
   },
+
+  // Reserved in the header so the layout does not jump when the field lifts
+  // out of the flow to be positioned absolutely.
+  searchSlot: { height: SEARCH_H, marginTop: spacing.sm },
+
+  pinned: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 11,
+    paddingHorizontal: layout.gutter,
+  },
+  pinBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    // Near-opaque, not translucent: rows passing underneath must not show
+    // through the field they are sliding behind.
+    backgroundColor: colors.bar,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+  },
+
+  tallyChipActive: { borderWidth: 1 },
 
   tally: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm - 3, marginTop: spacing.sm },
   tallyChip: {

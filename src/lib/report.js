@@ -35,25 +35,31 @@ export const addDays = (iso, n) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
-/** Builds the HTML for a day or a week. Separated so it can be checked
- *  without a device, and so print and share cannot diverge. */
-export async function buildReport({ mode, day, generatedBy }) {
-  if (mode === "week") {
-    const from = weekStart(day);
-    const to = addDays(from, 6);
-    const data = await fetchRangeReport(from, to);
+/**
+ * Builds the HTML for any date range. One entry point rather than a mode
+ * flag: a single day is just a range whose ends are equal, and the caller
+ * should not have to know which report that produces.
+ */
+export async function buildReport({ from, to, generatedBy }) {
+  // Picked out of order — swap rather than refuse. Rejecting it would mean an
+  // error message to read and a second attempt, for something with exactly
+  // one sensible interpretation.
+  const [start, end] = from <= to ? [from, to] : [to, from];
+
+  if (start === end) {
+    const data = await fetchDayReport(start);
     return {
-      html: rangeReportHtml(data, { generatedBy }),
-      name: `attendance-week-${from}`,
-      empty: data.totalMarks === 0,
+      html: dayReportHtml(data, { generatedBy }),
+      name: `attendance-${start}`,
+      empty: data.checkpoints.length === 0,
     };
   }
 
-  const data = await fetchDayReport(day);
+  const data = await fetchRangeReport(start, end);
   return {
-    html: dayReportHtml(data, { generatedBy }),
-    name: `attendance-${day}`,
-    empty: data.checkpoints.length === 0,
+    html: rangeReportHtml(data, { generatedBy }),
+    name: `attendance-${start}_to_${end}`,
+    empty: data.totalMarks === 0,
   };
 }
 
