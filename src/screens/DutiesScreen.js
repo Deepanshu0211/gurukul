@@ -27,7 +27,7 @@ import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import SearchField from "../components/SearchField";
 import Segmented from "../components/Segmented";
 import FadeIn from "../components/FadeIn";
-import { SectionLabel, EmptyState, SecondaryButton, Row, StatusTag } from "../components/ui";
+import { SectionLabel, EmptyState, Row, StatusTag, ErrorState } from "../components/ui";
 import { useNow } from "../lib/clock";
 import { defaultsToOwnDuties } from "../domain/roles";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
@@ -151,11 +151,10 @@ export default function DutiesScreen({ navigation }) {
   if (error && duties.length === 0) {
     return (
       <SafeAreaView style={[styles.screen, styles.centered]} edges={["left", "right"]}>
-        <EmptyState
-          icon="cloud-offline-outline"
+        <ErrorState
+          error={error}
           title="Can't reach the school server"
-          body={error}
-          action={<SecondaryButton title="Try again" onPress={refresh} style={styles.retryBtn} />}
+          onRetry={refresh}
         />
       </SafeAreaView>
     );

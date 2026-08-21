@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius, fonts, layout, typography } from "../theme/theme";
 import { useScreenTopInset } from "../navigation/tabBarInset";
 import ScreenHeader from "../components/ScreenHeader";
-import { EmptyState, SectionLabel } from "../components/ui";
+import { EmptyState, SectionLabel, ErrorState } from "../components/ui";
 import { fmtDay, fmtClock } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
@@ -241,7 +241,7 @@ export default function ActivityScreen({ navigation }) {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : error ? (
-        <EmptyState icon="cloud-offline-outline" title="Can't load the log" body={error} />
+        <ErrorState error={error} title="Can't load the log" onRetry={reload} />
       ) : rows.length === 0 ? (
         <EmptyState
           icon="time-outline"

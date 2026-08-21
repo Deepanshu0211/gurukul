@@ -252,7 +252,15 @@ export default function LoginScreen() {
       // Recorded server-side from the caller's own token, so a client can
       // only ever log its own sign-in. Never blocks the login: a failed audit
       // write must not keep a teacher out of the app before a checkpoint.
-      supabase.rpc("log_sign_in").catch(() => {});
+      // The rejection handler goes to `then`, not `.catch()`. A Postgrest
+      // builder is a thenable, not a Promise: it implements `then()` and
+      // nothing else, so calling `.catch()` on it threw "undefined is not a
+      // function" — from inside a promise, where it surfaced as an unhandled
+      // rejection with no component stack to point at.
+      supabase.rpc("log_sign_in").then(
+        () => {},
+        () => {}
+      );
       login(staffRow);
     } finally {
       setSubmitting(false);

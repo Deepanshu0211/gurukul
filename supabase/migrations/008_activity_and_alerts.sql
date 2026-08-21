@@ -40,11 +40,29 @@ alter table audit_log add column if not exists old_value text;
 alter table audit_log add column if not exists new_value text;
 
 -- Backfill before dropping, so the overrides already recorded survive.
-update audit_log
-   set field     = coalesce(field, 'status'),
-       old_value = coalesce(old_value, old_status),
-       new_value = coalesce(new_value, new_status)
- where action = 'attendance_override';
+--
+-- Guarded and run through EXECUTE because this file must survive being run
+-- twice. A plain UPDATE here referred to columns that the two statements
+-- below drop, so a second run failed with 42703 before reaching anything
+-- else. Dynamic SQL inside an untaken branch is never planned, so when the
+-- columns are already gone this is simply a no-op.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'audit_log'
+      and column_name  = 'old_status'
+  ) then
+    execute $mig$
+      update audit_log
+         set field     = coalesce(field, 'status'),
+             old_value = coalesce(old_value, old_status),
+             new_value = coalesce(new_value, new_status)
+       where action = 'attendance_override'
+    $mig$;
+  end if;
+end $$;
 
 alter table audit_log drop column if exists old_status;
 alter table audit_log drop column if exists new_status;

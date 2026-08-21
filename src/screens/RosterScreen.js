@@ -32,11 +32,12 @@ import {
   Chevron,
   TextAction,
   EmptyState,
-  SecondaryButton,
   StatusTag,
   Row,
+  ErrorState,
 } from "../components/ui";
 import { useNow } from "../lib/clock";
+import { describeError } from "../lib/errors";
 import { roleLabel, canReassign } from "../domain/roles";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime, plural, initial, weekdayName} from "../utils/format";
@@ -104,11 +105,16 @@ export default function RosterScreen() {
       await reassignDuty(duty.id, staffId);
       toast.show(`${duty.checkpoint} reassigned to ${staffName(staffId)}`);
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Could not reassign", message: "The duty was not reassigned. Try again." },
+        null
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Could not reassign",
-        message: e.message || "The duty was not reassigned. Try again.",
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Could not reassign",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     }
   };
@@ -457,11 +463,10 @@ function StudentsTab({ bottomInset, query, onScroll }) {
 
   if (error) {
     return (
-      <EmptyState
-        icon="cloud-offline-outline"
+      <ErrorState
+        error={error}
         title="Can't load the register"
-        body={error}
-        action={<SecondaryButton title="Try again" onPress={reload} style={{ marginTop: spacing.sm }} />}
+        onRetry={reload}
       />
     );
   }

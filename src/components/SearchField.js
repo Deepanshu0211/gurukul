@@ -34,7 +34,11 @@ export default function SearchField({
 }) {
   const [focused, setFocused] = useState(false);
   const inputRef = useRef(null);
-  const active = focused || value.length > 0;
+  // Coerced rather than trusted: an uncontrolled caller passing undefined
+  // would crash the whole screen on `.length`, and a search box is not worth
+  // a white screen.
+  const text = value || "";
+  const active = focused || text.length > 0;
 
   return (
     <View style={[styles.field, focused && styles.fieldFocused, style]}>
@@ -47,7 +51,7 @@ export default function SearchField({
 
       <TextInput
         ref={inputRef}
-        value={value}
+        value={text}
         onChangeText={onChangeText}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -64,13 +68,13 @@ export default function SearchField({
         accessibilityLabel={accessibilityLabel || placeholder}
       />
 
-      {!!hint && value.length > 0 && (
+      {!!hint && text.length > 0 && (
         <Text style={styles.hint} numberOfLines={1}>
           {hint}
         </Text>
       )}
 
-      {value.length > 0 && (
+      {text.length > 0 && (
         <TouchableOpacity
           onPress={() => {
             onChangeText("");

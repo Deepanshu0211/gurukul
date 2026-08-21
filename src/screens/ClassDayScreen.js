@@ -17,7 +17,7 @@ import ScreenHeader from "../components/ScreenHeader";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import CalendarSheet from "../components/CalendarSheet";
 import SearchField from "../components/SearchField";
-import { EmptyState, PrimaryButton } from "../components/ui";
+import { EmptyState, PrimaryButton, ErrorState } from "../components/ui";
 import { fmtTime, fmtDay, fmtDayCompact, fmtClock, plural, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
@@ -25,6 +25,7 @@ import { useDayAttendance, useMarkingTotals } from "../lib/history";
 import { resolveGroup } from "../lib/duties";
 import { useStudentHistory, RANGES } from "../lib/studentHistory";
 import { buildReport, printReport, weekStart, addDays } from "../lib/report";
+import { describeError } from "../lib/errors";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import { STATUS_META } from "../data/mockData";
@@ -248,11 +249,16 @@ export default function ClassDayScreen() {
       await printReport(report.html);
       setSheet(null);
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Could not create the PDF", message: "Something went wrong building the report." },
+        null
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Could not create the PDF",
-        message: e.message || "Something went wrong building the report.",
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Could not create the PDF",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setExporting(false);
@@ -453,7 +459,7 @@ export default function ClassDayScreen() {
       );
     }
     if (past.error) {
-      return <EmptyState icon="cloud-offline-outline" title="Can't load that day" body={past.error} />;
+      return <ErrorState error={past.error} title="Can't load that day" />;
     }
     if (!activeDuty) {
       return (
@@ -1019,7 +1025,10 @@ const styles = StyleSheet.create({
 
   // Reserved in the header so the layout does not jump when the field lifts
   // out of the flow to be positioned absolutely.
-  searchSlot: { height: SEARCH_H, marginTop: spacing.sm },
+  // A full step below the tallies rather than the 9pt used between rows within
+  // a block: the search belongs to the list underneath it, not to the
+  // checkpoint summary above, and the gap is what says so.
+  searchSlot: { height: SEARCH_H, marginTop: spacing.md },
 
   pinned: {
     position: "absolute",

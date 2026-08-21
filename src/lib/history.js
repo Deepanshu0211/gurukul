@@ -109,28 +109,36 @@ export async function fetchMarkingTotals(staffId) {
   const empty = { taken: 0, marked: 0, absent: 0 };
   if (!staffId) return empty;
 
-  const { data: dutyRows, error } = await supabase
-    .from("duties")
-    .select("id")
-    .eq("submitted_by", staffId)
-    .eq("state", "submitted");
-  if (error) throw new Error(error.message);
+  // Filtered through an inner join rather than by collecting duty ids and
+  // passing them to `.in(...)`. That version built a query string containing
+  // every duty the teacher had ever submitted — fine in week one, and a URL
+  // over the gateway's length limit by the end of a term, failing with a 414
+  // that would have looked like a server outage.
+  const scoped = (q) =>
+    q
+      .select("*, duties!inner(submitted_by, state)", { count: "exact", head: true })
+      .eq("duties.submitted_by", staffId)
+      .eq("duties.state", "submitted");
 
-  const ids = (dutyRows || []).map((d) => d.id);
-  if (!ids.length) return empty;
-
-  // `head: true` asks Postgrest for the count without shipping the rows —
-  // a term's marking is thousands of rows and none of them are needed here.
-  const counted = (q) => q.select("*", { count: "exact", head: true }).in("duty_id", ids);
-
-  const [{ count: marked, error: mErr }, { count: absent, error: aErr }] = await Promise.all([
-    counted(supabase.from("attendance")),
-    counted(supabase.from("attendance")).eq("status", "A"),
+  const [taken, marked, absent] = await Promise.all([
+    supabase
+      .from("duties")
+      .select("*", { count: "exact", head: true })
+      .eq("submitted_by", staffId)
+      .eq("state", "submitted"),
+    scoped(supabase.from("attendance")),
+    scoped(supabase.from("attendance")).eq("status", "A"),
   ]);
-  if (mErr) throw new Error(mErr.message);
-  if (aErr) throw new Error(aErr.message);
 
-  return { taken: ids.length, marked: marked || 0, absent: absent || 0 };
+  for (const r of [taken, marked, absent]) {
+    if (r.error) throw new Error(r.error.message);
+  }
+
+  return {
+    taken: taken.count || 0,
+    marked: marked.count || 0,
+    absent: absent.count || 0,
+  };
 }
 
 /** The stat strip at the top of Records. Refetched whenever `nonce` changes. */

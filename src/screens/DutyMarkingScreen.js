@@ -26,6 +26,7 @@ import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import { haptics } from "../lib/haptics";
 import { plural } from "../utils/format";
+import { describeError } from "../lib/errors";
 
 /**
  * Marking one checkpoint.
@@ -202,15 +203,16 @@ export default function DutyMarkingScreen({ route, navigation }) {
       );
       navigation.goBack();
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Not saved", message: "Something went wrong while saving this amendment. Your changes have been kept." },
+        "Your changes have been kept. Try again when you have signal."
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Not saved",
-        message: `${
-          e.message || "Something went wrong while saving this amendment."
-        }
-
-Your changes have been kept. Please try again.`,
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Not saved",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setSaving(false);
@@ -252,11 +254,16 @@ Your changes have been kept. Please try again.`,
     } catch (e) {
       // Stay on the screen so the marks aren't lost — a teacher who has just
       // walked a line of forty students must not have to start again.
+      const shown = describeError(
+        e,
+        { title: "Not submitted", message: "Something went wrong saving this. Your marks are still here — try again." },
+        "Your marks are still here. Try again when you have signal."
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Not submitted",
-        message: `${e.message || "Something went wrong saving this."}\n\nYour marks are still here. Try again.`,
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Not submitted",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setSaving(false);

@@ -32,7 +32,9 @@ import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
 import { fmtTime, fmtClock, plural, weekdayName } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
+import { useAuth } from "../context/AuthContext";
 import { useResolutions, resolveAlert } from "../lib/alerts";
+import { describeError } from "../lib/errors";
 import { canCloseAlerts } from "../domain/roles";
 import { useToast } from "../components/Toast";
 import { useDialog } from "../components/Dialog";
@@ -117,13 +119,16 @@ export default function DashboardScreen() {
     } catch (e) {
       // Stay on the sheet. Losing this remark is the specific failure this
       // whole table was added to prevent.
+      const shown = describeError(
+        e,
+        { title: "Not saved", message: "Something went wrong recording this. The alert is still open." },
+        "The alert is still open. Try again when you have signal."
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Not saved",
-        message: `${e.message || "Something went wrong recording this."}
-
-The alert is still open. Please try again.`,
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Not saved",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setSavingRemark(false);

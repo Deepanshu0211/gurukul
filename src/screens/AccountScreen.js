@@ -19,6 +19,7 @@ import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import { SectionLabel, Divider, Stat, TextAction, PrimaryButton, Chevron } from "../components/ui";
 import { roleLabel } from "../domain/roles";
+import { describeError } from "../lib/errors";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
@@ -69,11 +70,16 @@ export default function AccountScreen({ navigation }) {
       setEditing(false);
       toast.show(next ? "Phone number saved" : "Phone number cleared");
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Could not save", message: "Your phone number wasn't updated. Try again." },
+        null
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Could not save",
-        message: e.message || "Your phone number wasn't updated. Try again.",
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Could not save",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setSavingPhone(false);
@@ -90,11 +96,16 @@ export default function AccountScreen({ navigation }) {
       updateUser({ photoUrl: url });
       toast.show("Profile photo updated");
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Photo not updated", message: "Something went wrong uploading your photo." },
+        null
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Photo not updated",
-        message: e.message || "Something went wrong uploading your photo.",
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Photo not updated",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setPhotoBusy(false);
@@ -116,12 +127,17 @@ export default function AccountScreen({ navigation }) {
           updateUser({ photoUrl: null });
           toast.show("Profile photo removed");
         } catch (e) {
-          dialog.alert({
-            icon: "alert-circle-outline",
-            title: "Could not remove",
-            message: e.message || "Your photo wasn't removed. Try again.",
-            destructive: true,
-          });
+          const shown = describeError(
+        e,
+        { title: "Could not remove", message: "Your photo wasn't removed. Try again." },
+        null
+      );
+      dialog.alert({
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Could not remove",
+        message: shown.message,
+        destructive: !shown.offline,
+      });
         } finally {
           setPhotoBusy(false);
         }
