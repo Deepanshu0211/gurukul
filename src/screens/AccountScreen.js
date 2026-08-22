@@ -286,7 +286,7 @@ export default function AccountScreen({ navigation }) {
             label="About this app"
             onPress={() =>
               dialog.alert({
-                title: "BGIS Attendance",
+                title: "BG-SAAR",
                 message:
                   "Attendance & Student Safety · Pilot build\n\nBhaktivedanta Gurukula & International School",
               })

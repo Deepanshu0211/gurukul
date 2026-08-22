@@ -288,13 +288,13 @@ export default function LoginScreen() {
         >
           <View style={styles.form}>
             <Image
-              source={require("../assets/krishna-bgis-blend.png")}
+              source={require("../assets/newlogo.png")}
               style={styles.heroImage}
               resizeMode="contain"
               accessibilityLabel="Bhaktivedanta Gurukula and International School"
             />
 
-            <Text style={styles.brandTitle}>BGIS</Text>
+            <Text style={styles.brandTitle}>BG-SAAR</Text>
             <Text style={styles.brandSubtitle}>
               Bhaktivedanta Gurukula & International School
             </Text>
