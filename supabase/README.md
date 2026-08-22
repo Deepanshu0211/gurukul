@@ -14,6 +14,9 @@ staging copy, or recovery if the current one is lost.
 | `migrations/005_cover_marking.sql` | Any teacher may mark any pending checkpoint |
 | `migrations/006_attendance_override.sql` | Oversight roles may overrule a submitted record; `audit_log` |
 | `migrations/007_audit_visibility.sql` | Logs submissions and reassignments too; lets staff read their own entries |
+| `migrations/008_activity_and_alerts.sql` | Every staff action; tiered reading; `alert_resolutions` |
+| `migrations/009_reporting.sql` | `attendance_detail` view and per-student report functions |
+| `migrations/010_submit_duty_atomic.sql` | Submitting a checkpoint becomes one transaction |
 | `migrations/008_activity_and_alerts.sql` | Every staff action logged, tiered by severity; `alert_resolutions` |
 | `migrations/009_reporting.sql` | `attendance_detail` view + per-student history functions |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
@@ -24,7 +27,7 @@ staging copy, or recovery if the current one is lost.
 **1. Create the project** — region Mumbai (closest to the school; keeps latency
 low and data in-country, which SRS §14 P2 asks for).
 
-**2. Run the migrations in order** in the SQL Editor: `001` … `009`.
+**2. Run the migrations in order** in the SQL Editor: `001` … `010`.
 
 `005` is what makes the app's "Whole school" view and cover marking work. Until
 it is run, the database still answers with only the signed-in teacher's own
@@ -76,6 +79,10 @@ reason. After applying, sign in as a real user and confirm both directions:
 | Management edits the same row | succeeds |
 | …and `audit_log` gains a row naming them | yes |
 | Anyone inserts into `audit_log` directly | **rejected** |
+| Teacher submits a pending duty | succeeds, `submitted_by` = them |
+| Teacher submits an already-submitted duty | **rejected** (42501) |
+| Coordinator submits the same duty | succeeds, `corrected_by` set |
+| Submit twice with identical marks | second returns `changed = 0`, no audit rows |
 | Teacher reads `audit_log` after submitting | their own entry only |
 | Teacher reads an entry for a duty that is not theirs | **empty** |
 | Teacher B covers A's duty; A reads the log | sees B's submission |

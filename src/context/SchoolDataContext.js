@@ -94,11 +94,13 @@ export function SchoolDataProvider({ children }) {
       const duty = duties.find((d) => d.id === dutyId);
       if (!duty) throw new Error("That duty no longer exists.");
 
+      // `staffId` is no longer sent: migrations/010 resolves the submitter
+      // from the caller's own token. It is still used below for the optimistic
+      // local update, which the next refresh replaces with the server's value.
       await submitDutyToDb({
         dutyId,
         students: resolveGroup(duty, students),
         statuses,
-        staffId,
       });
 
       // Update locally so the UI responds immediately, then reload so every
@@ -115,22 +117,26 @@ export function SchoolDataProvider({ children }) {
   );
 
   /**
-   * Amend a record that is already submitted (SRS A6). Kept separate from
-   * `submitDuty` rather than folded into it: the two write different columns,
-   * only one of them is audit-logged, and a caller must not be able to reach
-   * for the wrong one by passing a different argument.
+   * Amend a record that is already submitted (SRS A6).
+   *
+   * Shares one database function with `submitDuty` since migrations/010, which
+   * branches on the duty's own state: pending means submit, submitted means
+   * correct. Keeping two entry points here is still worth it — they update
+   * different local state and say different things to the user — but the app
+   * can no longer ask for the wrong write, because it no longer chooses.
    */
   const overrideDuty = useCallback(
     async (dutyId, statuses, staffId) => {
       const duty = duties.find((d) => d.id === dutyId);
       if (!duty) throw new Error("That duty no longer exists.");
 
+      // The database diffs against what is stored and returns how many marks
+      // actually changed — the app no longer has to hold a `before` map and
+      // hope it matches the row it is about to overwrite.
       const changed = await overrideAttendanceInDb({
         dutyId,
         students: resolveGroup(duty, students),
         statuses,
-        before: records[dutyId]?.statuses || {},
-        staffId,
       });
 
       const correctedAt = new Date().toISOString();
@@ -145,7 +151,7 @@ export function SchoolDataProvider({ children }) {
       );
       return changed;
     },
-    [duties, students, records]
+    [duties, students]
   );
 
   const reassignDuty = useCallback(async (dutyId, staffId) => {

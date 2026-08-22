@@ -113,78 +113,51 @@ export async function fetchAttendance(dutyId) {
 }
 
 /**
- * Save a submission and lock the duty.
+ * Save a submission and lock the duty — one atomic call (migrations/010).
  *
- * Writes a row for EVERY student in the group, including present ones, so
- * report queries stay simple and "was this child checked at all?" is
- * answerable — the whole point of the night reconciliation (SRS F3).
+ * This used to be two statements from the app: upsert the marks, then flip the
+ * duty to 'submitted'. Losing signal between them left attendance saved
+ * against a duty that still read 'pending' — a checkpoint that looks unmarked
+ * but is full of marks, which nobody would notice until it escalated.
  *
- * Not yet atomic: two statements, so a crash between them could leave
- * attendance saved with the duty still pending. Moving this into a
- * `submit_duty` Postgres function is the fix, and is why the guide specifies
- * one (self-build-guide §4).
+ * The same call handles a correction to an already-submitted record. Which one
+ * happens is decided by the database from the duty's own state, not by the
+ * caller, so the app cannot ask for the wrong one.
+ *
+ * `submitted_by` is NOT passed: the function reads it from the caller's token,
+ * so this app can no longer name somebody else as the person who marked a
+ * checkpoint.
+ *
+ * @returns { marked, changed, absent } — `changed` is 0 when a correction
+ *          altered nothing, which the marking screen uses to skip the write.
  */
-export async function submitDuty({ dutyId, students, statuses, staffId }) {
-  const rows = students.map((s) => ({
-    duty_id: dutyId,
+export async function submitDuty({ dutyId, students, statuses }) {
+  const marks = students.map((s) => ({
     admission_no: s.adm,
     status: statuses[s.id] || null, // null = Present
   }));
 
-  const { error: attErr } = await supabase
-    .from("attendance")
-    .upsert(rows, { onConflict: "duty_id,admission_no" });
-  if (attErr) throw new Error(attErr.message);
+  const { data, error } = await supabase.rpc("submit_duty", {
+    p_duty_id: dutyId,
+    p_marks: marks,
+  });
+  if (error) throw new Error(error.message);
 
-  const { error: dutyErr } = await supabase
-    .from("duties")
-    .update({
-      state: "submitted",
-      submitted_by: staffId,
-      submitted_at: new Date().toISOString(),
-    })
-    .eq("id", dutyId);
-  if (dutyErr) throw new Error(dutyErr.message);
+  // The function returns a single row; PostgREST wraps it in an array.
+  return data?.[0] || { marked: 0, changed: 0, absent: 0 };
 }
 
 /**
  * Overrule a submitted record (SRS A6).
  *
- * Writes only the marks that actually CHANGED. `submitDuty` writes a row per
- * student, so re-writing all of them would put one audit row per child in the
- * group for a correction that touched one — and the log is the whole point of
- * the feature, so it has to stay readable.
- *
- * `submitted_by` is left alone on purpose: the teacher who marked the
- * checkpoint stays its author, and `corrected_by` records who amended it.
- * Collapsing the two would erase who originally got it wrong, which is
- * exactly what a correction trail exists to preserve.
- *
- * Returns the number of marks changed, for the confirmation message.
+ * Delegates to `submit_duty`, which branches on the duty's state. Passing the
+ * whole group rather than only the changed marks is safe and simpler: the
+ * audit trigger skips rows whose status did not actually change, so a
+ * correction touching one child still writes exactly one audit entry.
  */
-export async function overrideAttendance({ dutyId, students, statuses, before, staffId }) {
-  const changed = students.filter(
-    (s) => (statuses[s.id] || null) !== (before[s.id] || null)
-  );
-  if (!changed.length) return 0;
-
-  const { error } = await supabase.from("attendance").upsert(
-    changed.map((s) => ({
-      duty_id: dutyId,
-      admission_no: s.adm,
-      status: statuses[s.id] || null, // null = Present
-    })),
-    { onConflict: "duty_id,admission_no" }
-  );
-  if (error) throw new Error(error.message);
-
-  const { error: dutyErr } = await supabase
-    .from("duties")
-    .update({ corrected_by: staffId, corrected_at: new Date().toISOString() })
-    .eq("id", dutyId);
-  if (dutyErr) throw new Error(dutyErr.message);
-
-  return changed.length;
+export async function overrideAttendance({ dutyId, students, statuses }) {
+  const result = await submitDuty({ dutyId, students, statuses });
+  return result.changed;
 }
 
 /** Reassign a duty for today only; the recurring default is untouched (B2). */
