@@ -20,6 +20,8 @@
     "expo-image-manipulator": "~57.0.9",
     "expo-image-picker": "~57.0.9",
     "expo-linear-gradient": "~57.0.1",
+    "expo-print": "~57.0.1",
+    "expo-sharing": "~57.0.14",
     "expo-splash-screen": "~57.0.6",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",

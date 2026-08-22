@@ -20,10 +20,13 @@ import SearchField from "../components/SearchField";
 import { useScreenTopInset } from "../navigation/tabBarInset";
 import { STATUS_META } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
+import { canOverride } from "../domain/roles";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import { haptics } from "../lib/haptics";
+import { plural } from "../utils/format";
+import { describeError } from "../lib/errors";
 
 /**
  * Marking one checkpoint.
@@ -74,7 +77,8 @@ const STATUS_HINT = {
 export default function DutyMarkingScreen({ route, navigation }) {
   const { dutyId } = route.params;
   const { user } = useAuth();
-  const { duties, records, studentsForDuty, submitDuty, staffName } = useSchoolData();
+  const { duties, records, studentsForDuty, submitDuty, overrideDuty, staffName } =
+    useSchoolData();
   const dialog = useDialog();
   const toast = useToast();
   const insets = useSafeAreaInsets();
@@ -85,7 +89,13 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const students = useMemo(() => studentsForDuty(duty), [duty, studentsForDuty]);
 
   const existing = records[dutyId];
-  const readOnly = duty?.state === "submitted";
+  // A submitted record is final for the teacher who marked it. Oversight
+  // roles may amend it (SRS A6) — the same screen, deliberately, so a
+  // correction is made against the same list the teacher saw rather than a
+  // stripped-down form that hides the rest of the group.
+  const submitted = duty?.state === "submitted";
+  const isOverride = submitted && canOverride(user?.role);
+  const readOnly = submitted && !isOverride;
 
   const [statuses, setStatuses] = useState(existing ? existing.statuses : {});
   const [saving, setSaving] = useState(false);
@@ -139,6 +149,22 @@ export default function DutyMarkingScreen({ route, navigation }) {
   // assigned to whoever it was rostered to. `submitted_by` records who really
   // did it, so this has to be said on screen — a teacher must never submit a
   // colleague's list thinking it was their own class.
+  // Who the record belongs to, and what this correction would actually change
+  // against it. The count drives both the confirmation and whether Save is
+  // worth offering: reopening a record and changing nothing must not write a
+  // correction, stamp `corrected_by`, or raise an audit entry.
+  const markedBy = staffName(existing?.submittedBy);
+  const changedCount = useMemo(() => {
+    if (!isOverride) return 0;
+    const before = existing?.statuses || {};
+    const touched = new Set([...Object.keys(before), ...Object.keys(statuses)]);
+    let n = 0;
+    touched.forEach((id) => {
+      if ((statuses[id] || null) !== (before[id] || null)) n += 1;
+    });
+    return n;
+  }, [isOverride, existing, statuses]);
+
   const covering = !!duty && duty.staffId !== user?.id;
   // Falls back to a generic phrase — the warning matters more than the name,
   // and a duty can outlive the staff row it points at.
@@ -165,6 +191,52 @@ export default function DutyMarkingScreen({ route, navigation }) {
     );
   }
 
+  const handleOverride = async () => {
+    setSaving(true);
+    try {
+      const changed = await overrideDuty(dutyId, statuses, user.id);
+      haptics.success();
+      toast.show(
+        changed === 0
+          ? "No changes to save"
+          : `${plural(changed, "mark")} amended in ${duty.checkpoint}`
+      );
+      navigation.goBack();
+    } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Not saved", message: "Something went wrong while saving this amendment. Your changes have been kept." },
+        "Your changes have been kept. Try again when you have signal."
+      );
+      dialog.alert({
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Not saved",
+        message: shown.message,
+        destructive: !shown.offline,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmOverride = () => {
+    // Never silent, and never one tap. This overwrites a colleague's finished
+    // record, and the person doing it is senior enough that nobody downstream
+    // will question it — so the stop has to happen here.
+    haptics.warn();
+    dialog.confirm({
+      icon: "create-outline",
+      title: markedBy ? `Overrule ${markedBy}'s submission?` : "Overrule this submission?",
+      message: `This will change ${plural(changedCount, "mark")} in ${
+        duty.checkpoint
+      }. The original submitter remains on the record, and this amendment will be attributed to you.`,
+      cancelLabel: "Review",
+      confirmLabel: "Save correction",
+      destructive: true,
+      onConfirm: handleOverride,
+    });
+  };
+
   const handleSubmit = async () => {
     setSaving(true);
     try {
@@ -182,11 +254,16 @@ export default function DutyMarkingScreen({ route, navigation }) {
     } catch (e) {
       // Stay on the screen so the marks aren't lost — a teacher who has just
       // walked a line of forty students must not have to start again.
+      const shown = describeError(
+        e,
+        { title: "Not submitted", message: "Something went wrong saving this. Your marks are still here — try again." },
+        "Your marks are still here. Try again when you have signal."
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Not submitted",
-        message: `${e.message || "Something went wrong saving this."}\n\nYour marks are still here. Try again.`,
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Not submitted",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setSaving(false);
@@ -258,6 +335,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
             </Text>
           </View>
           {readOnly && <Pill label="Locked" icon="lock-closed" tone="neutral" />}
+          {isOverride && <Pill label="Correcting" icon="create" tone="warning" />}
         </View>
 
         {/* One line that answers "where am I up to?" without doing arithmetic
@@ -277,6 +355,17 @@ export default function DutyMarkingScreen({ route, navigation }) {
             )}
           </Text>
         </View>
+
+        {isOverride && (
+          <View style={styles.overrideBanner}>
+            <Ionicons name="create-outline" size={16} color={colors.warning} />
+            <Text style={styles.overrideText} numberOfLines={3}>
+              This checkpoint has already been submitted{markedBy ? " by " : ""}
+              {markedBy ? <Text style={styles.overrideName}>{markedBy}</Text> : null}. Any change
+              you make will be recorded in the audit log and attributed to you.
+            </Text>
+          </View>
+        )}
 
         {!!coveringFor && !readOnly && (
           <View style={styles.coverBanner}>
@@ -357,9 +446,19 @@ export default function DutyMarkingScreen({ route, navigation }) {
         </View>
         {!readOnly && (
           <PrimaryButton
-            title={saving ? "Saving…" : "Submit"}
-            onPress={confirmSubmit}
-            disabled={saving}
+            // Disabled until something actually differs, so "Save" can never
+            // stamp a correction onto a record nobody changed.
+            title={
+              saving
+                ? "Saving…"
+                : !isOverride
+                  ? "Submit"
+                  : changedCount > 0
+                    ? `Save ${plural(changedCount, "change")}`
+                    : "No changes yet"
+            }
+            onPress={isOverride ? confirmOverride : confirmSubmit}
+            disabled={saving || (isOverride && changedCount === 0)}
             style={styles.submitBtn}
           />
         )}
@@ -550,6 +649,31 @@ const styles = StyleSheet.create({
   summaryStrong: { fontFamily: fonts.bold, color: colors.text },
 
   search: { marginHorizontal: layout.gutter, marginBottom: spacing.sm + 2 },
+
+  // Gold rather than the cover banner's deep teal: this is a caution, not an
+  // orientation note, and the two must not be mistaken for each other at a
+  // glance when both can appear on the same screen.
+  overrideBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md - 4,
+    marginHorizontal: layout.gutter,
+    marginBottom: spacing.sm + 2,
+  },
+  overrideText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.warning,
+  },
+  overrideName: { fontFamily: fonts.bold },
 
   coverBanner: {
     flexDirection: "row",

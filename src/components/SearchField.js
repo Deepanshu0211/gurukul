@@ -34,7 +34,11 @@ export default function SearchField({
 }) {
   const [focused, setFocused] = useState(false);
   const inputRef = useRef(null);
-  const active = focused || value.length > 0;
+  // Coerced rather than trusted: an uncontrolled caller passing undefined
+  // would crash the whole screen on `.length`, and a search box is not worth
+  // a white screen.
+  const text = value || "";
+  const active = focused || text.length > 0;
 
   return (
     <View style={[styles.field, focused && styles.fieldFocused, style]}>
@@ -47,7 +51,7 @@ export default function SearchField({
 
       <TextInput
         ref={inputRef}
-        value={value}
+        value={text}
         onChangeText={onChangeText}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -64,13 +68,13 @@ export default function SearchField({
         accessibilityLabel={accessibilityLabel || placeholder}
       />
 
-      {!!hint && value.length > 0 && (
+      {!!hint && text.length > 0 && (
         <Text style={styles.hint} numberOfLines={1}>
           {hint}
         </Text>
       )}
 
-      {value.length > 0 && (
+      {text.length > 0 && (
         <TouchableOpacity
           onPress={() => {
             onChangeText("");
@@ -116,8 +120,16 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: colors.text,
     paddingVertical: 0,
-    // react-native-web only; ignored on native.
-    ...Platform.select({ web: { outlineStyle: "none" }, default: {} }),
+    // Android defaults TextInput to textAlignVertical: "top" — paired with an
+    // explicit lineHeight and no vertical padding, that renders glyphs above
+    // centre and clips their tops against the pill's rounded edge.
+    textAlignVertical: "center",
+    ...Platform.select({
+      android: { includeFontPadding: false },
+      // react-native-web only; ignored on native.
+      web: { outlineStyle: "none" },
+      default: {},
+    }),
   },
   hint: {
     fontFamily: fonts.semibold,

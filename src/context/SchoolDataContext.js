@@ -6,6 +6,7 @@ import {
   fetchAttendance,
   resolveGroup,
   submitDuty as submitDutyToDb,
+  overrideAttendance as overrideAttendanceInDb,
   reassignDuty as reassignDutyInDb,
 } from "../lib/duties";
 
@@ -51,6 +52,8 @@ export function SchoolDataProvider({ children }) {
             statuses: await fetchAttendance(d.id),
             submittedBy: d.submittedBy,
             submittedAt: d.submittedAt,
+            correctedBy: d.correctedBy,
+            correctedAt: d.correctedAt,
           },
         ])
       );
@@ -91,11 +94,13 @@ export function SchoolDataProvider({ children }) {
       const duty = duties.find((d) => d.id === dutyId);
       if (!duty) throw new Error("That duty no longer exists.");
 
+      // `staffId` is no longer sent: migrations/010 resolves the submitter
+      // from the caller's own token. It is still used below for the optimistic
+      // local update, which the next refresh replaces with the server's value.
       await submitDutyToDb({
         dutyId,
         students: resolveGroup(duty, students),
         statuses,
-        staffId,
       });
 
       // Update locally so the UI responds immediately, then reload so every
@@ -107,6 +112,44 @@ export function SchoolDataProvider({ children }) {
       setDuties((prev) =>
         prev.map((d) => (d.id === dutyId ? { ...d, state: "submitted", submittedBy: staffId } : d))
       );
+    },
+    [duties, students]
+  );
+
+  /**
+   * Amend a record that is already submitted (SRS A6).
+   *
+   * Shares one database function with `submitDuty` since migrations/010, which
+   * branches on the duty's own state: pending means submit, submitted means
+   * correct. Keeping two entry points here is still worth it — they update
+   * different local state and say different things to the user — but the app
+   * can no longer ask for the wrong write, because it no longer chooses.
+   */
+  const overrideDuty = useCallback(
+    async (dutyId, statuses, staffId) => {
+      const duty = duties.find((d) => d.id === dutyId);
+      if (!duty) throw new Error("That duty no longer exists.");
+
+      // The database diffs against what is stored and returns how many marks
+      // actually changed — the app no longer has to hold a `before` map and
+      // hope it matches the row it is about to overwrite.
+      const changed = await overrideAttendanceInDb({
+        dutyId,
+        students: resolveGroup(duty, students),
+        statuses,
+      });
+
+      const correctedAt = new Date().toISOString();
+      setRecords((prev) => ({
+        ...prev,
+        [dutyId]: { ...prev[dutyId], statuses, correctedBy: staffId, correctedAt },
+      }));
+      setDuties((prev) =>
+        prev.map((d) =>
+          d.id === dutyId ? { ...d, correctedBy: staffId, correctedAt } : d
+        )
+      );
+      return changed;
     },
     [duties, students]
   );
@@ -134,6 +177,7 @@ export function SchoolDataProvider({ children }) {
       staffById,
       staffName,
       submitDuty,
+      overrideDuty,
       reassignDuty,
     }),
     [
@@ -148,6 +192,7 @@ export function SchoolDataProvider({ children }) {
       staffById,
       staffName,
       submitDuty,
+      overrideDuty,
       reassignDuty,
     ]
   );

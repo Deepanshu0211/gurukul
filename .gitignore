@@ -44,3 +44,19 @@ yarn-error.*
 # Raw source art / video working folders — the app bundles from src/assets
 src/imgs/
 src/vdos/
+
+# graphify — the graph itself is committed so a new session can query it
+# instead of re-reading the tree, but these three are machine-local: absolute
+# interpreter/scan paths and the per-file extraction cache.
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cache/
+# ...and the dated snapshots `graphify update` leaves behind before it rewrites
+# the graph. Same reason: a local safety copy, not a fact about the repo.
+graphify-out/20*/
+graphify-out/*.sig
+
+# Supabase CLI scratch
+supabase/.temp/
+
+graphify-out

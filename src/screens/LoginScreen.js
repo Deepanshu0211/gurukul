@@ -249,6 +249,18 @@ export default function LoginScreen() {
         triggerNotification("Signed in, but no staff record found for this account.");
         return;
       }
+      // Recorded server-side from the caller's own token, so a client can
+      // only ever log its own sign-in. Never blocks the login: a failed audit
+      // write must not keep a teacher out of the app before a checkpoint.
+      // The rejection handler goes to `then`, not `.catch()`. A Postgrest
+      // builder is a thenable, not a Promise: it implements `then()` and
+      // nothing else, so calling `.catch()` on it threw "undefined is not a
+      // function" — from inside a promise, where it surfaced as an unhandled
+      // rejection with no component stack to point at.
+      supabase.rpc("log_sign_in").then(
+        () => {},
+        () => {}
+      );
       login(staffRow);
     } finally {
       setSubmitting(false);
@@ -276,13 +288,13 @@ export default function LoginScreen() {
         >
           <View style={styles.form}>
             <Image
-              source={require("../assets/krishna-bgis-blend.png")}
+              source={require("../assets/newlogo.png")}
               style={styles.heroImage}
               resizeMode="contain"
               accessibilityLabel="Bhaktivedanta Gurukula and International School"
             />
 
-            <Text style={styles.brandTitle}>BGIS</Text>
+            <Text style={styles.brandTitle}>BG-SAAR</Text>
             <Text style={styles.brandSubtitle}>
               Bhaktivedanta Gurukula & International School
             </Text>

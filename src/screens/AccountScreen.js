@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,6 +19,7 @@ import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import { SectionLabel, Divider, Stat, TextAction, PrimaryButton, Chevron } from "../components/ui";
 import { roleLabel } from "../domain/roles";
+import { describeError } from "../lib/errors";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
@@ -32,7 +34,7 @@ const ICON = 18;
 // same number so the hairline begins exactly under the label above it.
 const ROW_INSET = spacing.md + ICON + spacing.sm;
 
-export default function AccountScreen() {
+export default function AccountScreen({ navigation }) {
   const { user, logout, updateUser } = useAuth();
   const { duties, records } = useSchoolData();
   const dialog = useDialog();
@@ -68,11 +70,16 @@ export default function AccountScreen() {
       setEditing(false);
       toast.show(next ? "Phone number saved" : "Phone number cleared");
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Could not save", message: "Your phone number wasn't updated. Try again." },
+        null
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Could not save",
-        message: e.message || "Your phone number wasn't updated. Try again.",
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Could not save",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setSavingPhone(false);
@@ -89,11 +96,16 @@ export default function AccountScreen() {
       updateUser({ photoUrl: url });
       toast.show("Profile photo updated");
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Photo not updated", message: "Something went wrong uploading your photo." },
+        null
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Photo not updated",
-        message: e.message || "Something went wrong uploading your photo.",
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Photo not updated",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     } finally {
       setPhotoBusy(false);
@@ -115,12 +127,17 @@ export default function AccountScreen() {
           updateUser({ photoUrl: null });
           toast.show("Profile photo removed");
         } catch (e) {
-          dialog.alert({
-            icon: "alert-circle-outline",
-            title: "Could not remove",
-            message: e.message || "Your photo wasn't removed. Try again.",
-            destructive: true,
-          });
+          const shown = describeError(
+        e,
+        { title: "Could not remove", message: "Your photo wasn't removed. Try again." },
+        null
+      );
+      dialog.alert({
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Could not remove",
+        message: shown.message,
+        destructive: !shown.offline,
+      });
         } finally {
           setPhotoBusy(false);
         }
@@ -226,6 +243,15 @@ export default function AccountScreen() {
           </View>
         </View> */}
 
+        <SectionLabel>Records</SectionLabel>
+        <View style={styles.group}>
+          <ActionRow
+            icon="receipt-outline"
+            label="Activity log"
+            onPress={() => navigation.navigate("Activity")}
+          />
+        </View>
+
         <SectionLabel>Security</SectionLabel>
         <View style={styles.group}>
           <ActionRow
@@ -260,7 +286,7 @@ export default function AccountScreen() {
             label="About this app"
             onPress={() =>
               dialog.alert({
-                title: "BGIS Attendance",
+                title: "BG-SAAR",
                 message:
                   "Attendance & Student Safety · Pilot build\n\nBhaktivedanta Gurukula & International School",
               })
@@ -472,5 +498,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     color: colors.text,
+    // See SearchField.js — same Android top-alignment clipping fix.
+    textAlignVertical: "center",
+    ...Platform.select({ android: { includeFontPadding: false }, default: {} }),
   },
 });

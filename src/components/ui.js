@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { isOffline, OFFLINE_TITLE, OFFLINE_BODY } from "../lib/errors";
 import {
   colors,
   radius,
@@ -239,6 +240,39 @@ export function EmptyState({ icon, title, body, action, compact }) {
       {!!body && <Text style={styles.emptyBody}>{body}</Text>}
       {action}
     </View>
+  );
+}
+
+/**
+ * The whole-screen "we could not load this" state.
+ *
+ * One component for every screen's load failure, because they used to say
+ * five different things and three of them printed the raw error — which on a
+ * corridor with no signal is a Java stack trace with the database hostname in
+ * it. Offline gets a broken-cloud mark, plain words and a Retry, since that is
+ * the failure this app will actually meet and it has an obvious remedy.
+ *
+ * Anything else keeps its own wording, because "check your wi-fi" is useless
+ * advice for a problem that is not the wi-fi.
+ */
+export function ErrorState({ error, title, onRetry, compact }) {
+  const offline = isOffline(error);
+  return (
+    <EmptyState
+      compact={compact}
+      icon={offline ? "cloud-offline-outline" : "alert-circle-outline"}
+      title={offline ? OFFLINE_TITLE : title || "Something went wrong"}
+      body={offline ? OFFLINE_BODY : undefined}
+      action={
+        onRetry ? (
+          <SecondaryButton
+            title="Try again"
+            onPress={onRetry}
+            style={{ marginTop: spacing.md }}
+          />
+        ) : null
+      }
+    />
   );
 }
 

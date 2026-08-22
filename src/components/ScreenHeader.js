@@ -46,10 +46,13 @@ const styles = StyleSheet.create({
   right: { flexShrink: 0 },
 
   eyebrow: { ...typography.label, marginBottom: 2 },
+  // Semibold at 13, not regular at 12: this line carries the live clock and
+  // the school name, and under a 28pt bold title the lighter weight read as
+  // a caption to be skipped rather than a status line.
   subtitle: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    lineHeight: 16,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    lineHeight: 17,
     color: colors.textMuted,
     marginTop: 3,
   },

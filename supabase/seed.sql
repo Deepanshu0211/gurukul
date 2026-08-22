@@ -38,14 +38,19 @@ on conflict (id) do update
 -- ── STAFF ───────────────────────────────────────────────────────────────────
 -- auth_user_id is filled in by the linking statement further down, once the
 -- matching Supabase Auth users exist.
+-- The domain must match the Auth users exactly (see docs/dev-test-credentials.md).
+-- These rows once read @bgis.org while the Auth accounts were @gurukula.org: the
+-- linking statement at the foot of this file joins on email, so nothing matched,
+-- auth_user_id stayed null, and every policy in 002 silently denied. It fails
+-- quietly in both directions — the app just shows less than it should.
 insert into staff (id, name, role, email, class_key, class_label) values
-  ('t1', 'Krishna Saha Mt',    'teacher',      'krishna.saha@bgis.org', '4|A',      'Class 4 A'),
-  ('t2', 'Ajay Solanki Pr',    'teacher',      'ajay.solanki@bgis.org', '9|BALRAM', 'Class 9 Balram'),
-  ('c1', 'Ashram Coordinator', 'coordinator',  'coordinator@bgis.org',  null, null),
-  ('c2', 'MOD',                'coordinator',  'mod@bgis.org',          null, null),
-  ('m1', 'Principal Office',   'management',   'principal@bgis.org',    null, null),
-  ('a1', 'Admin Desk',         'admin',        'admin@bgis.org',        null, null),
-  ('n1', 'Sister Nurse',       'nurse',        'nurse@bgis.org',        null, null)
+  ('t1', 'Krishna Saha Mt',    'teacher',      'krishna.saha@gurukula.org', '4|A',      'Class 4 A'),
+  ('t2', 'Ajay Solanki Pr',    'teacher',      'ajay.solanki@gurukula.org', '9|BALRAM', 'Class 9 Balram'),
+  ('c1', 'Ashram Coordinator', 'coordinator',  'coordinator@gurukula.org',  null, null),
+  ('c2', 'MOD',                'coordinator',  'mod@gurukula.org',          null, null),
+  ('m1', 'Principal Office',   'management',   'principal@gurukula.org',    null, null),
+  ('a1', 'Admin Desk',         'admin',        'admin@gurukula.org',        null, null),
+  ('n1', 'Sister Nurse',       'nurse',        'nurse@gurukula.org',        null, null)
 on conflict (id) do update
   set name = excluded.name,
       role = excluded.role,

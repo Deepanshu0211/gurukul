@@ -14,6 +14,16 @@ export const fmtTime = (minutes) => {
   return `${h12}:${mm} ${h24 < 12 ? "AM" : "PM"}`;
 };
 
+/** A stored timestamp ("2026-08-20T07:42:11Z") -> "7:42 AM", in local time.
+ *  `fmtTime` above takes minutes-from-midnight; this is for the `submitted_at`
+ *  columns, which are real timestamps. */
+export const fmtClock = (ts) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  return fmtTime(d.getHours() * 60 + d.getMinutes());
+};
+
 /** "Overdue by 12 min" / "Closes in 8 min" — relative beats absolute when
  *  the question is "do I have time?" */
 export const fmtDuration = (minutes) => {
@@ -60,6 +70,10 @@ const parseDay = (iso) => {
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** Today's weekday, e.g. "Friday". Screens used to hardcode this next to the
+ *  time, so every day of the week read as Friday. */
+export const weekdayName = () => WEEKDAY[new Date().getDay()];
+
 /** "2026-08-11" -> "Tuesday, 11 Aug". Today and yesterday get named instead. */
 export const fmtDay = (iso) => {
   const d = parseDay(iso);
@@ -69,6 +83,19 @@ export const fmtDay = (iso) => {
   yesterday.setDate(yesterday.getDate() - 1);
   if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
   return `${WEEKDAY[d.getDay()]}, ${d.getDate()} ${MONTH[d.getMonth()]}`;
+};
+
+/**
+ * "Today" / "Yesterday" / "11 Aug" — for a control that shares its row with
+ * another. The weekday is dropped on purpose: "Tuesday, 11 Aug" is twice the
+ * width for information the screen repeats underneath anyway, and the space
+ * it takes comes straight out of whatever sits beside it.
+ */
+export const fmtDayCompact = (iso) => {
+  const named = fmtDay(iso);
+  if (named === "Today" || named === "Yesterday" || named === "—") return named;
+  const d = parseDay(iso);
+  return `${d.getDate()} ${MONTH[d.getMonth()]}`;
 };
 
 /** Two short lines for a date chip: { top: "FRI", bottom: "8 Aug" }. */

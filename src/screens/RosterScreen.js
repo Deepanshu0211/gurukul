@@ -32,14 +32,15 @@ import {
   Chevron,
   TextAction,
   EmptyState,
-  SecondaryButton,
   StatusTag,
   Row,
+  ErrorState,
 } from "../components/ui";
-import { NOW } from "../data/mockData";
+import { useNow } from "../lib/clock";
+import { describeError } from "../lib/errors";
 import { roleLabel, canReassign } from "../domain/roles";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
-import { fmtTime, plural, initial } from "../utils/format";
+import { fmtTime, plural, initial, weekdayName} from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useAuth } from "../context/AuthContext";
 import { useStudents } from "../lib/students";
@@ -65,6 +66,7 @@ export default function RosterScreen() {
   const { user } = useAuth();
   const dialog = useDialog();
   const toast = useToast();
+  const now = useNow();
   const [tab, setTab] = useState("duties");
   const [query, setQuery] = useState("");
   const [reassigning, setReassigning] = useState(null);
@@ -103,11 +105,16 @@ export default function RosterScreen() {
       await reassignDuty(duty.id, staffId);
       toast.show(`${duty.checkpoint} reassigned to ${staffName(staffId)}`);
     } catch (e) {
+      const shown = describeError(
+        e,
+        { title: "Could not reassign", message: "The duty was not reassigned. Try again." },
+        null
+      );
       dialog.alert({
-        icon: "alert-circle-outline",
-        title: "Could not reassign",
-        message: e.message || "The duty was not reassigned. Try again.",
-        destructive: true,
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.offline ? shown.title : "Could not reassign",
+        message: shown.message,
+        destructive: !shown.offline,
       });
     }
   };
@@ -121,7 +128,7 @@ export default function RosterScreen() {
           setHeaderH((prev) => (Math.abs(prev - h) > 1 ? h : prev));
         }}
       >
-        <ScreenHeader title="Roster" subtitle={`Friday, ${fmtTime(NOW)}`} />
+        <ScreenHeader title="Roster" subtitle={`${weekdayName()}, ${fmtTime(now)}`} />
 
         {/* Same control as the Duties scope switch — this screen used to draw
             its own, with a white selected pill instead of a teal one. */}
@@ -199,8 +206,9 @@ function DutiesTab({
   onScroll,
 }) {
   const q = query.trim().toLowerCase();
+  const now = useNow();
   const withStatus = duties
-    .map((d) => ({ ...d, _status: dutyStatus(d, records, NOW) }))
+    .map((d) => ({ ...d, _status: dutyStatus(d, records, now) }))
     .filter(
       (d) =>
         !q ||
@@ -342,6 +350,7 @@ function StaffTab({ staff: STAFF, duties, bottomInset, query, onScroll }) {
       }
       renderSectionHeader={() => (
         <SectionLabel
+          style={styles.countHead}
           action={
             <TextAction
               label="+ Add"
@@ -454,11 +463,10 @@ function StudentsTab({ bottomInset, query, onScroll }) {
 
   if (error) {
     return (
-      <EmptyState
-        icon="cloud-offline-outline"
+      <ErrorState
+        error={error}
         title="Can't load the register"
-        body={error}
-        action={<SecondaryButton title="Try again" onPress={reload} style={{ marginTop: spacing.sm }} />}
+        onRetry={reload}
       />
     );
   }
@@ -478,6 +486,7 @@ function StudentsTab({ bottomInset, query, onScroll }) {
       windowSize={11}
       ListHeaderComponent={
         <SectionLabel
+          style={styles.countHead}
           action={
             <TextAction
               label="+ Add"
@@ -560,6 +569,13 @@ const styles = StyleSheet.create({
   },
 
   search: { marginTop: spacing.sm },
+
+  // SectionLabel's default 24pt top margin is for separating groups down a
+  // scrolling page — "Your details" from "Security". These two headers are
+  // not separating anything: they sit directly under the pinned search field
+  // and only carry a count and an action, so the default opened a band of
+  // empty background between the field and the first row.
+  countHead: { marginTop: spacing.sm },
 
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 64, gap: spacing.sm },
   centeredText: { ...typography.caption, fontSize: 13, textAlign: "center" },

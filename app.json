@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "BGIS Attendance",
+    "name": "BG-SAAR",
     "slug": "bgis",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -32,7 +32,8 @@
     },
     "plugins": [
       "expo-font",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "expo-sharing"
     ]
   }
 }
