@@ -26,16 +26,18 @@ import ScreenHeader from "../components/ScreenHeader";
 import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import FadeIn from "../components/FadeIn";
+import PrintSheets from "../components/PrintSheets";
 import { SectionLabel, Stat, Divider, Card, StatusTag } from "../components/ui";
 import { useNow } from "../lib/clock";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
-import { fmtTime, fmtClock, plural, weekdayName } from "../utils/format";
+import { fmtTime, fmtClock, plural, weekdayName, todayISO } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useAuth } from "../context/AuthContext";
 import { useResolutions, resolveAlert } from "../lib/alerts";
 import { describeError } from "../lib/errors";
-import { canCloseAlerts } from "../domain/roles";
+import { REPORT_FORMAT } from "../lib/report";
+import { canCloseAlerts, canPrintReports } from "../domain/roles";
 import { useToast } from "../components/Toast";
 import { useDialog } from "../components/Dialog";
 import { haptics } from "../lib/haptics";
@@ -60,6 +62,15 @@ export default function DashboardScreen() {
   // Closing an alert is a written, attributable act (SRS F4) — the nurse can
   // see the board but the remark has to come from a coordinator or above.
   const mayClose = canCloseAlerts(user?.role);
+  // The coordinator's sheet: counts across every checkpoint, then the children
+  // who were not present. A class teacher prints their own class from "My
+  // Class"; nobody else has a route to a printed record without this.
+  const mayPrint = canPrintReports(user?.role);
+  const [printOpen, setPrintOpen] = useState(false);
+  // The day the board is showing, which is not always today: `fetchDuties`
+  // falls back to the most recent day that has duties, and printing today's
+  // date then produces an empty sheet for a screen full of checkpoints.
+  const reportDay = duties[0]?.day || todayISO();
   const [refreshing, setRefreshing] = useState(false);
   const tabInset = useTabContentInset();
   const topInset = useScreenTopInset();
@@ -151,6 +162,19 @@ export default function DashboardScreen() {
           subtitle={`Bhaktivedanta Gurukula & International School · ${weekdayName()}, ${fmtTime(
             now
           )}`}
+          right={
+            mayPrint ? (
+              <TouchableOpacity
+                onPress={() => setPrintOpen(true)}
+                activeOpacity={0.7}
+                style={styles.printBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Print attendance headcount"
+              >
+                <Ionicons name="print-outline" size={20} color={colors.primary} />
+              </TouchableOpacity>
+            ) : null
+          }
         />
 
         {/* The safety number leads: it is the reason the system exists. */}
@@ -316,6 +340,13 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
       </BottomSheet>
+
+      <PrintSheets
+        visible={printOpen}
+        onClose={() => setPrintOpen(false)}
+        day={reportDay}
+        format={REPORT_FORMAT.HEADCOUNT}
+      />
     </SafeAreaView>
   );
 }
@@ -355,6 +386,19 @@ function AlertCard({ alert, onResolve }) {
 }
 
 const styles = StyleSheet.create({
+  // Same trailing icon button as ClassDayScreen's, so "print" is one shape
+  // wherever it appears.
+  printBtn: {
+    width: layout.touch,
+    height: layout.touch,
+    borderRadius: radius.pill,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.gutter },
 

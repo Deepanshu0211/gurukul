@@ -108,6 +108,15 @@ const CSS = `
     white-space: nowrap;
   }
   tbody tr { page-break-inside: avoid; }
+  /* A totals row belongs at the end, once. The print default for tfoot is
+     table-footer-group, which repeats it on every page — the same numbers
+     under a partial table, which reads as a page total that it is not. */
+  tfoot { display: table-row-group; }
+  tfoot td {
+    border-top: 0.4mm solid #000;
+    border-bottom: none;
+    font-weight: 700;
+  }
 
   .num { text-align: right; }
   .c   { text-align: center; }
@@ -124,6 +133,13 @@ const CSS = `
     font-size: ${TYPE.small}pt;
     color: #444;
     line-height: 1.5;
+  }
+  /* The register's key is read before the grid, not after it, so it carries
+     its space below and is never left stranded at the foot of a page. */
+  .key {
+    margin-top: 0;
+    margin-bottom: 2mm;
+    page-break-after: avoid;
   }
   .foot {
     margin-top: 6mm;
@@ -213,7 +229,7 @@ function registerTable(students, checkpoints) {
   </table>`;
 }
 
-const LEGEND = `<div class="legend">
+const LEGEND = `<div class="legend key">
   <b>P</b> present &nbsp;&nbsp; <b>A</b> absent &nbsp;&nbsp; <b>H</b> home &nbsp;&nbsp;
   <b>S</b> sick &nbsp;&nbsp; <b>O</b> outing &nbsp;&nbsp; <b>G</b> Gita Nagari &nbsp;&nbsp;
   <b>V</b> activity &nbsp;&nbsp; <b>Y</b> self study &nbsp;&nbsp;
@@ -269,8 +285,8 @@ export function dayReportHtml({ day, checkpoints, students }, { generatedBy } = 
 </table>
 
 <h2>Register</h2>
-${registerTable(students, checkpoints)}
 ${LEGEND}
+${registerTable(students, checkpoints)}
 ${footer(generatedBy)}`
   );
 }
@@ -353,6 +369,110 @@ ${grid}
 
 <h2>Every exception</h2>
 ${exceptionsTable(exceptions, { showDay: true })}
+${footer(generatedBy)}`
+  );
+}
+
+/**
+ * The coordinator's sheet.
+ *
+ * A class teacher reads a register — thirty names and their marks. A
+ * coordinator reads a headcount: ten checkpoints, seven hundred children, and
+ * the only two questions that fit on a page. Did the numbers add up? If not,
+ * who, and why?
+ *
+ * So there is no student grid here. Counts per checkpoint, then every mark
+ * that was not "present", named and with its reason spelled out in the
+ * school's own wording rather than a letter. On a normal day that is one page
+ * where the register would have been fifteen.
+ *
+ * `strength` is how many children the checkpoint actually covers, not the size
+ * of the school — a residential-only checkpoint excludes day scholars, and a
+ * sheet that ignored that would report a shortfall every single evening.
+ */
+export function headcountReportHtml(
+  { from, to, days, checkpoints, exceptions, totals, byReason },
+  { generatedBy } = {}
+) {
+  // Over a range the checkpoint numbers would restart every day and key back
+  // to nothing, so the day itself becomes the first column instead.
+  const multiDay = days.length > 1;
+
+  const rows = checkpoints
+    .map(
+      (c, i) => `<tr>
+        ${multiDay ? `<td>${esc(fmtDay(c.day))}</td>` : `<td class="c"><b>${i + 1}</b></td>`}
+        <td>${esc(clip(c.name, 24))}</td>
+        <td>${esc(fmtTime(c.startMin))}</td>
+        <td>${esc(clip(c.group, 24))}</td>
+        <td class="num">${c.strength}</td>
+        <td class="num">${c.present}</td>
+        <td class="num${c.absent ? " absent" : ""}">${c.absent}</td>
+        <td class="num">${c.elsewhere}</td>
+      </tr>`
+    )
+    .join("");
+
+  const reasonRows = byReason
+    .map(
+      (r) => `<tr>
+        <td class="${r.status === "A" ? "absent" : "other"}">${esc(r.label)}</td>
+        <td class="num">${r.marks}</td>
+      </tr>`
+    )
+    .join("");
+
+  const counted = `${totals.present} of ${totals.strength} present`;
+
+  return page(
+    `${header(
+      "Attendance headcount",
+      `${multiDay ? `${fmtDay(from)} to ${fmtDay(to)}` : fmtDay(from)} · ${
+        checkpoints.length
+      } checkpoints · ${counted}`
+    )}
+
+<h2>Headcount</h2>
+${
+  checkpoints.length
+    ? `<table>
+  <thead><tr>
+    <th${multiDay ? ' style="width:16%"' : ' class="c" style="width:8mm"'}>${multiDay ? "Day" : "#"}</th>
+    <th style="width:${multiDay ? 22 : 28}%">Checkpoint</th>
+    <th style="width:12%">Time</th>
+    <th style="width:${multiDay ? 18 : 22}%">Group</th>
+    <th class="num" style="width:10%">Strength</th>
+    <th class="num" style="width:10%">Present</th>
+    <th class="num" style="width:9%">Absent</th>
+    <th class="num" style="width:9%">Other</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr>
+    <td colspan="4">Total</td>
+    <td class="num">${totals.strength}</td>
+    <td class="num">${totals.present}</td>
+    <td class="num${totals.absent ? " absent" : ""}">${totals.absent}</td>
+    <td class="num">${totals.elsewhere}</td>
+  </tr></tfoot>
+</table>`
+    : `<div class="none-row">No checkpoint was submitted in this period.</div>`
+}
+
+<h2>By reason</h2>
+${
+  byReason.length
+    ? `<table>
+  <thead><tr>
+    <th style="width:70%">Reason</th>
+    <th class="num" style="width:30%">Marks</th>
+  </tr></thead>
+  <tbody>${reasonRows}</tbody>
+</table>`
+    : `<div class="none-row">Every child was present at every checkpoint.</div>`
+}
+
+<h2>Not present (${exceptions.length})</h2>
+${exceptionsTable(exceptions, { showDay: multiDay })}
 ${footer(generatedBy)}`
   );
 }

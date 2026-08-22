@@ -147,3 +147,79 @@ export async function fetchRangeReport(from, to) {
     ),
   };
 }
+
+/**
+ * The coordinator's sheet: counts per checkpoint, and names only for the marks
+ * that are not "present".
+ *
+ * Two requests regardless of range. The totals come from `attendance_headcount`
+ * (migration 011), which groups server-side — a day is seven thousand marks and
+ * fetching them to add up in the client is eight round trips for eight numbers.
+ * The exceptions are fetched in full because they are the only rows anyone
+ * reads by name, and there are a few dozen of them in a week.
+ */
+export async function fetchHeadcountReport(from, to) {
+  const { data, error } = await supabase.rpc("attendance_headcount", {
+    p_from: from,
+    p_to: to,
+  });
+  if (error) throw new Error(error.message);
+
+  // PostgREST serialises bigint counts as JSON numbers, but a driver that ever
+  // hands them back as strings would turn every total into concatenation.
+  const checkpoints = (data || []).map((r) => ({
+    day: r.day,
+    dutyId: r.duty_id,
+    name: r.checkpoint,
+    startMin: r.start_min,
+    group: r.group_label,
+    strength: Number(r.strength),
+    present: Number(r.present),
+    absent: Number(r.absent),
+    elsewhere: Number(r.elsewhere),
+  }));
+
+  const exceptions = await fetchAll(() =>
+    detail()
+      .gte("day", from)
+      .lte("day", to)
+      .not("status", "is", null)
+      .order("day")
+      .order("start_min")
+      .order("roll_no")
+  );
+
+  const totals = checkpoints.reduce(
+    (t, c) => ({
+      strength: t.strength + c.strength,
+      present: t.present + c.present,
+      absent: t.absent + c.absent,
+      elsewhere: t.elsewhere + c.elsewhere,
+    }),
+    { strength: 0, present: 0, absent: 0, elsewhere: 0 }
+  );
+
+  // How many of each reason. Counted from the exception rows already in hand
+  // rather than a second query, and labelled with `status_label` so the sheet
+  // prints the school's own wording rather than a letter.
+  const reasons = new Map();
+  for (const r of exceptions) {
+    const hit = reasons.get(r.status) || { status: r.status, label: r.status_label, marks: 0 };
+    hit.marks += 1;
+    reasons.set(r.status, hit);
+  }
+
+  return {
+    from,
+    to,
+    days: [...new Set(checkpoints.map((c) => c.day))].sort(),
+    checkpoints,
+    exceptions,
+    totals,
+    // Absent leads whatever its count, because it is the only one that means
+    // nobody knows where the child is. The rest follow by size.
+    byReason: [...reasons.values()].sort((a, b) =>
+      a.status === "A" ? -1 : b.status === "A" ? 1 : b.marks - a.marks
+    ),
+  };
+}

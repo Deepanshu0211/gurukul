@@ -17,17 +17,14 @@ import ScreenHeader from "../components/ScreenHeader";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import CalendarSheet from "../components/CalendarSheet";
 import SearchField from "../components/SearchField";
-import { EmptyState, PrimaryButton, ErrorState } from "../components/ui";
+import { EmptyState, ErrorState } from "../components/ui";
 import { fmtTime, fmtDay, fmtDayCompact, fmtClock, plural, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDayAttendance, useMarkingTotals } from "../lib/history";
 import { resolveGroup } from "../lib/duties";
 import { useStudentHistory, RANGES } from "../lib/studentHistory";
-import { buildReport, printReport, weekStart, addDays } from "../lib/report";
-import { describeError } from "../lib/errors";
-import { useDialog } from "../components/Dialog";
-import { useToast } from "../components/Toast";
+import PrintSheets from "../components/PrintSheets";
 import { STATUS_META } from "../data/mockData";
 
 /**
@@ -93,12 +90,8 @@ export default function ClassDayScreen() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [infoFor, setInfoFor] = useState(null);
-  // One sheet at a time: null | "export" | "range" | "from" | "to". Stacking a
-  // calendar modal on top of the sheet that opened it is unreliable on
-  // Android and confusing anywhere, so the flow steps between them instead.
-  const [sheet, setSheet] = useState(null);
-  const [exporting, setExporting] = useState(false);
-  const [range, setRange] = useState({ from: null, to: null });
+  // The print flow owns its own steps and dates; this is only whether it is up.
+  const [printOpen, setPrintOpen] = useState(false);
   const [query, setQuery] = useState("");
   // Which status floats to the top. null = the register's own order, which is
   // by roll number and is what a teacher reading down a printed list expects.
@@ -110,8 +103,6 @@ export default function ClassDayScreen() {
   const [searchTop, setSearchTop] = useState(0);
   const scrollY = useRef(new Animated.Value(0)).current;
 
-  const dialog = useDialog();
-  const toast = useToast();
 
   const isPast = !!selectedDay && selectedDay !== liveDay;
   const past = useDayAttendance(isPast ? selectedDay : null);
@@ -228,45 +219,6 @@ export default function ClassDayScreen() {
 
   const rec = activeDuty ? records[activeDuty.id] : null;
 
-  /** Builds the sheet, then either prints it or hands it to the share sheet. */
-  const runExport = async (from, to) => {
-    if (exporting) return;
-    setExporting(true);
-    try {
-      const report = await buildReport({ from, to, generatedBy: user?.name });
-      if (report.empty) {
-        setSheet(null);
-        dialog.alert({
-          icon: "document-outline",
-          title: "Nothing to print",
-          message:
-            from === to
-              ? "No checkpoint was submitted on this day."
-              : "No checkpoint was submitted between these dates.",
-        });
-        return;
-      }
-      await printReport(report.html);
-      setSheet(null);
-    } catch (e) {
-      const shown = describeError(
-        e,
-        { title: "Could not create the PDF", message: "Something went wrong building the report." },
-        null
-      );
-      dialog.alert({
-        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
-        title: shown.offline ? shown.title : "Could not create the PDF",
-        message: shown.message,
-        destructive: !shown.offline,
-      });
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const thisWeek = { from: weekStart(day), to: addDays(weekStart(day), 6) };
-
   // Purely native-driven now: nothing about this animation needs a value read
   // back on the JS thread, so there is no listener and no per-frame setState.
   const onScroll = useMemo(
@@ -316,7 +268,7 @@ export default function ClassDayScreen() {
         }
         right={
           <TouchableOpacity
-            onPress={() => setSheet("export")}
+            onPress={() => setPrintOpen(true)}
             activeOpacity={0.7}
             style={styles.printBtn}
             accessibilityRole="button"
@@ -570,96 +522,10 @@ export default function ClassDayScreen() {
         ))}
       </BottomSheet>
 
-      <BottomSheet
-        visible={sheet === "export"}
-        onClose={() => !exporting && setSheet(null)}
-        title="Print attendance"
-        subtitle="A4 · one row per student"
-        showClose
-      >
-        {exporting ? (
-          <View style={styles.exportBusy}>
-            <ActivityIndicator color={colors.primary} />
-            <Text style={typography.caption}>Building the sheet…</Text>
-          </View>
-        ) : (
-          <>
-            {/* Each row says the dates it will use, so nothing depends on
-                remembering what the screen behind the sheet is set to. The
-                print dialog is also where "Save as PDF" lives, so one verb
-                covers printing and saving. */}
-            <SheetOption
-              icon="today-outline"
-              label="Print this day"
-              hint={fmtDay(day)}
-              onPress={() => runExport(day, day)}
-            />
-            <SheetOption
-              icon="calendar-outline"
-              label="Print this week"
-              hint={`${fmtDayCompact(thisWeek.from)} to ${fmtDayCompact(thisWeek.to)}`}
-              onPress={() => runExport(thisWeek.from, thisWeek.to)}
-            />
-            <SheetOption
-              icon="calendar-number-outline"
-              label="Choose dates"
-              hint="Any two days"
-              onPress={() => {
-                setRange({ from: day, to: day });
-                setSheet("range");
-              }}
-            />
-          </>
-        )}
-      </BottomSheet>
-
-      {/* Two dates and one button. Deliberately not a tap-start-then-tap-end
-          range calendar: that mode has no visible state between the two taps,
-          and getting it wrong looks like the app ignoring you. */}
-      <BottomSheet
-        visible={sheet === "range"}
-        onClose={() => !exporting && setSheet(null)}
-        title="Choose dates"
-        subtitle="Both days are included"
-        showClose
-      >
-        {exporting ? (
-          <View style={styles.exportBusy}>
-            <ActivityIndicator color={colors.primary} />
-            <Text style={typography.caption}>Building the sheet…</Text>
-          </View>
-        ) : (
-          <>
-            <SheetOption
-              icon="calendar-outline"
-              label="From"
-              hint={fmtDay(range.from || day)}
-              onPress={() => setSheet("from")}
-            />
-            <SheetOption
-              icon="calendar-outline"
-              label="To"
-              hint={fmtDay(range.to || day)}
-              onPress={() => setSheet("to")}
-            />
-            <PrimaryButton
-              title="Print"
-              icon="print-outline"
-              onPress={() => runExport(range.from || day, range.to || day)}
-              style={{ marginTop: spacing.md }}
-            />
-          </>
-        )}
-      </BottomSheet>
-
-      <CalendarSheet
-        visible={sheet === "from" || sheet === "to"}
-        selected={(sheet === "from" ? range.from : range.to) || day}
-        onSelect={(picked) => {
-          setRange((prev) => ({ ...prev, [sheet]: picked }));
-          setSheet("range");
-        }}
-        onClose={() => setSheet("range")}
+      <PrintSheets
+        visible={printOpen}
+        onClose={() => setPrintOpen(false)}
+        day={day}
       />
 
       <StudentInfoSheet
@@ -1129,8 +995,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  exportBusy: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.lg },
-
   histHead: {
     flexDirection: "row",
     alignItems: "center",

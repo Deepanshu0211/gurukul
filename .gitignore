@@ -51,6 +51,12 @@ src/vdos/
 graphify-out/.graphify_python
 graphify-out/.graphify_root
 graphify-out/cache/
+# ...and the dated snapshots `graphify update` leaves behind before it rewrites
+# the graph. Same reason: a local safety copy, not a fact about the repo.
+graphify-out/20*/
+graphify-out/*.sig
 
 # Supabase CLI scratch
 supabase/.temp/
+
+graphify-out

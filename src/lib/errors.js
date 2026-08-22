@@ -72,6 +72,29 @@ export function isDenied(e) {
   );
 }
 
+/**
+ * The database is behind the app: it is being asked for a function or column
+ * that no migration has created yet. PostgREST reports both as "… in the
+ * schema cache" — PGRST202 for a missing function, PGRST204 for a column.
+ *
+ * Worth its own words because it is the one failure here that no amount of
+ * retrying will clear and nobody in the building can fix from the app. It
+ * means a file in `supabase/migrations` was written but never run, and saying
+ * that turns a support call into a two-minute paste.
+ *
+ * Matched on the text as well as the code: several call sites re-throw as
+ * `new Error(error.message)`, which keeps the wording and drops the code.
+ */
+export function isNotDeployed(e) {
+  const t = text(e);
+  return (
+    e?.code === "PGRST202" ||
+    e?.code === "PGRST204" ||
+    t.includes("schema cache") ||
+    t.includes("could not find the function")
+  );
+}
+
 export const OFFLINE_TITLE = "You're offline";
 export const OFFLINE_BODY =
   "This phone can't reach the school server. Check your wi-fi or mobile data, then try again.";
@@ -92,6 +115,15 @@ export function describeError(e, fallback, keep) {
       offline: true,
       title: OFFLINE_TITLE,
       message: keep ? `${OFFLINE_BODY}\n\n${keep}` : OFFLINE_BODY,
+    };
+  }
+  if (isNotDeployed(e)) {
+    return {
+      offline: false,
+      title: "The server is missing an update",
+      message:
+        "This part of the app needs a database update that has not been applied yet. " +
+        "Whoever set up the school server needs to run the latest file in supabase/migrations.",
     };
   }
   if (isDenied(e)) {

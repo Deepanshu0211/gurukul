@@ -67,5 +67,20 @@ export const canOverride = (role) => isOversight(role);
 /** Closing a safety alert with a written remark (SRS F4). */
 export const canCloseAlerts = (role) => isOversight(role);
 
+/**
+ * Printing the school-wide headcount.
+ *
+ * A class teacher already prints their own class from "My Class"; this is the
+ * sheet that spans every checkpoint and every child, so it follows oversight
+ * rather than being granted separately. The nurse is excluded for the same
+ * reason they cannot close an alert — they read the board, they do not file
+ * the record.
+ *
+ * Not a security boundary: the marks themselves are readable school-wide by
+ * any staff login since migration 005, and `attendance_headcount` counts under
+ * the caller's own RLS. This decides who is OFFERED the button.
+ */
+export const canPrintReports = (role) => isOversight(role);
+
 /** Whether the Duties list should default to "my duties only". */
 export const defaultsToOwnDuties = (role) => role === ROLES.TEACHER;

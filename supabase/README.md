@@ -17,8 +17,7 @@ staging copy, or recovery if the current one is lost.
 | `migrations/008_activity_and_alerts.sql` | Every staff action; tiered reading; `alert_resolutions` |
 | `migrations/009_reporting.sql` | `attendance_detail` view and per-student report functions |
 | `migrations/010_submit_duty_atomic.sql` | Submitting a checkpoint becomes one transaction |
-| `migrations/008_activity_and_alerts.sql` | Every staff action logged, tiered by severity; `alert_resolutions` |
-| `migrations/009_reporting.sql` | `attendance_detail` view + per-student history functions |
+| `migrations/011_headcount.sql` | `attendance_headcount()` — counts per checkpoint for the printed sheet |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
 | `../docs/data/students_415_insert.sql` | The 415-student register |
 
@@ -27,7 +26,7 @@ staging copy, or recovery if the current one is lost.
 **1. Create the project** — region Mumbai (closest to the school; keeps latency
 low and data in-country, which SRS §14 P2 asks for).
 
-**2. Run the migrations in order** in the SQL Editor: `001` … `010`.
+**2. Run the migrations in order** in the SQL Editor: `001` … `011`.
 
 `005` is what makes the app's "Whole school" view and cover marking work. Until
 it is run, the database still answers with only the signed-in teacher's own
@@ -85,6 +84,8 @@ reason. After applying, sign in as a real user and confirm both directions:
 | Submit twice with identical marks | second returns `changed = 0`, no audit rows |
 | Teacher reads `audit_log` after submitting | their own entry only |
 | Teacher reads an entry for a duty that is not theirs | **empty** |
+| `attendance_headcount()` as a coordinator | one row per submitted checkpoint |
+| …and `strength` = `present` + `absent` + `elsewhere` | on every row |
 | Teacher B covers A's duty; A reads the log | sees B's submission |
 | Teacher changes their phone | logged `routine`; coordinator can't see it, admin can |
 | Coordinator resolves an alert; app restarts | the remark is still there |
