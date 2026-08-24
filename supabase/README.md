@@ -18,6 +18,11 @@ staging copy, or recovery if the current one is lost.
 | `migrations/009_reporting.sql` | `attendance_detail` view and per-student report functions |
 | `migrations/010_submit_duty_atomic.sql` | Submitting a checkpoint becomes one transaction |
 | `migrations/011_headcount.sql` | `attendance_headcount()` — counts per checkpoint for the printed sheet |
+| `migrations/012_close_register_to_non_staff.sql` | Students and staff readable only by accounts that HAVE a staff row |
+| `migrations/013_staff_requests.sql` | Teachers ask for access; a coordinator approves. Role is always `teacher` |
+| `migrations/014_request_on_submit.sql` | The request reaches the queue when it is sent, before the email is confirmed |
+| `migrations/015_null_safe_role_guards.sql` | `my_role()` returning NULL no longer slips past a role check |
+| `migrations/016_approve_with_class.sql` | A coordinator can assign the teacher's class in the same tap |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
 | `../docs/data/students_415_insert.sql` | The 415-student register |
 
@@ -26,7 +31,7 @@ staging copy, or recovery if the current one is lost.
 **1. Create the project** — region Mumbai (closest to the school; keeps latency
 low and data in-country, which SRS §14 P2 asks for).
 
-**2. Run the migrations in order** in the SQL Editor: `001` … `011`.
+**2. Run the migrations in order** in the SQL Editor: `001` … `016`.
 
 `005` is what makes the app's "Whole school" view and cover marking work. Until
 it is run, the database still answers with only the signed-in teacher's own
@@ -84,6 +89,26 @@ reason. After applying, sign in as a real user and confirm both directions:
 | Submit twice with identical marks | second returns `changed = 0`, no audit rows |
 | Teacher reads `audit_log` after submitting | their own entry only |
 | Teacher reads an entry for a duty that is not theirs | **empty** |
+| Teacher reads `students` | 415 rows |
+| A signed-up account with no `staff` row reads `students` | **empty** |
+| …and reads `staff` | **empty** |
+| That account calls `request_staff_access(…)` | a `pending` row |
+| …then writes `staff_requests` directly | **rejected** |
+| …then calls `approve_staff_request` on itself | **rejected** (42501) |
+| A teacher calls `approve_staff_request` | **rejected** (42501) |
+| A coordinator approves it | staff row, role `teacher` |
+| A coordinator approves the same request twice | **rejected** |
+| Anon (no token) calls `submit_access_request(…)` | succeeds, one row |
+| …calls it twice for one address | still one row |
+| …for an address that is already staff | succeeds, writes **nothing** |
+| A confirmed account calls `link_staff_account()` | claims its own row only |
+| A different account calls it for that row | **null**, row unchanged |
+| A signed-in account with NO staff row calls `approve_staff_request` on its own request | **rejected** (42501) |
+| Approve with `'4|A'` | staff row, `class_label` = `Class 4 A` |
+| Approve with `'99|ZZ'` | **rejected**, and no staff row created |
+| Approve with no class | staff row, `class_key` null |
+| That teacher reads their own class's attendance on another teacher's duty | succeeds |
+| …reads a different class | **empty** |
 | `attendance_headcount()` as a coordinator | one row per submitted checkpoint |
 | …and `strength` = `present` + `absent` + `elsewhere` | on every row |
 | Teacher B covers A's duty; A reads the log | sees B's submission |

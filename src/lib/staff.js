@@ -37,6 +37,25 @@ export async function fetchStaff() {
   return (data || []).map(fromRow);
 }
 
+/**
+ * The staff row for an email, or null when there is none.
+ *
+ * Separate from `fetchStaffByEmail` because "no row" stopped being an error
+ * when self-registration landed: a confirmed Auth account with no staff row is
+ * the normal state of every teacher waiting for a coordinator. `single()`
+ * reports that as PGRST116, which the caller would have to unpick to tell it
+ * apart from a real failure.
+ */
+export async function fetchStaffMaybeByEmail(email) {
+  const { data, error } = await supabase
+    .from("staff")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return fromRow(data);
+}
+
 export async function fetchStaffByEmail(email) {
   const { data, error } = await supabase.from("staff").select("*").eq("email", email).single();
   if (error) throw error;

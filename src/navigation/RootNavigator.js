@@ -8,6 +8,8 @@ import { colors } from "../theme/theme";
 import { useAuth } from "../context/AuthContext";
 import AppTabBar from "./AppTabBar";
 import LoginScreen from "../screens/LoginScreen";
+import RegisterScreen from "../screens/RegisterScreen";
+import PendingScreen from "../screens/PendingScreen";
 import DutiesScreen from "../screens/DutiesScreen";
 import DutyMarkingScreen from "../screens/DutyMarkingScreen";
 import DashboardScreen from "../screens/DashboardScreen";
@@ -132,8 +134,28 @@ function RoleTabs({ role }) {
   );
 }
 
+/**
+ * Signing in, and asking to be let in. A stack rather than a bare screen,
+ * because "Request access" has to lead somewhere and a modal would put the
+ * form on top of the login it is an alternative to.
+ */
+function AuthStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: "transparent" },
+        animation: "slide_from_right",
+      }}
+    >
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Register" component={RegisterScreen} />
+    </Stack.Navigator>
+  );
+}
+
 export default function RootNavigator() {
-  const { user, restoring } = useAuth();
+  const { user, pending, restoring } = useAuth();
 
   // Blank while a stored session is being checked — brief, and avoids showing
   // the login screen to someone who is already signed in.
@@ -143,7 +165,17 @@ export default function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      {user ? <RoleTabs role={user.role} /> : <LoginScreen />}
+      {/* Three states, not two. `pending` is an account that exists and is
+          nobody yet — someone who signed up and is waiting on a coordinator.
+          It gets one screen, and what actually stops it reading anything is
+          migration 012, not this branch. */}
+      {user ? (
+        <RoleTabs role={user.role} />
+      ) : pending ? (
+        <PendingScreen />
+      ) : (
+        <AuthStack />
+      )}
     </NavigationContainer>
   );
 }
