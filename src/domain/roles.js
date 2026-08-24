@@ -82,5 +82,21 @@ export const canCloseAlerts = (role) => isOversight(role);
  */
 export const canPrintReports = (role) => isOversight(role);
 
+/**
+ * Deciding an access request — turning somebody who signed up into staff.
+ *
+ * Coordinator and admin, deliberately NOT management. Approving is the act
+ * that creates a login, and the person who does it is the one whose name ends
+ * up in the audit log beside it; the MOD reads the board, they do not staff
+ * the school.
+ *
+ * What an approval can GRANT is not decided here and cannot be: migration 013
+ * hardcodes the new row's role to `teacher` and offers no parameter for
+ * anything else. A coordinator cannot mint a coordinator however this
+ * predicate is edited, which is the point of putting that rule in the
+ * database rather than in this file.
+ */
+export const canApproveStaff = (role) => role === ROLES.COORDINATOR || role === ROLES.ADMIN;
+
 /** Whether the Duties list should default to "my duties only". */
 export const defaultsToOwnDuties = (role) => role === ROLES.TEACHER;

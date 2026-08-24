@@ -35,10 +35,12 @@ import {
   StatusTag,
   Row,
   ErrorState,
+  PrimaryButton,
 } from "../components/ui";
 import { useNow } from "../lib/clock";
+import { usePendingRequests, approveRequest, rejectRequest } from "../lib/access";
 import { describeError } from "../lib/errors";
-import { roleLabel, canReassign } from "../domain/roles";
+import { roleLabel, canReassign, canApproveStaff } from "../domain/roles";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime, plural, initial, weekdayName} from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
@@ -57,6 +59,7 @@ export default function RosterScreen() {
   const {
     duties: DUTIES,
     staff: STAFF,
+    students: STUDENTS,
     records,
     studentsForDuty,
     reassignDuty,
@@ -162,6 +165,9 @@ export default function RosterScreen() {
         <StaffTab
           staff={STAFF}
           duties={DUTIES}
+          students={STUDENTS}
+          mayApprove={canApproveStaff(user?.role)}
+          onStaffChanged={refresh}
           bottomInset={tabInset}
           query={query}
           onScroll={onScroll}
@@ -321,9 +327,122 @@ function DutiesTab({
   );
 }
 
-function StaffTab({ staff: STAFF, duties, bottomInset, query, onScroll }) {
+function StaffTab({
+  staff: STAFF,
+  duties,
+  students,
+  mayApprove,
+  onStaffChanged,
+  bottomInset,
+  query,
+  onScroll,
+}) {
   const dialog = useDialog();
+  const toast = useToast();
   const dutiesFor = (id) => duties.filter((d) => d.staffId === id).length;
+
+  // Only fetched for the roles that can act on it: to everyone else the queue
+  // is not "empty", it does not exist, and 013's read policy agrees.
+  const { requests, error: requestError, reload: reloadRequests } = usePendingRequests(mayApprove);
+  // Guards a double tap on a slow connection, which would otherwise send two
+  // approvals and surface the second as "already decided".
+  const [deciding, setDeciding] = useState(null);
+  // The request whose approval sheet is open, the class picked in it, and
+  // whether the class list is showing on top.
+  const [approving, setApproving] = useState(null);
+  const [classKey, setClassKey] = useState(null);
+  const [pickingClass, setPickingClass] = useState(false);
+
+  const decide = async (req, action) => {
+    if (deciding) return;
+    setDeciding(req.id);
+    try {
+      if (action === "approve") {
+        const staff = await approveRequest(req.id, classKey);
+        toast.show(`${staff?.name || req.name} can now sign in as a teacher`);
+        // The new row has to reach the directory, or the person a coordinator
+        // just approved is invisible on the screen that approved them.
+        onStaffChanged?.();
+      } else {
+        await rejectRequest(req.id, null);
+        toast.show(`Request from ${req.name} declined`);
+      }
+      await reloadRequests();
+    } catch (e) {
+      const shown = describeError(e, {
+        title: "Could not update the request",
+        message: "Something went wrong. Try again in a moment.",
+      });
+      dialog.alert({
+        icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+        title: shown.title,
+        message: shown.message,
+        destructive: !shown.offline,
+      });
+      await reloadRequests();
+    } finally {
+      setDeciding(null);
+      setApproving(null);
+    }
+  };
+
+  const detail = (req) =>
+    `${req.email}` +
+    (req.phone ? `
+${req.phone}` : "") +
+    (req.note ? `
+
+“${req.note}”` : "");
+
+  /**
+   * Every class that has students in it, with whoever already teaches it.
+   *
+   * Built from the register rather than a fixed list, so a class the school
+   * adds appears here without a code change. Showing the current teacher is
+   * why this is not just a list of keys: two staff sharing a class is allowed
+   * (a class teacher and an assistant), so the coordinator needs to see it
+   * rather than be stopped by it.
+   */
+  const classes = useMemo(() => {
+    const byKey = new Map();
+    for (const st of students || []) {
+      if (!byKey.has(st.key)) byKey.set(st.key, { key: st.key, label: st.label, students: 0 });
+      byKey.get(st.key).students += 1;
+    }
+    for (const c of byKey.values()) {
+      c.teacher = (STAFF || []).find((m) => m.classKey === c.key)?.name || null;
+    }
+    return [...byKey.values()].sort((a, b) => {
+      const [ga, sa] = a.key.split("|");
+      const [gb, sb] = b.key.split("|");
+      return Number(ga) - Number(gb) || sa.localeCompare(sb);
+    });
+  }, [students, STAFF]);
+
+  /**
+   * Approving is a sheet, not a dialog, because a class has to be chosen and
+   * `Dialog` has room for a message and two buttons. Declining stays its own
+   * confirm: `Dialog`'s cancel is a dismissal that the backdrop also fires, so
+   * "Decline" in that slot would turn a stray tap into a decision about
+   * somebody's job.
+   */
+  const openRequest = (req) => {
+    setApproving(req);
+    setClassKey(null);
+    setPickingClass(false);
+  };
+
+  const declineRequest = (req) =>
+    dialog.confirm({
+      icon: "close-circle-outline",
+      title: `Decline ${req.name}?`,
+      message: `${detail(req)}
+
+They keep their sign-in but see nothing, and can ask again.`,
+      confirmLabel: "Decline",
+      destructive: true,
+      onConfirm: () => decide(req, "reject"),
+    });
 
   const q = query.trim().toLowerCase();
   const filtered = q
@@ -335,9 +454,22 @@ function StaffTab({ staff: STAFF, duties, bottomInset, query, onScroll }) {
       )
     : STAFF;
 
+  // The queue leads. It is the only thing on this screen that is WAITING on
+  // the person reading it — a new teacher cannot mark a checkpoint until one
+  // of these is tapped — so it sits above a directory that is merely true.
+  const sections = [
+    ...(mayApprove && requests.length
+      ? [{ key: "requests", kind: "requests", data: requests }]
+      : []),
+    { key: "staff", kind: "staff", data: filtered },
+  ];
+
+  const chosen = classes.find((c) => c.key === classKey) || null;
+
   return (
+    <>
     <SectionList
-      sections={[{ title: "", data: filtered }]}
+      sections={sections}
       keyExtractor={(s) => s.id}
       contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
       showsVerticalScrollIndicator={false}
@@ -348,7 +480,17 @@ function StaffTab({ staff: STAFF, duties, bottomInset, query, onScroll }) {
       ListEmptyComponent={
         <EmptyState icon="search-outline" title="No match" body={`No staff member matches “${query}”.`} compact />
       }
-      renderSectionHeader={() => (
+      ListHeaderComponent={
+        requestError ? (
+          <Text style={[typography.caption, styles.requestError]}>{requestError}</Text>
+        ) : null
+      }
+      renderSectionHeader={({ section }) =>
+        section.kind === "requests" ? (
+          <SectionLabel style={styles.countHead} count={requests.length} tone="due">
+            Access requests
+          </SectionLabel>
+        ) : (
         <SectionLabel
           style={styles.countHead}
           action={
@@ -367,8 +509,19 @@ function StaffTab({ staff: STAFF, duties, bottomInset, query, onScroll }) {
         >
           {q ? `${filtered.length} of ${STAFF.length} staff` : `${STAFF.length} staff`}
         </SectionLabel>
-      )}
-      renderItem={({ item }) => {
+        )
+      }
+      renderItem={({ item, section }) => {
+        if (section.kind === "requests") {
+          return (
+            <RequestRow
+              request={item}
+              busy={deciding === item.id}
+              onOpen={() => openRequest(item)}
+              onDecline={() => declineRequest(item)}
+            />
+          );
+        }
         const n = dutiesFor(item.id);
         return (
           <Row
@@ -403,6 +556,151 @@ function StaffTab({ staff: STAFF, duties, bottomInset, query, onScroll }) {
         );
       }}
     />
+
+    {/* Approving, with the one decision that has to be made at the same time. */}
+    <BottomSheet
+      visible={!!approving && !pickingClass}
+      onClose={() => !deciding && setApproving(null)}
+      title={approving?.name}
+      subtitle={approving?.email}
+      showClose
+      scroll
+    >
+      {!!approving?.phone && (
+        <Text style={[typography.caption, styles.approveLine]}>{approving.phone}</Text>
+      )}
+      {!!approving?.note && (
+        <Text style={[typography.caption, styles.approveLine]}>“{approving.note}”</Text>
+      )}
+
+      <SectionLabel style={styles.countHead}>Class teacher for</SectionLabel>
+      <SheetOption
+        icon="school-outline"
+        label={chosen ? chosen.label : "No class"}
+        hint={
+          chosen
+            ? chosen.teacher
+              ? `Currently ${chosen.teacher} · ${plural(chosen.students, "student")}`
+              : plural(chosen.students, "student")
+            : "Duty staff with no class of their own"
+        }
+        onPress={() => setPickingClass(true)}
+        trailing={<Ionicons name="chevron-forward" size={16} color={colors.icon} />}
+      />
+
+      {/* Said before the tap, not after. A class is a second grant: 004 opens
+          that class's attendance across every checkpoint, whoever marked it. */}
+      <Text style={[typography.caption, styles.approveWarn]}>
+        Approving creates a teacher login. They will be able to see every student&apos;s
+        attendance
+        {chosen ? `, and read ${chosen.label} across every checkpoint` : ""}.
+      </Text>
+
+      <PrimaryButton
+        title={deciding ? "Approving…" : "Approve"}
+        icon="checkmark"
+        onPress={() => decide(approving, "approve")}
+        disabled={!!deciding}
+        style={{ marginTop: spacing.md }}
+      />
+    </BottomSheet>
+
+    {/* Built from the register, so a class the school adds shows up here on
+        its own rather than needing a code change. */}
+    <BottomSheet
+      visible={!!approving && pickingClass}
+      onClose={() => setPickingClass(false)}
+      title="Class teacher for"
+      subtitle={`${approving?.name} · optional`}
+      showClose
+      scroll
+    >
+      <SheetOption
+        icon="remove-circle-outline"
+        label="No class"
+        hint="Duty staff with no class of their own"
+        active={!classKey}
+        onPress={() => {
+          setClassKey(null);
+          setPickingClass(false);
+        }}
+      />
+      {classes.map((c) => (
+        <SheetOption
+          key={c.key}
+          icon="school-outline"
+          label={c.label}
+          hint={
+            c.teacher
+              ? `Currently ${c.teacher} · ${plural(c.students, "student")}`
+              : plural(c.students, "student")
+          }
+          active={classKey === c.key}
+          onPress={() => {
+            setClassKey(c.key);
+            setPickingClass(false);
+          }}
+        />
+      ))}
+    </BottomSheet>
+    </>
+  );
+}
+
+/**
+ * One person asking to be let in.
+ *
+ * Both decisions are on the row, because a queue of one or two is read and
+ * cleared in the same glance — burying "decline" inside the detail dialog
+ * would mean opening a card to say no to somebody you already know you do not
+ * recognise. Tapping the row itself opens the detail, which is where the
+ * approval actually happens.
+ */
+function RequestRow({ request, busy, onOpen, onDecline }) {
+  return (
+    <Row
+      style={styles.personRow}
+      accessibilityRole="button"
+      accessibilityLabel={`Access request from ${request.name}`}
+      onPress={busy ? undefined : onOpen}
+    >
+      <View style={[styles.personAvatar, styles.requestAvatar]}>
+        <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+      </View>
+      <View style={styles.personMain}>
+        <Text style={styles.personName} numberOfLines={1}>
+          {request.name}
+        </Text>
+        <Text style={typography.caption} numberOfLines={1}>
+          {request.email}
+        </Text>
+      </View>
+
+      {busy ? (
+        <ActivityIndicator color={colors.primary} />
+      ) : (
+        <View style={styles.requestActions}>
+          <TouchableOpacity
+            onPress={onDecline}
+            style={[styles.requestBtn, styles.requestDecline]}
+            accessibilityRole="button"
+            accessibilityLabel={`Decline ${request.name}`}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="close" size={16} color={colors.danger} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onOpen}
+            style={[styles.requestBtn, styles.requestApprove]}
+            accessibilityRole="button"
+            accessibilityLabel={`Approve ${request.name}`}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons name="checkmark" size={16} color={colors.onDark} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </Row>
   );
 }
 
@@ -553,6 +851,23 @@ const StudentRow = React.memo(function StudentRow({ student, onOpen }) {
 const LEAD = 38;
 
 const styles = StyleSheet.create({
+  requestAvatar: { backgroundColor: colors.cardAlt },
+  requestActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  requestBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Approve is the filled one. Declining is reversible — they can ask again —
+  // so it does not need to shout back.
+  requestApprove: { backgroundColor: colors.primary },
+  requestDecline: { backgroundColor: colors.dangerBg },
+  requestError: { color: colors.danger, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  approveLine: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
+  approveWarn: { paddingHorizontal: spacing.md, paddingTop: spacing.md, color: colors.textMuted },
+
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: layout.gutter, paddingBottom: spacing.xs },
 

@@ -19,7 +19,6 @@ import { colors, radius, spacing, layout, loginFonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
-import { fetchStaffByEmail } from "../lib/staff";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -189,8 +188,8 @@ function SwipeableToast({ message, onDismiss, duration = 3500 }) {
   );
 }
 
-export default function LoginScreen() {
-  const { login } = useAuth();
+export default function LoginScreen({ navigation }) {
+  const { resolveSession } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -238,17 +237,6 @@ export default function LoginScreen() {
         return;
       }
 
-      const { data: staffRow, error: staffError } = await supabase
-        .from("staff")
-        .select("*")
-        .eq("email", email.trim())
-        .single();
-      if (staffError || !staffRow) {
-        // This path used to call an undefined `setError`, which crashed the
-        // screen instead of telling the user what went wrong.
-        triggerNotification("Signed in, but no staff record found for this account.");
-        return;
-      }
       // Recorded server-side from the caller's own token, so a client can
       // only ever log its own sign-in. Never blocks the login: a failed audit
       // write must not keep a teacher out of the app before a checkpoint.
@@ -261,7 +249,16 @@ export default function LoginScreen() {
         () => {},
         () => {}
       );
-      login(staffRow);
+
+      // One resolution path into the app. This screen used to run its own
+      // staff lookup and hand the RAW row to `login()`, so the app held a
+      // snake_case row where every screen reads camelCase — `photoUrl` and
+      // `classLabel` came back undefined on Account until the next app start,
+      // when session restore mapped it properly. It also treated "no staff
+      // row" as an error; that is now simply someone waiting for approval, and
+      // AuthContext routes them to the waiting screen instead.
+      const { data: sessionData } = await supabase.auth.getSession();
+      await resolveSession(sessionData?.session);
     } finally {
       setSubmitting(false);
     }
@@ -378,6 +375,22 @@ export default function LoginScreen() {
               textStyle={{ fontFamily: loginFonts.bold }}
             />
 
+            {/* New staff arrive mid-term and the one person with dashboard
+                access is not always findable on a first morning. This is the
+                way in that does not need them — a request, not an account:
+                what it creates reads nothing until a coordinator approves it. */}
+            <View style={styles.registerRow}>
+              <Text style={styles.helpText}>New here?</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("Register")}
+                accessibilityRole="button"
+                accessibilityLabel="Request a teacher account"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[styles.helpText, styles.helpLink]}>Request access</Text>
+              </TouchableOpacity>
+            </View>
+
             <Text style={styles.helpText}>
               Need help? <Text style={styles.helpLink}>Contact the school office</Text>
             </Text>
@@ -481,6 +494,15 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   helpLink: { fontFamily: loginFonts.bold, color: colors.text },
+
+  // The two halves sit on one baseline: "New here?" is not a label above a
+  // button, it is the first half of the sentence the link finishes.
+  registerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+  },
 
   toastContainer: {
     position: "absolute",
