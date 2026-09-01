@@ -5,9 +5,16 @@ import CalendarSheet from "./CalendarSheet";
 import { PrimaryButton } from "./ui";
 import { useDialog } from "./Dialog";
 import { useAuth } from "../context/AuthContext";
-import { buildReport, printReport, weekStart, addDays, REPORT_FORMAT } from "../lib/report";
+import {
+  buildReport,
+  printReport,
+  weekStart,
+  addDays,
+  lastSaturday,
+  REPORT_FORMAT,
+} from "../lib/report";
 import { describeError } from "../lib/errors";
-import { fmtDay, fmtDayCompact } from "../utils/format";
+import { fmtDay, fmtDayCompact, isSaturday } from "../utils/format";
 import { colors, spacing, typography } from "../theme/theme";
 
 /**
@@ -58,11 +65,15 @@ export default function PrintSheets({
     if (!exporting) onClose();
   };
 
-  const runExport = async (from, to) => {
+  // `fmt` overrides the screen's format for one export. The Saturday assembly
+  // sheet is a different document from the one this sheet is otherwise
+  // printing, offered from the same list because it answers the same question
+  // — "give me the printed record" — from the same place.
+  const runExport = async (from, to, fmt = format) => {
     if (exporting) return;
     setExporting(true);
     try {
-      const report = await buildReport({ from, to, generatedBy: user?.name, format });
+      const report = await buildReport({ from, to, generatedBy: user?.name, format: fmt });
       if (report.empty) {
         onClose();
         dialog.alert({
@@ -101,6 +112,18 @@ export default function PrintSheets({
 
   const thisWeek = { from: weekStart(day), to: addDays(weekStart(day), 6) };
 
+  // Which Saturday the assembly sheet will cover: the day on screen when that
+  // is a Saturday, otherwise the Saturday just gone. The row states that date
+  // like every other row here, so it never prints a day the reader did not
+  // expect — the reason this is not simply hidden six days a week is that the
+  // Dashboard has no date picker, and hiding it left the sheet unreachable on
+  // the Monday morning somebody actually wants Saturday's page.
+  //
+  // Only the oversight sheet offers it: the form covers grades 2–12 and is
+  // signed by the Principal, so it is not a class teacher's document.
+  const showSaturday = format === REPORT_FORMAT.HEADCOUNT;
+  const saturday = lastSaturday(day);
+
   const busy = (
     <View style={styles.busy}>
       <ActivityIndicator color={colors.primary} />
@@ -130,6 +153,16 @@ export default function PrintSheets({
                 remembering what the screen behind the sheet is set to. The
                 print dialog is also where "Save as PDF" lives, so one verb
                 covers printing and saving. */}
+            {showSaturday && (
+              <SheetOption
+                icon="ribbon-outline"
+                label="Saturday assembly sheet"
+                hint={`${
+                  isSaturday(day) ? fmtDay(saturday) : fmtDayCompact(saturday)
+                } · Grade 2–12 by house`}
+                onPress={() => runExport(saturday, saturday, REPORT_FORMAT.SATURDAY)}
+              />
+            )}
             <SheetOption
               icon="today-outline"
               label="Print this day"

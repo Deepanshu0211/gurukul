@@ -31,6 +31,7 @@ export const fromRow = (r) => ({
   classKey: r.class_key || null,
   scope: r.scope || null,
   band: r.band || null,
+  house: r.house || null,
   staffId: r.staff_id,
   state: r.state,
   submittedBy: r.submitted_by || null,
@@ -76,6 +77,18 @@ export async function fetchDuties(day) {
 /**
  * Which students a duty covers, resolved against the register.
  * Pure — takes the full student list so callers can fetch it once.
+ *
+ * The narrowings COMPOSE rather than compete, which is what lets one duty be
+ * a row of the Saturday assembly sheet: band cuts by grade, house cuts by
+ * house, and "Middle · Nandgaon" is both. `band` and `house` used to be an
+ * either/or with `classKey` on an if/else chain, so a duty carrying both
+ * silently honoured only the first — a house teacher would have been handed
+ * every child in the school of their band, four times too many, with nothing
+ * on screen to say the house had been ignored.
+ *
+ * `classKey` stays exclusive: a class is already a single group, and pairing
+ * it with a house would mean a roll call of the three children in 4A who
+ * happen to be in Barsana, which is not a thing anybody marks.
  */
 export function resolveGroup(duty, students) {
   if (!duty || !students?.length) return [];
@@ -84,9 +97,17 @@ export function resolveGroup(duty, students) {
 
   if (duty.classKey) {
     pool = pool.filter((s) => s.key === duty.classKey);
-  } else if (duty.band && BANDS[duty.band]) {
-    const [min, max] = BANDS[duty.band];
-    pool = pool.filter((s) => s.grade >= min && s.grade <= max);
+  } else {
+    if (duty.band && BANDS[duty.band]) {
+      const [min, max] = BANDS[duty.band];
+      pool = pool.filter((s) => s.grade >= min && s.grade <= max);
+    }
+    // A house duty covers the children IN that house, so a student with no
+    // house yet matches nothing and is marked by nobody. That is the honest
+    // outcome — the alternative is quietly sweeping them into a house they
+    // are not in — and it is visible: the printed sheet counts them in its
+    // unmarked column and says the rows do not add up.
+    if (duty.house) pool = pool.filter((s) => s.house === duty.house);
   }
 
   if (duty.scope === "res") pool = pool.filter((s) => s.type !== "D");

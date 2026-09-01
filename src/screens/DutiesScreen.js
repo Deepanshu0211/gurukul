@@ -151,9 +151,13 @@ export default function DutiesScreen({ navigation }) {
   if (error && duties.length === 0) {
     return (
       <SafeAreaView style={[styles.screen, styles.centered]} edges={["left", "right"]}>
+        {/* `title` is the fallback wording only, for failures describeError
+            cannot name. It used to say "Can't reach the school server", which
+            named a cause it did not know — a database that was behind sent
+            teachers to check the wi-fi for it. */}
         <ErrorState
           error={error}
-          title="Can't reach the school server"
+          title="Can't load today's duties"
           onRetry={refresh}
         />
       </SafeAreaView>
