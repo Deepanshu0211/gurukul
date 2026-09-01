@@ -73,13 +73,34 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose }) 
 
   const today = todayISO();
 
-  // A flat list of 7-column cells: leading nulls pad the month to its first
-  // weekday, so the grid needs no per-row arithmetic while rendering.
-  const cells = useMemo(() => {
+  /**
+   * The month as rows of exactly seven, nulls padding both ends.
+   *
+   * This used to be one flat list rendered into a `flexWrap` container whose
+   * cells were `width: ${100/7}%`. Seven of those is 14.285714285714286% each,
+   * and after Yoga rounds every cell to the pixel grid the seven no longer fit
+   * in 100% — so the last column wrapped and the grid rendered SIX days a week
+   * against a seven-day header. Every date sat under the wrong weekday, which
+   * on a screen whose entire job is picking a date is worse than not shipping
+   * it: August 2026 begins on a Saturday, its six leading pad cells filled a
+   * whole six-wide row, and the 1st appeared under Sunday.
+   *
+   * Rows of seven with `flex: 1` cells cannot drift: seven equal children of
+   * one row divide the row exactly, whatever the rounding, and there is no
+   * wrapping to get wrong. The TRAILING pad matters as much as the leading
+   * one — a final week holding only the 31st would otherwise stretch that one
+   * cell across the full width and centre it under Wednesday.
+   */
+  const weeks = useMemo(() => {
     const first = new Date(cursor.year, cursor.month, 1).getDay();
     const count = new Date(cursor.year, cursor.month + 1, 0).getDate();
-    const out = Array.from({ length: first }, () => null);
-    for (let d = 1; d <= count; d += 1) out.push(d);
+
+    const flat = Array.from({ length: first }, () => null);
+    for (let d = 1; d <= count; d += 1) flat.push(d);
+    while (flat.length % 7 !== 0) flat.push(null);
+
+    const out = [];
+    for (let i = 0; i < flat.length; i += 7) out.push(flat.slice(i, i + 7));
     return out;
   }, [cursor.year, cursor.month]);
 
@@ -141,7 +162,10 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose }) 
         </TouchableOpacity>
       </View>
 
-      <View style={styles.weekRow}>
+      {/* The header is built from the same row-of-seven as the grid below it,
+          so the letters and the numbers cannot be laid out by two different
+          rules and end up a column apart. */}
+      <View style={[styles.week, styles.weekHeader]}>
         {WEEKDAYS.map((w, i) => (
           <Text key={`${w}${i}`} style={styles.weekday}>
             {w}
@@ -149,62 +173,64 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose }) 
         ))}
       </View>
 
-      <View style={styles.grid}>
-        {cells.map((d, i) => {
-          if (d === null) return <View key={`pad${i}`} style={styles.cell} />;
+      {weeks.map((week, w) => (
+        <View key={`w${w}`} style={styles.week}>
+          {week.map((d, i) => {
+            if (d === null) return <View key={`pad${w}-${i}`} style={styles.cell} />;
 
-          const value = iso(cursor.year, cursor.month, d);
-          const isSelected = value === selected;
-          const isToday = value === today;
-          const isFuture = value > today;
-          const hasData = markedDays.has(value);
+            const value = iso(cursor.year, cursor.month, d);
+            const isSelected = value === selected;
+            const isToday = value === today;
+            const isFuture = value > today;
+            const hasData = markedDays.has(value);
 
-          return (
-            <TouchableOpacity
-              key={value}
-              style={styles.cell}
-              disabled={isFuture}
-              activeOpacity={0.7}
-              onPress={() => {
-                onSelect(value);
-                onClose();
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected, disabled: isFuture }}
-              accessibilityLabel={`${d} ${MONTHS[cursor.month]}${
-                hasData ? ", has attendance" : ""
-              }`}
-            >
-              <View
-                style={[
-                  styles.day,
-                  isToday && styles.dayToday,
-                  isSelected && styles.daySelected,
-                ]}
+            return (
+              <TouchableOpacity
+                key={value}
+                style={styles.cell}
+                disabled={isFuture}
+                activeOpacity={0.7}
+                onPress={() => {
+                  onSelect(value);
+                  onClose();
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected, disabled: isFuture }}
+                accessibilityLabel={`${d} ${MONTHS[cursor.month]}${
+                  hasData ? ", has attendance" : ""
+                }`}
               >
-                <Text
+                <View
                   style={[
-                    styles.dayText,
-                    isFuture && styles.dayTextOff,
-                    isSelected && styles.dayTextSelected,
+                    styles.day,
+                    isToday && styles.dayToday,
+                    isSelected && styles.daySelected,
                   ]}
                 >
-                  {d}
-                </Text>
-              </View>
-              {/* Outside the pill so a selected day keeps its marker rather
-                  than hiding it under the fill. */}
-              <View
-                style={[
-                  styles.dot,
-                  hasData && styles.dotOn,
-                  hasData && isSelected && styles.dotOnSelected,
-                ]}
-              />
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+                  <Text
+                    style={[
+                      styles.dayText,
+                      isFuture && styles.dayTextOff,
+                      isSelected && styles.dayTextSelected,
+                    ]}
+                  >
+                    {d}
+                  </Text>
+                </View>
+                {/* Outside the pill so a selected day keeps its marker rather
+                    than hiding it under the fill. */}
+                <View
+                  style={[
+                    styles.dot,
+                    hasData && styles.dotOn,
+                    hasData && isSelected && styles.dotOnSelected,
+                  ]}
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
 
       <TouchableOpacity
         onPress={() => {
@@ -242,9 +268,18 @@ const styles = StyleSheet.create({
   monthLabelWrap: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   monthLabel: { ...typography.h2 },
 
-  weekRow: { flexDirection: "row", marginBottom: spacing.xs },
+  // One row, seven equal children, no wrapping. Every column in the calendar —
+  // header letters included — is a `flex: 1` child of one of these. Nothing
+  // here may go back to a percentage width: seven of `100/7`% do not reliably
+  // fit inside 100% once Yoga rounds them to whole pixels, and the seventh
+  // column wraps away onto a row of its own.
+  week: { flexDirection: "row" },
+  // Only the header carries it. Putting it on `week` would add four points
+  // under all seven rows and make the sheet taller than it was before the fix;
+  // the day rows already space themselves with the cells' own padding.
+  weekHeader: { marginBottom: spacing.xs },
   weekday: {
-    width: `${100 / 7}%`,
+    flex: 1,
     textAlign: "center",
     fontFamily: fonts.semibold,
     fontSize: 11,
@@ -253,9 +288,8 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 
-  grid: { flexDirection: "row", flexWrap: "wrap" },
   cell: {
-    width: `${100 / 7}%`,
+    flex: 1,
     alignItems: "center",
     paddingVertical: spacing.xs,
   },

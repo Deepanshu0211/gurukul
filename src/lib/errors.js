@@ -73,14 +73,21 @@ export function isDenied(e) {
 }
 
 /**
- * The database is behind the app: it is being asked for a function or column
- * that no migration has created yet. PostgREST reports both as "… in the
- * schema cache" — PGRST202 for a missing function, PGRST204 for a column.
+ * The database is behind the app: it is being asked for a table, function or
+ * column that no migration has created yet.
  *
  * Worth its own words because it is the one failure here that no amount of
  * retrying will clear and nobody in the building can fix from the app. It
  * means a file in `supabase/migrations` was written but never run, and saying
  * that turns a support call into a two-minute paste.
+ *
+ * PostgREST reports this two different ways, and knowing only the first cost
+ * a morning: PGRST202/PGRST204 ("… in the schema cache") are raised when a
+ * FUNCTION is called or a column is WRITTEN, but a select naming a column that
+ * does not exist comes back as the raw Postgres code instead — 42703, or
+ * 42P01 for a whole missing table. Those fell through to the generic branch
+ * and were reported to teachers as "Can't reach the school server", which sent
+ * them to check the wi-fi for a problem that was in the database.
  *
  * Matched on the text as well as the code: several call sites re-throw as
  * `new Error(error.message)`, which keeps the wording and drops the code.
@@ -90,8 +97,12 @@ export function isNotDeployed(e) {
   return (
     e?.code === "PGRST202" ||
     e?.code === "PGRST204" ||
+    e?.code === "42703" ||
+    e?.code === "42P01" ||
     t.includes("schema cache") ||
-    t.includes("could not find the function")
+    t.includes("could not find the function") ||
+    // "column students.house does not exist" / "relation ... does not exist"
+    t.includes("does not exist")
   );
 }
 

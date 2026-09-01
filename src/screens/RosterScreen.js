@@ -722,9 +722,12 @@ function StudentsTab({ bottomInset, query, onScroll }) {
       dialog.alert({
         icon: "school-outline",
         title: s.name,
+        // The house is on the printed Saturday assembly sheet, so it has to be
+        // checkable from inside the app — an office correcting a house on the
+        // signed page needs to see the same value the sheet was built from.
         message: `Admission no. ${s.adm}\nClass ${s.label} · Roll ${s.roll || "—"}\n${
           TYPE_LABEL[s.type]
-        }${s.remedial ? "\nRemedial batch" : ""}`,
+        }\nHouse: ${s.house || "not assigned"}${s.remedial ? "\nRemedial batch" : ""}`,
       }),
     [dialog]
   );

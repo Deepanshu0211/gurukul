@@ -98,6 +98,27 @@ export const fmtDayCompact = (iso) => {
   return `${d.getDate()} ${MONTH[d.getMonth()]}`;
 };
 
+/** The full weekday, from a date rather than from "now": "Saturday". */
+export const weekdayOf = (iso) => {
+  const d = parseDay(iso);
+  return d ? WEEKDAY[d.getDay()] : "—";
+};
+
+/** Whether a "YYYY-MM-DD" falls on a Saturday. The Saturday assembly sheet is
+ *  the only thing in the app that is offered on one weekday and not the rest. */
+export const isSaturday = (iso) => weekdayOf(iso) === "Saturday";
+
+/** "2026-08-08" -> "08-08-26". How the school writes the date at the top of
+ *  its own register, and the one place the app copies that rather than its
+ *  own "Saturday, 8 Aug" — a printed sheet has to look like the book it is
+ *  replacing or nobody trusts it. */
+export const fmtDayNumeric = (iso) => {
+  const d = parseDay(iso);
+  if (!d) return "—";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${String(d.getFullYear()).slice(2)}`;
+};
+
 /** Two short lines for a date chip: { top: "FRI", bottom: "8 Aug" }. */
 export const fmtDayChip = (iso) => {
   const d = parseDay(iso);

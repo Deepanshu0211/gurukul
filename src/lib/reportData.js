@@ -223,3 +223,91 @@ export async function fetchHeadcountReport(from, to) {
     ),
   };
 }
+
+/** The checkpoint the Saturday assembly sheet reports on. */
+export const SATURDAY_CHECKPOINT = "morning";
+
+/**
+ * The Saturday morning assembly sheet — the school's own ruled page,
+ * generated from the marks instead of filled in by hand.
+ *
+ * All of the counting is `saturday_report` (migration 017), which returns one
+ * row per printed row and nothing else: twelve rows for a school of seven
+ * hundred, so there is no paging here and no arithmetic in the client. The
+ * only reason to touch the database twice is the state of the checkpoint
+ * itself — a sheet has to be able to say "this was never submitted" rather
+ * than print a page of zeros that reads like an empty school.
+ */
+export async function fetchSaturdayReport(day, checkpointId = SATURDAY_CHECKPOINT) {
+  const { data, error } = await supabase.rpc("saturday_report", {
+    p_day: day,
+    p_checkpoint: checkpointId,
+  });
+  if (error) throw new Error(error.message);
+
+  // Same guard as the headcount: bigint counts arrive as JSON numbers today,
+  // but a driver that ever handed them back as strings would turn every
+  // total on a signed sheet into concatenation.
+  const rows = (data || []).map((r) => ({
+    band: r.band,
+    bandOrder: r.band_order,
+    house: r.house,
+    houseOrder: r.house_order,
+    res: Number(r.res),
+    day: Number(r.day_scholars),
+    strength: Number(r.strength),
+    resPresent: Number(r.res_present),
+    dayPresent: Number(r.day_present),
+    resAbsent: Number(r.res_absent),
+    dayAbsent: Number(r.day_absent),
+    sick: Number(r.sick),
+    notReported: Number(r.not_reported),
+    onDuty: Number(r.on_duty),
+    unmarked: Number(r.unmarked),
+  }));
+
+  const FIELDS = [
+    "res",
+    "day",
+    "strength",
+    "resPresent",
+    "dayPresent",
+    "resAbsent",
+    "dayAbsent",
+    "sick",
+    "notReported",
+    "onDuty",
+    "unmarked",
+  ];
+  const totals = rows.reduce(
+    (t, r) => {
+      FIELDS.forEach((f) => (t[f] += r[f]));
+      return t;
+    },
+    Object.fromEntries(FIELDS.map((f) => [f, 0]))
+  );
+
+  // Was the checkpoint marked at all? A Saturday whose duty nobody submitted
+  // still prints — with the class strengths and empty count columns — which
+  // is exactly the blank form somebody would otherwise have gone looking for.
+  const { data: duties, error: dutyErr } = await supabase
+    .from("duties")
+    .select("state, submitted_at, checkpoints(name, start_min)")
+    .eq("day", day)
+    .eq("checkpoint_id", checkpointId);
+  if (dutyErr) throw new Error(dutyErr.message);
+
+  const list = duties || [];
+
+  return {
+    day,
+    rows,
+    totals,
+    checkpoint: list[0]?.checkpoints?.name || "Morning attendance",
+    startMin: list[0]?.checkpoints?.start_min ?? null,
+    // The morning checkpoint may be split across several duties (one per
+    // band), so the sheet is only complete when every one of them is in.
+    duties: list.length,
+    submitted: list.filter((d) => d.state === "submitted").length,
+  };
+}

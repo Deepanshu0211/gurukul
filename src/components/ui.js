@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { isOffline, OFFLINE_TITLE, OFFLINE_BODY } from "../lib/errors";
+import { describeError } from "../lib/errors";
 import {
   colors,
   radius,
@@ -255,14 +255,22 @@ export function EmptyState({ icon, title, body, action, compact }) {
  * Anything else keeps its own wording, because "check your wi-fi" is useless
  * advice for a problem that is not the wi-fi.
  */
+/**
+ * `title` is the FALLBACK wording, used only for failures `describeError`
+ * cannot name. This used to handle the offline case itself and pass everything
+ * else through as a bare title with no body, so a server missing a migration
+ * appeared on a teacher's phone as "Can't reach the school server" and nothing
+ * else — a screen that names the wrong cause and offers a Retry that can never
+ * work. Every case `describeError` knows about now brings its own words.
+ */
 export function ErrorState({ error, title, onRetry, compact }) {
-  const offline = isOffline(error);
+  const shown = describeError(error, { title }, null);
   return (
     <EmptyState
       compact={compact}
-      icon={offline ? "cloud-offline-outline" : "alert-circle-outline"}
-      title={offline ? OFFLINE_TITLE : title || "Something went wrong"}
-      body={offline ? OFFLINE_BODY : undefined}
+      icon={shown.offline ? "cloud-offline-outline" : "alert-circle-outline"}
+      title={shown.title}
+      body={shown.message}
       action={
         onRetry ? (
           <SecondaryButton

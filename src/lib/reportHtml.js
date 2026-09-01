@@ -1,4 +1,4 @@
-import { fmtTime, fmtDay } from "../utils/format";
+import { fmtTime, fmtDay, fmtDayNumeric, weekdayOf, plural } from "../utils/format";
 
 /**
  * The printed attendance sheet.
@@ -149,6 +149,64 @@ const CSS = `
     color: #555;
   }
   .none-row { font-size: ${TYPE.body}pt; color: #444; padding: 3mm 0; }
+
+  /* ── THE SATURDAY ASSEMBLY SHEET ────────────────────────────────────────
+     The only sheet here that is a FORM rather than a report: it is signed by
+     three people and filed in a book, so it is fully ruled and its blank
+     cells are meant to be written in. Everything under .form is scoped to it
+     and changes nothing about the register or the headcount. */
+  .form-title { text-align: center; font-size: ${TYPE.h2}pt; font-weight: 700; margin: 0; }
+  .form-sub   { text-align: center; font-size: ${TYPE.body}pt; margin: 1mm 0 4mm; }
+  .form-meta  { display: flex; justify-content: space-between; margin-bottom: 2mm; }
+  .form-meta b { font-weight: 700; }
+
+  table.form { border: 0.4mm solid #000; table-layout: fixed; }
+  table.form th, table.form td {
+    border: 0.25mm solid #000;
+    text-align: center;
+    padding: 1mm 0.5mm;
+    /* The numbers are generated; the last two columns are not. Wrapping is
+       what lets "Not Reported (Home) / GN" sit in a 20mm column. */
+    white-space: normal;
+    overflow: visible;
+  }
+  table.form th { font-size: 7pt; line-height: 1.15; vertical-align: middle; }
+  /* Tall enough to sign in by hand — the two right-hand columns are blank on
+     purpose and a printed form nobody can write on is just a screenshot. */
+  table.form td { height: 10.5mm; font-size: ${TYPE.body}pt; }
+  /* The one column that is text. nowrap keeps every row exactly one line
+     tall, so the twelve rows are the same height as each other and as the
+     ruled book this replaces — a wrapped "Primary Goverdhan" quietly makes
+     its own row taller than the eleven around it. */
+  table.form td.row-label { text-align: left; padding-left: 2mm; white-space: nowrap; }
+  table.form tr.total td { font-weight: 700; border-top: 0.4mm solid #000; }
+  /* Set smaller as well as italic: this row only exists while the house list
+     is being filled in, its label is the longest on the sheet, and nowrap
+     would otherwise push it out over the Res column. */
+  table.form tr.unassigned td.row-label { font-style: italic; font-size: 8pt; }
+
+  .play {
+    margin-top: 3mm;
+    border: 0.4mm solid #000;
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .play td { border: 0.25mm solid #000; height: 10mm; padding: 1mm 2mm; font-size: ${TYPE.body}pt; }
+
+  .signatures {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 16mm;
+  }
+  .signatures div {
+    width: 48mm;
+    border-top: 0.25mm solid #000;
+    padding-top: 1mm;
+    text-align: center;
+    font-size: ${TYPE.small}pt;
+  }
+  .note { margin-top: 3mm; font-size: ${TYPE.small}pt; color: #444; line-height: 1.5; }
+  .warn { font-weight: 700; color: #000; }
 `;
 
 const header = (title, sub) => `<h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div>`;
@@ -473,6 +531,168 @@ ${
 
 <h2>Not present (${exceptions.length})</h2>
 ${exceptionsTable(exceptions, { showDay: multiDay })}
+${footer(generatedBy)}`
+  );
+}
+
+/**
+ * The Saturday morning assembly sheet.
+ *
+ * Unlike everything above it, this is not a report the app invented — it is a
+ * page the school already has, ruled into a spiral book, filled in by hand
+ * every Saturday and signed by three people. So the layout is copied, not
+ * designed: the same twelve rows in the same order, the same column headings
+ * in the same words, the same Play School line underneath and the same three
+ * signature blocks at the foot. Somebody who has signed the paper one for
+ * years should be able to sign this without reading it twice.
+ *
+ * Two things are deliberately NOT copied.
+ *
+ * The blank columns stay blank. "House Teacher" and "Signature" are ruled and
+ * empty because they are written in at the assembly, and so is the whole Play
+ * School line — the play school is not in this app's register, and printing a
+ * number there would be inventing one.
+ *
+ * Nothing is silently rounded into a column that does not fit it. Children
+ * marked Activity or Self study are on campus and counted present, with the
+ * number stated in a note; on paper they go in the Res A column with "on
+ * duty" pencilled above, which works when a human reads it and is a lie when
+ * a computer adds it up. Children with no mark at all are called out the same
+ * way rather than being quietly counted as present — that gap is the single
+ * thing the sheet exists to catch.
+ */
+export function saturdayReportHtml(
+  { day, rows, totals, checkpoint, duties, submitted },
+  { generatedBy } = {}
+) {
+  // A dash, exactly as the paper form is filled in. A grid of noughts is
+  // harder to read across than a grid with gaps in it.
+  const n = (v) => (v ? String(v) : "—");
+
+  const rowHtml = (r) => {
+    const label = r.house ? `${r.band} ${r.house}` : `${r.band} — no house set`;
+    return `<tr class="${r.house ? "" : "unassigned"}">
+      <td class="row-label">${esc(label)}</td>
+      <td>${n(r.res)}</td>
+      <td>${n(r.day)}</td>
+      <td>${n(r.strength)}</td>
+      <td>${n(r.resPresent)}</td>
+      <td>${n(r.dayPresent)}</td>
+      <td>${n(r.resAbsent)}</td>
+      <td>${n(r.dayAbsent)}</td>
+      <td>${n(r.sick)}</td>
+      <td>${n(r.notReported)}</td>
+      <td></td>
+      <td></td>
+    </tr>`;
+  };
+
+  // Written out rather than left for the reader to notice, because a sheet
+  // that does not add up is the only interesting thing on the page.
+  const notes = [];
+  if (duties === 0) {
+    notes.push(
+      `<div class="note warn">No morning checkpoint was rostered on this day. The strengths
+       above are from the register; every count column is empty.</div>`
+    );
+  } else if (submitted < duties) {
+    notes.push(
+      `<div class="note warn">${duties - submitted} of ${plural(duties, "checkpoint")}
+       for ${esc(checkpoint)} had not been submitted when this sheet was printed.</div>`
+    );
+  }
+  // Not when nothing was rostered: the note above already says why the count
+  // columns are empty, and repeating it as "409 students have no mark" reads
+  // like a second, worse problem.
+  if (totals.unmarked && duties > 0) {
+    const one = totals.unmarked === 1;
+    notes.push(
+      `<div class="note warn">${plural(totals.unmarked, "student")} in the register
+       ${one ? "has" : "have"} no mark at this checkpoint and ${one ? "is" : "are"} not
+       counted in any column above, so the rows do not add up to Total.</div>`
+    );
+  }
+  if (totals.onDuty) {
+    notes.push(
+      `<div class="note">${totals.onDuty} of the students counted present
+       ${totals.onDuty === 1 ? "was" : "were"} marked Activity or Self study — on duty
+       elsewhere on campus, not at the assembly.</div>`
+    );
+  }
+
+  return page(
+    `<div class="form-title">BHAKTIVEDANTA GURUKULA AND INTERNATIONAL SCHOOL</div>
+<div class="form-sub">Saturday Morning Attendance Report Grade 2-12</div>
+
+<div class="form-meta">
+  <span>Date :- <b>${esc(fmtDayNumeric(day))}</b></span>
+  <span>Day :- <b>${esc(weekdayOf(day))}</b></span>
+</div>
+
+<table class="form">
+  <thead><tr>
+    <th style="width:36mm">Class</th>
+    <th style="width:10mm">Res</th>
+    <th style="width:10mm">Day</th>
+    <th style="width:10mm">Total</th>
+    <th style="width:10mm">Res P</th>
+    <th style="width:10mm">Day P</th>
+    <th style="width:10mm">Res A</th>
+    <th style="width:10mm">Day A</th>
+    <th style="width:10mm">Sick</th>
+    <th style="width:20mm">Not Reported (Home) / GN</th>
+    <!-- Every column is given a width, including the two blank ones, and they
+         add up to the 186mm of A4 content area exactly. A fixed table layout
+         hands leftover space to whatever has no width — which is nothing when
+         the page is A4, and is zero-width columns the moment it is rendered
+         anywhere narrower. The two columns that would vanish are the two that
+         have to be written in. -->
+    <th style="width:25mm">House Teacher</th>
+    <th style="width:25mm">Signature</th>
+  </tr></thead>
+  <tbody>
+    ${rows.map(rowHtml).join("")}
+    <tr class="total">
+      <td class="row-label">Total</td>
+      <td>${n(totals.res)}</td>
+      <td>${n(totals.day)}</td>
+      <td>${n(totals.strength)}</td>
+      <td>${n(totals.resPresent)}</td>
+      <td>${n(totals.dayPresent)}</td>
+      <td>${n(totals.resAbsent)}</td>
+      <td>${n(totals.dayAbsent)}</td>
+      <td>${n(totals.sick)}</td>
+      <td>${n(totals.notReported)}</td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- Ruled and empty on purpose: the play school is not in this register, so
+     this line is filled in by hand exactly as it is on the paper form. -->
+<table class="play">
+  <tr>
+    <td style="width:36mm">Play School</td>
+    <td style="width:20mm">Total</td>
+    <td style="width:16mm"></td>
+    <td style="width:24mm">Present</td>
+    <td style="width:16mm"></td>
+    <td style="width:22mm">Absent</td>
+    <td style="width:16mm"></td>
+    <td style="width:20mm">Signature</td>
+    <td style="width:16mm"></td>
+  </tr>
+</table>
+
+${notes.join("")}
+
+<div class="signatures">
+  <div>Assembly Co-ordinator</div>
+  <div>MOD</div>
+  <div>Principal</div>
+</div>
+
 ${footer(generatedBy)}`
   );
 }
