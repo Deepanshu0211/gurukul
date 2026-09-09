@@ -23,8 +23,17 @@ staging copy, or recovery if the current one is lost.
 | `migrations/014_request_on_submit.sql` | The request reaches the queue when it is sent, before the email is confirmed |
 | `migrations/015_null_safe_role_guards.sql` | `my_role()` returning NULL no longer slips past a role check |
 | `migrations/016_approve_with_class.sql` | A coordinator can assign the teacher's class in the same tap |
+| `migrations/017_saturday_report.sql` | `houses`, `students.house`, and `saturday_report()` — the assembly sheet by band and house |
+| `migrations/018_duty_band.sql` | `duties.band`, so a checkpoint can cover Primary/Middle/Senior |
+| `migrations/019_duty_house.sql` | `duties.house`, so a Saturday duty can cover one house |
+| `migrations/020_class_status_board.sql` | `class_status_board()` — the weekday morning report's counts, one row per class |
+| `migrations/021_fix_approved_signup_trigger.sql` | An approved teacher can create their account — the auth.users trigger moves BEFORE→AFTER |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
-| `../docs/data/students_415_insert.sql` | The 415-student register |
+| `seed-mock-school.sql` | The school as its own register draws it: 18 classes, 411 students, 18 class teachers, today's duties |
+| `seed-auth-users.sql` | A working login for every staff row, in one statement. Run after `seed-mock-school.sql` |
+| `seed-saturday.sql` | The twelve Saturday house duties |
+| `seed-houses-test.sql` | Assigns houses to students that have none |
+| `../docs/data/students_415_insert.sql` | The school's own 415-student register |
 
 ## Applying to a fresh project
 

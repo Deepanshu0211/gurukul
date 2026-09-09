@@ -18,6 +18,7 @@ import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import CalendarSheet from "../components/CalendarSheet";
 import SearchField from "../components/SearchField";
 import { EmptyState, ErrorState } from "../components/ui";
+import { isOversight } from "../domain/roles";
 import { fmtTime, fmtDay, fmtDayCompact, fmtClock, plural, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
@@ -128,12 +129,42 @@ export default function ClassDayScreen() {
     [duties, records]
   );
 
-  // Falling back to the first checkpoint rather than tracking the day change
-  // in an effect: when the teacher moves to a day that has no 'morn-4A', the
-  // selection simply stops matching and the earliest checkpoint takes over.
+  // WHAT A CLASS TEACHER MAY READ BACK
+  //
+  // Their own class, and the checkpoints that cover the whole school. Not
+  // another teacher's register.
+  //
+  // This screen used to show every submitted checkpoint to everybody, and
+  // opened on `submitted[0]`. With two morning duties that landed on your
+  // own class most of the time by luck. With eighteen it lands on whoever
+  // marked first, so a Class 8 teacher opened Records and read Class 2 —
+  // thirty children's names and marks that were none of her business.
+  //
+  // Nothing was leaking in the database sense: 005 makes marks school-wide
+  // readable deliberately, and a determined client can still request them.
+  // This is the app declining to PUT another class in front of someone who
+  // did not ask for it, which is a different and smaller claim. If the
+  // school ever wants it enforced rather than merely respected, that is a
+  // policy in 005, not a filter here.
+  //
+  // Oversight keeps the whole school: reading across classes is the job.
+  const readable = useMemo(() => {
+    if (isOversight(user?.role) || !user?.classKey) return submitted;
+    // A school-wide checkpoint (Mangalarati, lunch) has no class_key and
+    // covers this teacher's students along with everyone else's, so it stays.
+    return submitted.filter((d) => !d.classKey || d.classKey === user.classKey);
+  }, [submitted, user?.role, user?.classKey]);
+
+  // Falling back to the first readable checkpoint rather than tracking the
+  // day change in an effect: when the teacher moves to a day that has no
+  // 'morn-8B', the selection stops matching and the fallback takes over.
   const activeDuty = useMemo(
-    () => submitted.find((d) => d.id === selectedDutyId) || submitted[0] || null,
-    [submitted, selectedDutyId]
+    () =>
+      readable.find((d) => d.id === selectedDutyId) ||
+      (user?.classKey && readable.find((d) => d.classKey === user.classKey)) ||
+      readable[0] ||
+      null,
+    [readable, selectedDutyId, user?.classKey]
   );
 
   // Everyone the checkpoint covered — the same set the duty teacher marked,
@@ -198,13 +229,13 @@ export default function ClassDayScreen() {
    */
   const infoEntries = useMemo(() => {
     if (!infoFor) return [];
-    return submitted.map((d) => ({
+    return readable.map((d) => ({
       duty: d,
       code: resolveGroup(d, students).some((s) => s.id === infoFor.id)
         ? statusOf(infoFor.id, d)
         : null,
     }));
-  }, [infoFor, submitted, students, statusOf]);
+  }, [infoFor, readable, students, statusOf]);
 
   const renderStudent = useCallback(
     ({ item }) => (
@@ -305,11 +336,11 @@ export default function ClassDayScreen() {
 
         <TouchableOpacity
           onPress={() => setPickerOpen(true)}
-          disabled={submitted.length === 0}
+          disabled={readable.length === 0}
           activeOpacity={0.7}
-          style={[styles.control, styles.controlGrow, !submitted.length && styles.controlOff]}
+          style={[styles.control, styles.controlGrow, !readable.length && styles.controlOff]}
           accessibilityRole="button"
-          accessibilityState={{ disabled: submitted.length === 0 }}
+          accessibilityState={{ disabled: readable.length === 0 }}
           accessibilityLabel={
             activeDuty
               ? `Checkpoint: ${activeDuty.checkpoint}. Choose another`
@@ -414,14 +445,25 @@ export default function ClassDayScreen() {
       return <ErrorState error={past.error} title="Can't load that day" />;
     }
     if (!activeDuty) {
+      // Naming the class matters. 'Nothing marked yet' next to a register
+      // full of another class's children was the confusing part; on its own
+      // it reads like the app failed rather than like the morning has not
+      // happened yet.
+      const mine = user?.classLabel;
       return (
         <EmptyState
           icon="time-outline"
-          title={isPast ? "Nothing was marked" : "Nothing marked yet"}
+          title={
+            isPast
+              ? mine ? `${mine} was not marked` : "Nothing was marked"
+              : mine ? `${mine} is not marked yet` : "Nothing marked yet"
+          }
           body={
             isPast
-              ? "No checkpoint was submitted on this day. Pick another date above."
-              : "Statuses appear here as duty teachers submit each checkpoint."
+              ? "No checkpoint was submitted for this day. Pick another date above."
+              : mine
+                ? "Mark it from Duties and it will appear here. Yesterday's register is on the date button above."
+                : "Statuses appear here as duty teachers submit each checkpoint."
           }
         />
       );
@@ -508,7 +550,7 @@ export default function ClassDayScreen() {
         subtitle={`Submitted ${onDay(day)}`}
         showClose
       >
-        {submitted.map((d) => (
+        {readable.map((d) => (
           <SheetOption
             key={d.id}
             label={d.checkpoint}
@@ -608,6 +650,10 @@ const StudentRow = React.memo(function StudentRow({ student, code, onInfo }) {
         </Text>
         <Text style={typography.caption} numberOfLines={1}>
           Roll {student.roll} · {student.type === "D" ? "Day scholar" : "Residential"}
+          {/* House is optional in the register and null for anyone not yet
+              assigned, so it is appended rather than given a slot that would
+              sit empty. */}
+          {student.house ? ` · ${student.house}` : ""}
         </Text>
       </View>
 
@@ -677,7 +723,7 @@ function StudentInfoSheet({ student, day, entries, onClose }) {
         student
           ? `Roll ${student.roll} · Class ${student.label} · ${
               student.type === "D" ? "Day scholar" : "Residential"
-            }`
+            }${student.house ? ` · ${student.house}` : ""}`
           : ""
       }
       showClose

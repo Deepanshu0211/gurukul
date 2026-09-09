@@ -715,6 +715,11 @@ function StudentsTab({ bottomInset, query, onScroll }) {
   const dialog = useDialog();
   const { students, loading, error, reload } = useStudents();
 
+  // Which way the register is cut. Not persisted: it is a way of looking,
+  // not a setting, and a list that comes back grouped differently from how
+  // you left the screen is more confusing than one that always starts by class.
+  const [groupBy, setGroupBy] = useState("class");
+
   // Stable identity, so the memoised rows below aren't invalidated on every
   // keystroke in the search field.
   const showStudent = useCallback(
@@ -739,19 +744,50 @@ function StudentsTab({ bottomInset, query, onScroll }) {
       (s) =>
         s.name.toLowerCase().includes(q) ||
         s.adm.toLowerCase().includes(q) ||
-        s.label.toLowerCase().includes(q)
+        s.label.toLowerCase().includes(q) ||
+        (s.house || "").toLowerCase().includes(q)
     );
   }, [students, query]);
 
+  // Two ways to cut the same register. Class is how the register is kept and
+  // how attendance is taken; house is how the Saturday assembly is arranged
+  // and how sports and competitions are run, so the school asks both
+  // questions and neither is a filter on the other.
   const sections = useMemo(() => {
-    const byClass = filtered.reduce((acc, s) => {
-      (acc[s.label] = acc[s.label] || []).push(s);
+    const key =
+      groupBy === "house"
+        // Null is a real answer here, not a gap to hide: a child with no
+        // house yet has to be findable, or nobody ever assigns them one.
+        ? (s) => s.house || "No house yet"
+        : (s) => s.label;
+
+    const groups = filtered.reduce((acc, s) => {
+      const k = key(s);
+      (acc[k] = acc[k] || []).push(s);
       return acc;
     }, {});
-    return Object.entries(byClass)
-      .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
-      .map(([label, data]) => ({ title: label, data }));
-  }, [filtered]);
+
+    return Object.entries(groups)
+      .sort((a, b) => {
+        // Unassigned sits last however it happens to sort alphabetically.
+        if (a[0] === "No house yet") return 1;
+        if (b[0] === "No house yet") return -1;
+        return a[0].localeCompare(b[0], undefined, { numeric: true });
+      })
+      .map(([label, data]) => ({
+        title: label,
+        // Within a house the classes are jumbled, so roll number alone is
+        // meaningless — order by class first, then roll, as the register does.
+        data:
+          groupBy === "house"
+            ? [...data].sort(
+                (x, y) =>
+                  String(x.label).localeCompare(String(y.label), undefined, { numeric: true }) ||
+                  (x.roll || 0) - (y.roll || 0)
+              )
+            : data,
+      }));
+  }, [filtered, groupBy]);
 
   if (loading) {
     return (
@@ -786,6 +822,7 @@ function StudentsTab({ bottomInset, query, onScroll }) {
       initialNumToRender={20}
       windowSize={11}
       ListHeaderComponent={
+        <>
         <SectionLabel
           style={styles.countHead}
           action={
@@ -804,6 +841,26 @@ function StudentsTab({ bottomInset, query, onScroll }) {
         >
           {query ? `${filtered.length} of ${students.length}` : `${students.length} students`}
         </SectionLabel>
+
+        {/* Two ways to read the same register, not a filter: nothing is
+            hidden either way, the children are only gathered differently. */}
+        <View style={styles.groupBar}>
+          {[["class", "By class"], ["house", "By house"]].map(([key, label]) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.groupTab, groupBy === key && styles.groupTabOn]}
+              onPress={() => setGroupBy(key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: groupBy === key }}
+              accessibilityLabel={`Group students ${label.toLowerCase()}`}
+            >
+              <Text style={[styles.groupTabText, groupBy === key && styles.groupTabTextOn]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        </>
       }
       ListEmptyComponent={
         <EmptyState
@@ -815,7 +872,8 @@ function StudentsTab({ bottomInset, query, onScroll }) {
       }
       renderSectionHeader={({ section }) => (
         <Text style={styles.classHeader}>
-          Class {section.title} · {section.data.length}
+          {groupBy === "house" ? section.title : `Class ${section.title}`} ·{" "}
+          {section.data.length}
         </Text>
       )}
       renderItem={({ item }) => <StudentRow student={item} onOpen={showStudent} />}
@@ -854,6 +912,20 @@ const StudentRow = React.memo(function StudentRow({ student, onOpen }) {
 const LEAD = 38;
 
 const styles = StyleSheet.create({
+  groupBar: {
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  groupTab: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.cardAlt,
+  },
+  groupTabOn: { backgroundColor: colors.primary },
+  groupTabText: { ...typography.caption, color: colors.textMuted },
+  groupTabTextOn: { color: colors.white, fontWeight: "600" },
   requestAvatar: { backgroundColor: colors.cardAlt },
   requestActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   requestBtn: {

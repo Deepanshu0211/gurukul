@@ -60,7 +60,7 @@ export default function RegisterScreen({ navigation }) {
     // Deliberately loose. The confirmation email is the real check, and a
     // strict pattern here mostly rejects addresses that are actually valid.
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return fail("That email address looks incomplete.");
-    if (password.length < 8) return fail("Choose a password of at least 8 characters.");
+    if (password.trim().length < 8) return fail("Choose a password of at least 8 characters.");
     return true;
   };
 
@@ -81,7 +81,10 @@ export default function RegisterScreen({ navigation }) {
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
-        password,
+        // Trimmed to match the sign-in screen. If a stray keyboard space were
+        // stored here but trimmed there, the account would be created and then
+        // never accept the password its owner just chose.
+        password: password.trim(),
         // Carried on the Auth user so the waiting screen can pre-fill the
         // request without asking for the same things twice.
         options: { data: { full_name: name.trim(), phone: phone.trim() } },

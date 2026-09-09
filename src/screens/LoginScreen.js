@@ -220,7 +220,12 @@ export default function LoginScreen({ navigation }) {
     try {
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
-        password,
+        // Trimmed like the email above. Android re-enables keyboard suggestions
+        // when secureTextEntry is toggled off to reveal the password, and an
+        // accepted suggestion appends a space. That space reaches GoTrue as part
+        // of the password, comes back as invalid_credentials, and the screen then
+        // tells a teacher their password is wrong when they typed it correctly.
+        password: password.trim(),
       });
 
       if (authError) {

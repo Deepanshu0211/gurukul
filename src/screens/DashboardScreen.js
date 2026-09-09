@@ -27,7 +27,8 @@ import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import FadeIn from "../components/FadeIn";
 import PrintSheets from "../components/PrintSheets";
-import { SectionLabel, Stat, Divider, Card, StatusTag } from "../components/ui";
+import StatusBoardSheet from "../components/StatusBoardSheet";
+import { SectionLabel, Stat, Divider, Card, StatusTag, IconCircle, Chevron } from "../components/ui";
 import { useNow } from "../lib/clock";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
@@ -67,6 +68,11 @@ export default function DashboardScreen() {
   // Class"; nobody else has a route to a printed record without this.
   const mayPrint = canPrintReports(user?.role);
   const [printOpen, setPrintOpen] = useState(false);
+  // The morning report's own counts, on screen rather than on paper. Every
+  // role gets it: a class teacher sees their class, oversight sees all of
+  // them and can look at any past day. `class_status_board` (020) counts
+  // under the caller's own RLS, so this is not a permission decision.
+  const [statusOpen, setStatusOpen] = useState(false);
   // The day the board is showing, which is not always today: `fetchDuties`
   // falls back to the most recent day that has duties, and printing today's
   // date then produces an empty sheet for a screen full of checkpoints.
@@ -216,6 +222,31 @@ export default function DashboardScreen() {
           </Card>
         </View>
 
+        {/* The three stats above are this screen's own summary. This opens the
+            school's summary — the nine columns they sign every morning, in
+            their own words, for the class this person is responsible for. */}
+        <Card style={styles.statusCard}>
+          <TouchableOpacity
+            style={styles.statusRow}
+            onPress={() => setStatusOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Show today's status"
+          >
+            <IconCircle bg={colors.primarySoft} size={40}>
+              <Ionicons name="stats-chart-outline" size={18} color={colors.primary} />
+            </IconCircle>
+            <View style={styles.statusText}>
+              <Text style={styles.statusTitle}>Today's status</Text>
+              <Text style={styles.statusSub}>
+                {user?.classLabel
+                  ? `Residential and day counts for ${user.classLabel}`
+                  : "Residential and day counts, class by class"}
+              </Text>
+            </View>
+            <Chevron />
+          </TouchableOpacity>
+        </Card>
+
         {open.length > 0 && (
           <>
             <SectionLabel count={open.length} tone="overdue">
@@ -347,6 +378,8 @@ export default function DashboardScreen() {
         day={reportDay}
         format={REPORT_FORMAT.HEADCOUNT}
       />
+
+      <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -386,6 +419,11 @@ function AlertCard({ alert, onResolve }) {
 }
 
 const styles = StyleSheet.create({
+  statusCard: { marginTop: spacing.md, paddingVertical: spacing.xs },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm },
+  statusText: { flex: 1 },
+  statusTitle: { ...typography.bodyStrong, color: colors.text },
+  statusSub: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
   // Same trailing icon button as ClassDayScreen's, so "print" is one shape
   // wherever it appears.
   printBtn: {
