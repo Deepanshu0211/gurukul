@@ -1,0 +1,73 @@
+# Stops Supabase pausing the project.
+#
+# A free-tier project pauses after 7 days with no activity, and pausing tears
+# down the subdomain along with the compute — the app then reports "no
+# connection" and the host does not resolve at all, which looks like a network
+# fault rather than a paused database. That happened on 2026-09-09 after the
+# team was away for ten days.
+#
+# One request every six hours is enough. RLS means the anon key sees no rows
+# (migration 012 closed the register to accounts with no staff row), and that
+# is fine: the request still reaches Postgres, and reaching Postgres is what
+# counts as activity. It reads nothing and writes nothing.
+#
+# TWO THINGS THIS DOES NOT SURVIVE
+#
+#  1. GitHub disables scheduled workflows after 60 days with no commits to the
+#     repository. If this project goes quiet after delivery, the schedule stops
+#     and the database pauses a week later. Re-enable it from the Actions tab,
+#     or push anything.
+#
+#  2. It is a stopgap, not a plan. Once the school depends on this app, a
+#     paid Supabase plan is the answer — a register that is unreachable on a
+#     Monday morning because a cron job was disabled is not something a school
+#     will forgive.
+
+name: Keep Supabase awake
+
+on:
+  schedule:
+    # Every six hours. Four attempts a day against a seven-day timeout leaves
+    # a lot of room for GitHub to skip runs, which it does under load — cron
+    # here is best-effort, never guaranteed.
+    - cron: "0 */6 * * *"
+  # So it can be run by hand from the Actions tab, which is also how you check
+  # the secret is right without waiting six hours.
+  workflow_dispatch:
+
+# No repository contents are read or written.
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping the REST API
+        env:
+          # The anon key. Public by design — it ships inside the app bundle —
+          # but kept in a secret so it is rotated in one place. Never the
+          # service_role key: that bypasses every policy in 002.
+          ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ANON_KEY}" ]; then
+            echo "SUPABASE_ANON_KEY is not set."
+            echo "Settings -> Secrets and variables -> Actions -> New repository secret"
+            exit 1
+          fi
+
+          URL="https://ofuvjzxjbgsityacukva.supabase.co/rest/v1/status_types?select=code&limit=1"
+
+          # --fail-with-body so a wrong or revoked key is a red build rather
+          # than a green one that has been pinging a 401 for a month. A silent
+          # keep-alive that stopped working is worse than none.
+          code=$(curl --silent --show-error --fail-with-body \
+                      --max-time 30 --retry 3 --retry-delay 10 \
+                      --output /dev/null --write-out '%{http_code}' \
+                      -H "apikey: ${ANON_KEY}" \
+                      "${URL}")
+
+          echo "HTTP ${code} — project is awake."
