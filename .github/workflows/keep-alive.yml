@@ -1,4 +1,5 @@
-# Stops Supabase pausing the project.
+# Stops Supabase pausing the project, and notices when the school has no
+# checkpoints to mark.
 #
 # A free-tier project pauses after 7 days with no activity, and pausing tears
 # down the subdomain along with the compute — the app then reports "no
@@ -23,7 +24,7 @@
 #     Monday morning because a cron job was disabled is not something a school
 #     will forgive.
 
-name: Keep Supabase awake
+name: Keep awake and check the morning
 
 on:
   schedule:
@@ -44,7 +45,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Ping the REST API
+      - name: Ping the database, and check the morning has duties
         env:
           # The anon key. Public by design — it ships inside the app bundle —
           # but kept in a secret so it is rotated in one place. Never the
@@ -59,15 +60,45 @@ jobs:
             exit 1
           fi
 
-          URL="https://ofuvjzxjbgsityacukva.supabase.co/rest/v1/status_types?select=code&limit=1"
+          BASE="https://ofuvjzxjbgsityacukva.supabase.co/rest/v1"
 
-          # --fail-with-body so a wrong or revoked key is a red build rather
-          # than a green one that has been pinging a 401 for a month. A silent
-          # keep-alive that stopped working is worse than none.
-          code=$(curl --silent --show-error --fail-with-body \
+          # duty_health() (migration 025) returns counts only — no names, no
+          # marks — which is why the public anon key may call it. The request
+          # doubles as the keep-alive: it reaches Postgres, which is all the
+          # pause timer cares about.
+          #
+          # --fail-with-body so a revoked key is a red build rather than a
+          # green one that has been pinging a 401 for a month.
+          body=$(curl --silent --show-error --fail-with-body \
                       --max-time 30 --retry 3 --retry-delay 10 \
-                      --output /dev/null --write-out '%{http_code}' \
+                      -X POST \
                       -H "apikey: ${ANON_KEY}" \
-                      "${URL}")
+                      -H 'Content-Type: application/json' \
+                      -d '{}' \
+                      "${BASE}/rpc/duty_health")
 
-          echo "HTTP ${code} — project is awake."
+          echo "${body}" | jq .
+
+          healthy=$(echo "${body}" | jq -r '.[0].healthy // false')
+          day=$(echo "${body}"     | jq -r '.[0].day // "?"')
+          duties=$(echo "${body}"  | jq -r '.[0].duties // 0')
+          classes=$(echo "${body}" | jq -r '.[0].classes // 0')
+          morning=$(echo "${body}" | jq -r '.[0].morning_duties // 0')
+
+          if [ "${healthy}" != "true" ]; then
+            echo "::error::No usable duties for ${day} — ${morning} morning duties for ${classes} classes, ${duties} in total."
+            echo ""
+            echo "The nightly job (generate-duties-nightly, migration 024) did not"
+            echo "produce a workable day. Teachers will open the app to an empty"
+            echo "Duties tab."
+            echo ""
+            echo "To see what happened:"
+            echo "  select jobname, status, return_message, start_time"
+            echo "    from cron.job_run_details order by start_time desc limit 5;"
+            echo ""
+            echo "To fix it right now, from the SQL editor:"
+            echo "  select generate_duties();"
+            exit 1
+          fi
+
+          echo "${day}: ${morning} morning duties for ${classes} classes, ${duties} in total. Healthy."
