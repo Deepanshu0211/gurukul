@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { fromRow as studentFromRow } from "./students";
+import { todayISO } from "../utils/format";
 
 /**
  * Duties, and resolving each one to the students it covers.
@@ -50,7 +51,14 @@ export const fromRow = (r) => ({
  * looks broken. Once that job runs, this fallback stops being reached.
  */
 export async function fetchDuties(day) {
-  const target = day || new Date().toISOString().slice(0, 10);
+  // `todayISO()`, not `toISOString().slice(0, 10)`. The latter is the UTC
+  // date: India is +5:30, so between midnight and 5:30am local it names
+  // YESTERDAY. Mangalarati is at 4:30, squarely inside that window — the
+  // app would ask for the previous day's duties, and the fallback below
+  // would quietly serve them as though they were today's, already
+  // submitted. `todayISO` exists in utils/format.js for exactly this and
+  // says so in its own comment.
+  const target = day || todayISO();
 
   const query = () =>
     supabase.from("duties").select("*, checkpoints(name, start_min, end_min)").order("id");

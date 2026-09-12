@@ -29,10 +29,11 @@ import Segmented from "../components/Segmented";
 import FadeIn from "../components/FadeIn";
 import { SectionLabel, EmptyState, Row, StatusTag, ErrorState, IconCircle, Chevron } from "../components/ui";
 import StatusBoardSheet from "../components/StatusBoardSheet";
+import CalendarSheet from "../components/CalendarSheet";
 import { useNow } from "../lib/clock";
 import { defaultsToOwnDuties } from "../domain/roles";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
-import { plural, fmtTime, fmtDuration, weekdayName} from "../utils/format";
+import { plural, fmtTime, fmtDuration, weekdayName, fmtDay, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 
@@ -60,6 +61,9 @@ export default function DutiesScreen({ navigation }) {
     refresh,
     studentsForDuty,
     staffName,
+    day,
+    setDay,
+    isToday,
   } = useSchoolData();
   const [refreshing, setRefreshing] = useState(false);
   const tabInset = useTabContentInset();
@@ -95,6 +99,7 @@ export default function DutiesScreen({ navigation }) {
   // screen — and they are the people the sheet was built for. Putting it
   // only on the Dashboard made it invisible to every teacher in the school.
   const [statusOpen, setStatusOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [query, setQuery] = useState("");
   const showingMine = ownFirst && scope === "mine";
 
@@ -243,6 +248,16 @@ export default function DutiesScreen({ navigation }) {
       <EdgeFade top={0} height={topInset} visible={scrolled} />
 
       <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} />
+
+      <CalendarSheet
+        visible={calendarOpen}
+        selected={day}
+        onSelect={(d) => {
+          setDay(d);
+          setCalendarOpen(false);
+        }}
+        onClose={() => setCalendarOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -284,6 +299,40 @@ function DutiesHeader({
         total={total}
         badge={badge}
       />
+
+      {/* The only route in the app to a PAST day's checkpoint.
+
+          A coordinator, the MOD and the Principal's office may all correct a
+          submitted register — 006 grants it and the database enforces it —
+          but there was nowhere to do it from. Records reads a past day back
+          and offers no way to change it, and Records is on the teacher's tab
+          bar only, so those three roles could not even see one. A permission
+          with no button attached to it.
+
+          Pick a day here and the existing correction flow does the rest,
+          unchanged: tap a submitted checkpoint and it opens in Correcting
+          mode. It also lets a teacher fill in a register they missed, which
+          the database already allowed while it was still pending. */}
+      <TouchableOpacity
+        style={[styles.dayPill, !isToday && styles.dayPillPast]}
+        onPress={() => setCalendarOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`Showing ${fmtDay(day)}. Change day`}
+      >
+        <Ionicons
+          name="calendar-outline"
+          size={16}
+          color={isToday ? colors.primary : colors.warning}
+        />
+        <Text style={[styles.dayPillText, !isToday && styles.dayPillTextPast]}>
+          {fmtDay(day)}
+        </Text>
+        {!isToday && (
+          <Text style={styles.dayPillBack} onPress={() => setDay(todayISO())}>
+            Back to today
+          </Text>
+        )}
+      </TouchableOpacity>
 
       {showScope && (
         <Segmented
@@ -493,6 +542,23 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.gutter },
 
   scope: { marginTop: spacing.sm },
+  dayPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    alignSelf: "flex-start",
+    marginTop: spacing.sm,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+  },
+  // A past day is tinted, because marking one is a different act from
+  // marking today and the screen should not look identical.
+  dayPillPast: { backgroundColor: colors.warningBg },
+  dayPillText: { ...typography.caption, color: colors.primaryDark, fontWeight: "600" },
+  dayPillTextPast: { color: colors.warning },
+  dayPillBack: { ...typography.caption, color: colors.primary, marginLeft: spacing.xs },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",

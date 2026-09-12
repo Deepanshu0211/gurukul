@@ -9,6 +9,7 @@ import {
   overrideAttendance as overrideAttendanceInDb,
   reassignDuty as reassignDutyInDb,
 } from "../lib/duties";
+import { todayISO } from "../utils/format";
 
 /**
  * One source of truth for students, duties and attendance.
@@ -28,6 +29,15 @@ export function SchoolDataProvider({ children }) {
   // { [dutyId]: { statuses: { admissionNo: code }, submittedBy, submittedAt } }
   const [records, setRecords] = useState({});
   const [loading, setLoading] = useState(true);
+  // The day every screen is working on. Today, until somebody picks another.
+  //
+  // Until this existed there was no route to a past day's DUTY anywhere in
+  // the app — Records could read a past day back but offered no way to
+  // change it, and Records is on the teacher's tab bar only. So the three
+  // roles allowed to correct a submitted register (coordinator, MOD, the
+  // Principal's office) could not reach one. The permission existed in the
+  // database and had no button attached to it.
+  const [day, setDay] = useState(todayISO());
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
@@ -36,7 +46,7 @@ export function SchoolDataProvider({ children }) {
       const [studentRows, staffRows, dutyRows] = await Promise.all([
         fetchStudents(),
         fetchStaff(),
-        fetchDuties(),
+        fetchDuties(day),
       ]);
       setStudents(studentRows);
       setStaff(staffRows);
@@ -63,7 +73,7 @@ export function SchoolDataProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [day]);
 
   useEffect(() => {
     load();
@@ -172,6 +182,9 @@ export function SchoolDataProvider({ children }) {
       records,
       loading,
       error,
+      day,
+      setDay,
+      isToday: day === todayISO(),
       refresh: load,
       studentsForDuty,
       staffById,
@@ -187,6 +200,7 @@ export function SchoolDataProvider({ children }) {
       records,
       loading,
       error,
+      day,
       load,
       studentsForDuty,
       staffById,

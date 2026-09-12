@@ -78,7 +78,22 @@ export function StatusTag({ tone = "pending", label, style }) {
   );
 }
 
-export function PrimaryButton({ title, icon, onPress, disabled, style, textStyle, ...rest }) {
+/**
+ * `numberOfLines` defaults to 1 because a button label that wraps makes the
+ * button grow, and every footer and sticky bar in the app is sized around it.
+ * It was previously swallowed by `...rest` onto the TouchableOpacity, where
+ * it does nothing at all.
+ */
+export function PrimaryButton({
+  title,
+  icon,
+  onPress,
+  disabled,
+  style,
+  textStyle,
+  numberOfLines = 1,
+  ...rest
+}) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -89,7 +104,9 @@ export function PrimaryButton({ title, icon, onPress, disabled, style, textStyle
       style={[styles.primaryBtn, disabled && styles.btnDisabled, style]}
       {...rest}
     >
-      <Text style={[styles.primaryBtnText, textStyle]}>{title}</Text>
+      <Text style={[styles.primaryBtnText, textStyle]} numberOfLines={numberOfLines}>
+        {title}
+      </Text>
       {!!icon && <Ionicons name={icon} size={16} color={colors.white} />}
     </TouchableOpacity>
   );

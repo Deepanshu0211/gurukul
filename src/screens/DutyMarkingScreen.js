@@ -473,6 +473,10 @@ export default function DutyMarkingScreen({ route, navigation }) {
             onPress={isOverride ? confirmOverride : confirmSubmit}
             disabled={saving || (isOverride && changedCount === 0)}
             style={styles.submitBtn}
+            // A label that wraps to two lines makes the footer grow and the
+            // list jump; one that shrinks stays readable.
+            textStyle={{ flexShrink: 1 }}
+            numberOfLines={1}
           />
         )}
       </View>
@@ -625,8 +629,14 @@ function Tally({ value, label, tone }) {
       : colors.text;
   return (
     <View style={styles.tally}>
-      <Text style={[styles.tallyValue, { color }]}>{value}</Text>
-      <Text style={styles.tallyLabel}>{label}</Text>
+      <Text style={[styles.tallyValue, { color }]} numberOfLines={1}>
+        {value}
+      </Text>
+      {/* The label is the expendable half of a tally: '279' on its own is
+          still a headcount, 'Pres…' over a blank is not. */}
+      <Text style={styles.tallyLabel} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -785,9 +795,19 @@ const styles = StyleSheet.create({
     ...shadow.lg,
     shadowOffset: { width: 0, height: -8 },
   },
-  tallies: { flexDirection: "row", gap: spacing.lg },
-  tally: { alignItems: "flex-start" },
+  // Both halves of the footer can give way, and neither could before.
+  //
+  // 'Save 3 changes' is the longest label the button ever shows, and with
+  // three tallies at 24px gaps and 32px of button padding the row was wider
+  // than the phone. Nothing had flexShrink, so instead of tightening, the
+  // button ran off the right edge and over 'Absent'. It only appeared on a
+  // correction — the plain 'Submit' label fits — so every test of the normal
+  // path looked fine.
+  tallies: { flexDirection: "row", gap: spacing.md, flexShrink: 1, minWidth: 0 },
+  tally: { alignItems: "flex-start", flexShrink: 1, minWidth: 0 },
   tallyValue: { fontFamily: fonts.bold, fontSize: 21, lineHeight: 27, ...numeric },
   tallyLabel: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 15, color: colors.textMuted },
-  submitBtn: { paddingHorizontal: spacing.xl },
+  // flexShrink 0 so the tallies tighten first: a clipped number is useless,
+  // a slightly narrower button is not.
+  submitBtn: { paddingHorizontal: spacing.md, flexShrink: 0 },
 });
