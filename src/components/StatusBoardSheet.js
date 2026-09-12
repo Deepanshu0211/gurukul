@@ -195,14 +195,18 @@ function ClassRow({ row, expanded, onPress, single, total }) {
         <>
           <View style={styles.grid}>
             {COLUMNS.map((c) => (
-              <View key={c.key} style={styles.cell}>
+              <View
+                key={c.key}
+                style={styles.cell}
+                accessible
+                // The heading a sighted reader gets from the column is spoken
+                // here instead, because 'Res P' is read out as two letters.
+                accessibilityLabel={`${c.label}: ${row[c.key]}`}
+              >
                 <Text style={[styles.cellNum, row[c.key] > 0 && styles.cellNumOn, numeric]}>
                   {row[c.key]}
                 </Text>
                 <Text style={styles.cellShort}>{c.short}</Text>
-                <Text style={styles.cellLabel} numberOfLines={2}>
-                  {c.label}
-                </Text>
               </View>
             ))}
           </View>
@@ -275,17 +279,17 @@ const styles = StyleSheet.create({
 
   grid: {
     flexDirection: "row",
-    flexWrap: "wrap",
     marginTop: spacing.sm,
     backgroundColor: colors.cardAlt,
     borderRadius: radius.md,
     paddingVertical: spacing.sm,
   },
-  cell: { width: "33.33%", paddingHorizontal: spacing.xs, paddingVertical: spacing.xs },
+  // Six cells in one row of six rather than two rows of three: they are the
+  // register's columns and they read left to right, the way the paper does.
+  cell: { flex: 1, paddingHorizontal: 2, paddingVertical: spacing.xs },
   cellNum: { ...typography.h3, color: colors.textMuted, textAlign: "center" },
   cellNumOn: { color: colors.text },
-  cellShort: { ...typography.caption, color: colors.text, textAlign: "center", fontWeight: "600" },
-  cellLabel: { ...typography.caption, color: colors.textMuted, textAlign: "center", fontSize: 10 },
+  cellShort: { ...typography.caption, color: colors.textMuted, textAlign: "center", fontSize: 11 },
 
   footnote: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
 });

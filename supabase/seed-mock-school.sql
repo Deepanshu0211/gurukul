@@ -516,30 +516,30 @@ on conflict (id) do update
 --
 -- Saturday's twelve house duties are NOT here — seed-saturday.sql owns those.
 insert into duties (id, checkpoint_id, day, group_label, class_key, scope, band, staff_id) values
-  ('morn-2','morning',current_date,'Class 2','2|A',null,null,'t1'),
-  ('morn-3','morning',current_date,'Class 3','3|A',null,null,'t03'),
-  ('morn-4','morning',current_date,'Class 4','4|A',null,null,'t04'),
-  ('morn-5','morning',current_date,'Class 5','5|A',null,null,'t05'),
-  ('morn-6K','morning',current_date,'Class 6 Krishna','6|KRISHNA',null,null,'t06'),
-  ('morn-6B','morning',current_date,'Class 6 Balram','6|BALRAM',null,null,'t07'),
-  ('morn-7K','morning',current_date,'Class 7 Krishna','7|KRISHNA',null,null,'t08'),
-  ('morn-7B','morning',current_date,'Class 7 Balram','7|BALRAM',null,null,'t09'),
-  ('morn-8K','morning',current_date,'Class 8 Krishna','8|KRISHNA',null,null,'t10'),
-  ('morn-8B','morning',current_date,'Class 8 Balram','8|BALRAM',null,null,'t11'),
-  ('morn-9K','morning',current_date,'Class 9 Krishna','9|KRISHNA',null,null,'t12'),
-  ('morn-9B','morning',current_date,'Class 9 Balram','9|BALRAM',null,null,'t13'),
-  ('morn-10K','morning',current_date,'Class 10 Krishna','10|KRISHNA',null,null,'t14'),
-  ('morn-10B','morning',current_date,'Class 10 Balram','10|BALRAM',null,null,'t2'),
-  ('morn-11K','morning',current_date,'Class 11 Krishna','11|KRISHNA',null,null,'t16'),
-  ('morn-11B','morning',current_date,'Class 11 Balram','11|BALRAM',null,null,'t17'),
-  ('morn-12K','morning',current_date,'Class 12 Krishna','12|KRISHNA',null,null,'t18'),
-  ('morn-12B','morning',current_date,'Class 12 Balram','12|BALRAM',null,null,'t19'),
-  ('mang','mang',current_date,'All residential students',null,'res',null,'c1'),
-  ('bfast-pri','breakfast',current_date,'Primary · residential',null,'res','Primary','d1'),
-  ('bfast-mid','breakfast',current_date,'Middle · residential',null,'res','Middle','d2'),
-  ('bfast-sr','breakfast',current_date,'Senior · residential',null,'res','Senior','d3'),
-  ('lunch-all','lunch',current_date,'Whole school',null,'all',null,'c1'),
-  ('night-res','night',current_date,'All residential students',null,'res',null,'c2')
+  ('morn-2','morning',school_today(),'Class 2','2|A',null,null,'t1'),
+  ('morn-3','morning',school_today(),'Class 3','3|A',null,null,'t03'),
+  ('morn-4','morning',school_today(),'Class 4','4|A',null,null,'t04'),
+  ('morn-5','morning',school_today(),'Class 5','5|A',null,null,'t05'),
+  ('morn-6K','morning',school_today(),'Class 6 Krishna','6|KRISHNA',null,null,'t06'),
+  ('morn-6B','morning',school_today(),'Class 6 Balram','6|BALRAM',null,null,'t07'),
+  ('morn-7K','morning',school_today(),'Class 7 Krishna','7|KRISHNA',null,null,'t08'),
+  ('morn-7B','morning',school_today(),'Class 7 Balram','7|BALRAM',null,null,'t09'),
+  ('morn-8K','morning',school_today(),'Class 8 Krishna','8|KRISHNA',null,null,'t10'),
+  ('morn-8B','morning',school_today(),'Class 8 Balram','8|BALRAM',null,null,'t11'),
+  ('morn-9K','morning',school_today(),'Class 9 Krishna','9|KRISHNA',null,null,'t12'),
+  ('morn-9B','morning',school_today(),'Class 9 Balram','9|BALRAM',null,null,'t13'),
+  ('morn-10K','morning',school_today(),'Class 10 Krishna','10|KRISHNA',null,null,'t14'),
+  ('morn-10B','morning',school_today(),'Class 10 Balram','10|BALRAM',null,null,'t2'),
+  ('morn-11K','morning',school_today(),'Class 11 Krishna','11|KRISHNA',null,null,'t16'),
+  ('morn-11B','morning',school_today(),'Class 11 Balram','11|BALRAM',null,null,'t17'),
+  ('morn-12K','morning',school_today(),'Class 12 Krishna','12|KRISHNA',null,null,'t18'),
+  ('morn-12B','morning',school_today(),'Class 12 Balram','12|BALRAM',null,null,'t19'),
+  ('mang','mang',school_today(),'All residential students',null,'res',null,'c1'),
+  ('bfast-pri','breakfast',school_today(),'Primary · residential',null,'res','Primary','d1'),
+  ('bfast-mid','breakfast',school_today(),'Middle · residential',null,'res','Middle','d2'),
+  ('bfast-sr','breakfast',school_today(),'Senior · residential',null,'res','Senior','d3'),
+  ('lunch-all','lunch',school_today(),'Whole school',null,'all',null,'c1'),
+  ('night-res','night',school_today(),'All residential students',null,'res',null,'c2')
 on conflict (id) do update
   set checkpoint_id = excluded.checkpoint_id, day = excluded.day,
       group_label = excluded.group_label, class_key = excluded.class_key,
@@ -570,7 +570,7 @@ union all select 'day scholars',   count(*)::text from students where stype = 'D
 union all select 'classes',        count(distinct grade || '|' || section)::text from students
 union all select 'staff',          count(*)::text from staff
 union all select 'class teachers', count(*)::text from staff where class_key is not null
-union all select 'duties today',   count(*)::text from duties where day = current_date
+union all select 'duties today',   count(*)::text from duties where day = school_today()
 union all select 'can sign in',    count(*)::text from staff where auth_user_id is not null
 union all select 'no house',       count(*)::text from students where house is null
 union all select 'unstaffed classes',

@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { fromRow as dutyFromRow } from "./duties";
 
+// PostgREST answers with at most this many rows unless a range is given.
+// Shared by both readers below so they cannot drift apart.
+const PAGE = 1000;
+
 /**
  * Reading attendance for a day OTHER than the one the app is currently
  * working on.
@@ -29,16 +33,40 @@ export async function fetchDayAttendance(day) {
   const submitted = duties.filter((d) => d.state === "submitted");
   if (!submitted.length) return { duties, records: {} };
 
-  // One query for the whole day rather than one per duty — a full day is ten
-  // checkpoints, and ten round trips on a school Wi-Fi connection is felt.
-  const { data: marks, error: attErr } = await supabase
-    .from("attendance")
-    .select("duty_id, admission_no, status")
-    .in(
-      "duty_id",
-      submitted.map((d) => d.id)
-    );
-  if (attErr) throw new Error(attErr.message);
+  // One query per PAGE of the whole day rather than one per duty — a full
+  // day is ten checkpoints, and ten round trips on school Wi-Fi is felt.
+  //
+  // PAGED, and it has to be. PostgREST answers with at most 1000 rows unless
+  // asked for a range, and a marked day at this school is about 1700: 411
+  // children at morning attendance, ~300 at each residential checkpoint, 411
+  // again at lunch. The unpaged version returned the first 1000 and dropped
+  // the rest without an error, a warning, or a short count anybody could see.
+  //
+  // The way it failed is the reason this is worth the loop. Only a non-null
+  // status is stored below — Present is the absence of one — so the rows that
+  // went missing were the ABSENCES. A child marked absent at the last
+  // checkpoint of the day came back Present. An attendance register that
+  // silently turns missing children into present ones is worse than no
+  // register, because it is believed.
+  const dutyIds = submitted.map((d) => d.id);
+  const marks = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error: attErr } = await supabase
+      .from("attendance")
+      .select("duty_id, admission_no, status")
+      .in("duty_id", dutyIds)
+      // Without a stable order the pages can overlap or skip rows: Postgres
+      // makes no promise about the order of an unordered query between calls.
+      .order("duty_id")
+      .order("admission_no")
+      .range(from, from + PAGE - 1);
+    if (attErr) throw new Error(attErr.message);
+    if (!data || data.length === 0) break;
+    marks.push(...data);
+    // A short page is the last page. Checking this rather than comparing
+    // against a total means one request for a small day and no count query.
+    if (data.length < PAGE) break;
+  }
 
   const records = {};
   submitted.forEach((d) => {
@@ -172,13 +200,35 @@ export async function fetchMarkedDaysInMonth(year, month) {
   // Day 0 of the next month is the last day of this one.
   const to = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`;
 
-  const { data, error } = await supabase
-    .from("duties")
-    .select("day")
-    .eq("state", "submitted")
-    .gte("day", from)
-    .lte("day", to);
-  if (error) throw new Error(error.message);
+  // Paged, though the answer is at most 31 dates.
+  //
+  // This asks for one row per submitted DUTY and then collapses them into a
+  // set of days, so a month costs 24 rows a day — about 740 — and a month
+  // with Saturdays and the eight-to-ten checkpoints the requirements ask for
+  // would cross a thousand. PostgREST would then return the first thousand
+  // and the last days of the month would quietly lose their dot: a teacher
+  // looking for last Tuesday's register would be told nothing was marked.
+  //
+  // Paging is the fix that needs no migration. The better one is a function
+  // returning the distinct days — PostgREST cannot express SELECT DISTINCT —
+  // which would turn 740 rows into 31. Worth doing when the checkpoint list
+  // grows; not worth a migration today.
+  const days = new Set();
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from("duties")
+      .select("day")
+      .eq("state", "submitted")
+      .gte("day", from)
+      .lte("day", to)
+      .order("day")
+      .order("id")
+      .range(offset, offset + PAGE - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    data.forEach((r) => days.add(r.day));
+    if (data.length < PAGE) break;
+  }
 
-  return new Set((data || []).map((r) => r.day));
+  return days;
 }

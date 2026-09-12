@@ -75,7 +75,7 @@ union all select 'staff',          count(*)::text from staff
 union all select 'staff w/ login', count(*)::text from staff where auth_user_id is not null
 union all select 'class teachers', count(*)::text from staff where class_key is not null
 union all select 'duties',         count(*)::text from duties
-union all select 'duties today',   count(*)::text from duties where day = current_date
+union all select 'duties today',   count(*)::text from duties where day = school_today()
 union all select 'attendance',     count(*)::text from attendance
 union all select 'checkpoints',    count(*)::text from checkpoints
 union all select 'status types',   count(*)::text from status_types

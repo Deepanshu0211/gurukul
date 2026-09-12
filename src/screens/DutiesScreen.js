@@ -27,7 +27,8 @@ import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import SearchField from "../components/SearchField";
 import Segmented from "../components/Segmented";
 import FadeIn from "../components/FadeIn";
-import { SectionLabel, EmptyState, Row, StatusTag, ErrorState } from "../components/ui";
+import { SectionLabel, EmptyState, Row, StatusTag, ErrorState, IconCircle, Chevron } from "../components/ui";
+import StatusBoardSheet from "../components/StatusBoardSheet";
 import { useNow } from "../lib/clock";
 import { defaultsToOwnDuties } from "../domain/roles";
 import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/duties";
@@ -89,6 +90,11 @@ export default function DutiesScreen({ navigation }) {
   // mark a colleague's checkpoint — a duty teacher is regularly away and the
   // window still has to be met.
   const [scope, setScope] = useState("mine");
+  // The morning report's counts. It lives here as well as on the Dashboard
+  // because a class teacher has no Dashboard tab — Duties IS their home
+  // screen — and they are the people the sheet was built for. Putting it
+  // only on the Dashboard made it invisible to every teacher in the school.
+  const [statusOpen, setStatusOpen] = useState(false);
   const [query, setQuery] = useState("");
   const showingMine = ownFirst && scope === "mine";
 
@@ -187,6 +193,7 @@ export default function DutiesScreen({ navigation }) {
             showScope={ownFirst}
             coverHint={ownFirst && scope === "all" && allDuties.length <= myDuties.length}
             scope={scope}
+            onOpenStatus={() => setStatusOpen(true)}
             onScope={setScope}
             mineCount={myDuties.length}
             allCount={allDuties.length}
@@ -234,6 +241,8 @@ export default function DutiesScreen({ navigation }) {
       />
 
       <EdgeFade top={0} height={topInset} visible={scrolled} />
+
+      <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -247,6 +256,7 @@ function DutiesHeader({
   showScope,
   coverHint,
   scope,
+  onOpenStatus,
   onScope,
   mineCount,
   allCount,
@@ -286,6 +296,28 @@ function DutiesHeader({
           ]}
         />
       )}
+
+      {/* The school's own morning-report columns for this person's class:
+          residential and day scholars, present, absent, sick, not reported. */}
+      <TouchableOpacity
+        style={styles.statusRow}
+        onPress={onOpenStatus}
+        accessibilityRole="button"
+        accessibilityLabel="Show today's status"
+      >
+        <IconCircle bg={colors.primarySoft} size={36}>
+          <Ionicons name="stats-chart-outline" size={16} color={colors.primary} />
+        </IconCircle>
+        <View style={styles.statusText}>
+          <Text style={styles.statusTitle}>Today's status</Text>
+          <Text style={styles.statusSub} numberOfLines={1}>
+            {user?.classLabel
+              ? `Counts for ${user.classLabel}`
+              : "Residential and day counts, class by class"}
+          </Text>
+        </View>
+        <Chevron />
+      </TouchableOpacity>
 
       {/* "Whole school" returned nothing beyond this teacher's own duties. The
           filtering happens in the database, so no amount of app code can widen
@@ -461,6 +493,19 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.gutter },
 
   scope: { marginTop: spacing.sm },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+  },
+  statusText: { flex: 1 },
+  statusTitle: { ...typography.bodyStrong, color: colors.text },
+  statusSub: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
   search: { marginTop: spacing.sm },
 
   notice: {

@@ -34,7 +34,7 @@ begin;
 -- session open across runs, so without it the second run of this file fails
 -- with 'relation "target" already exists' and nothing gets seeded.
 create temp table target on commit drop as
-select (current_date - ((extract(dow from current_date)::int + 1) % 7))::date as day;
+select (school_today() - ((extract(dow from school_today())::int + 1) % 7))::date as day;
 
 -- Who answers for each house. One teacher per house across all three bands,
 -- which is the closest the seeded test accounts get to a real house rota —
@@ -121,14 +121,14 @@ select (select count(*) from students where active and grade between 2 and 12) a
 -- from an earlier test run, the app shows that and the Saturday stays
 -- invisible, with nothing on screen to explain why.
 select case
-         when exists (select 1 from duties where day = current_date)
-           then current_date
+         when exists (select 1 from duties where day = school_today())
+           then school_today()
          else (select max(day) from duties)
        end                                                as app_will_show,
        (select max(day) from duties where id like 'sat-%') as saturday_seeded,
        case
-         when exists (select 1 from duties where day = current_date)
-              and current_date <> (select max(day) from duties where id like 'sat-%')
+         when exists (select 1 from duties where day = school_today())
+              and school_today() <> (select max(day) from duties where id like 'sat-%')
            then 'Duties dated today are in the way — see the optional block below'
          when (select max(day) from duties) = (select max(day) from duties where id like 'sat-%')
            then 'Good: the app will open on the seeded Saturday'
@@ -147,7 +147,7 @@ select case
 --
 -- To undo:
 --   update duties set day = day + interval '1 year'
---    where day < current_date - interval '300 days' and id not like 'sat-%';
+--    where day < school_today() - interval '300 days' and id not like 'sat-%';
 
 -- ── THEN, IN THE APP ────────────────────────────────────────────────────────
 --   1. Log in as t1 (krishna.saha@gurukula.org) — the Vrindavan house teacher.

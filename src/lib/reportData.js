@@ -41,18 +41,40 @@ const detail = () => supabase.from("attendance_detail").select("*");
 export async function fetchDayReport(day) {
   const rows = await fetchAll(() => detail().eq("day", day).order("start_min").order("roll_no"));
 
+  // ONE COLUMN PER CHECKPOINT, NOT PER DUTY.
+  //
+  // A checkpoint is split across as many duties as there are groups marking
+  // it: morning attendance is eighteen duties, one per class, and breakfast
+  // is three, one per band. Keying columns by duty gave the printed register
+  // twenty-four of them — 24 x 7mm + 12mm roll + 16mm class = 196mm across a
+  // page with 186mm between its margins, leaving the student's NAME a
+  // negative width. Keyed by checkpoint it is five columns and 63mm, which
+  // is also how the school reads its own day.
+  //
+  // Safe because a student sits in exactly one group per checkpoint, so they
+  // have at most one mark in it. If overlapping duties are ever introduced —
+  // a remedial batch marked alongside its class, say — the second mark would
+  // overwrite the first here, and this becomes a decision about which wins
+  // rather than the accident it would be today.
   const checkpoints = [];
   const seen = new Set();
   const students = new Map();
 
   for (const r of rows) {
-    if (!seen.has(r.duty_id)) {
-      seen.add(r.duty_id);
+    if (!seen.has(r.checkpoint_id)) {
+      seen.add(r.checkpoint_id);
       checkpoints.push({
-        dutyId: r.duty_id,
+        // `dutyId` keeps its name: reportHtml.js and the Records screen both
+        // look marks up by `c.dutyId`, and it is still a stable key for a
+        // column — it is just the checkpoint's key now, not a duty's.
+        dutyId: r.checkpoint_id,
+        checkpointId: r.checkpoint_id,
         name: r.checkpoint,
         startMin: r.start_min,
-        group: r.group_label,
+        // The group label belonged to ONE of the duties in this column, so it
+        // would name a single class on a column covering all eighteen. The
+        // checkpoint's own name is the honest label.
+        group: null,
         submittedBy: r.submitted_by,
         submittedAt: r.submitted_at,
         correctedBy: r.corrected_by,
@@ -72,7 +94,7 @@ export async function fetchDayReport(day) {
       };
       students.set(r.admission_no, s);
     }
-    s.marks[r.duty_id] = { status: r.status, label: r.status_label, present: r.present };
+    s.marks[r.checkpoint_id] = { status: r.status, label: r.status_label, present: r.present };
   }
 
   checkpoints.sort((a, b) => a.startMin - b.startMin);

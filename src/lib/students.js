@@ -39,30 +39,58 @@ const CORE = "admission_no,name,grade,section,stype,roll_no,remedial";
  */
 const missingColumn = (e) => e?.code === "42703" || /does not exist/i.test(e?.message || "");
 
+const PAGE = 1000;
+
 export async function fetchStudents() {
-  // Supabase caps a request at 1000 rows by default, which comfortably covers
-  // the current register; range() is set explicitly so growth past that is a
-  // deliberate change rather than a silent truncation.
-  const query = (columns) =>
+  // PostgREST answers with at most 1000 rows unless a range is given, so this
+  // pages until the register runs out.
+  //
+  // It used to ask for `.range(0, 999)` once, with a comment arguing that a
+  // fixed range made growth past a thousand "a deliberate change rather than a
+  // silent truncation". It did not: nothing anywhere checked whether the
+  // thousandth row was the last one. The register is 411 today and the
+  // requirements say to plan for 800, so the school would have crossed it by
+  // adding one campus, and the app would have shown a register missing its
+  // last classes with nothing to say so. The same shape of bug cost this
+  // project a day in `fetchDayAttendance`, where the rows that vanished were
+  // the absences.
+  const query = (columns, from) =>
     supabase
       .from("students")
       .select(columns)
       .eq("active", true)
       .order("grade", { ascending: true })
       .order("roll_no", { ascending: true })
-      .range(0, 999);
+      // admission_no last so the order is total. grade+roll_no is not unique —
+      // two children can share a roll number across sections — and a tie the
+      // database breaks differently between calls would repeat one row on a
+      // page boundary and drop another.
+      .order("admission_no", { ascending: true })
+      .range(from, from + PAGE - 1);
 
   // `house` arrived with the Saturday assembly sheet (migration 017) and is
   // read in exactly one dialog. This function is loaded by every screen in the
   // app, so asking for it unconditionally meant that on a server where 017 has
   // not been run yet, PostgREST rejected the whole select and Duties — the
   // reason this app exists — went down for a label on a report. Ask for it,
-  // and drop it if the server is behind.
-  let { data, error } = await query(`${CORE},house`);
-  if (error && missingColumn(error)) ({ data, error } = await query(CORE));
+  // and drop it if the server is behind. Decided once, on the first page,
+  // rather than re-tried on every one.
+  let columns = `${CORE},house`;
+  const out = [];
 
-  if (error) throw error;
-  return (data || []).map(fromRow);
+  for (let from = 0; ; from += PAGE) {
+    let { data, error } = await query(columns, from);
+    if (error && missingColumn(error) && columns !== CORE) {
+      columns = CORE;
+      ({ data, error } = await query(columns, from));
+    }
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    out.push(...data);
+    if (data.length < PAGE) break;
+  }
+
+  return out.map(fromRow);
 }
 
 export function useStudents() {

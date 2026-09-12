@@ -34,6 +34,11 @@
       "expo-font",
       "expo-splash-screen",
       "expo-sharing"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "07efe597-2d56-4e23-afc5-72a3bf83ca2b"
+      }
+    }
   }
 }

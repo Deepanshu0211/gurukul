@@ -14,8 +14,18 @@ import { supabase } from "./supabase";
  * could alter a sheet the school files.
  */
 
-/** The school's own column headings, and what each one counts. Shown in the
- *  sheet so nobody has to remember which bucket a status falls in. */
+/**
+ * The school's own column headings, in the school's own words.
+ *
+ * Short forms only. The sheet used to spell each one out underneath — 'Res P'
+ * over 'Residential present' — which is the right call for someone meeting
+ * the form for the first time and the wrong one for everybody who fills it in
+ * every morning. These are the headings on their printed register; the staff
+ * who read this screen have been reading them for years.
+ *
+ * `label` is kept for the accessibility name, where a screen reader has no
+ * column header to lean on and 'Res P' alone would be read as two letters.
+ */
 export const COLUMNS = [
   { key: "resPresent", short: "Res P", label: "Residential present" },
   { key: "dayPresent", short: "Day P", label: "Day scholar present" },

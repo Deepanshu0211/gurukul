@@ -39,7 +39,7 @@ delete from audit_log;
 --    `corrected_by` likewise — otherwise a duty that was overruled during
 --    testing still shows "Overruled by …" on a record that no longer exists.
 update duties set
-  day          = current_date,
+  day          = school_today(),
   state        = 'pending',
   submitted_by = null,
   submitted_at = null,
@@ -62,7 +62,7 @@ commit;
 
 -- Check — all four should be true:
 select 'duties pending and dated today' as check,
-       not exists (select 1 from duties where state <> 'pending' or day <> current_date) as ok
+       not exists (select 1 from duties where state <> 'pending' or day <> school_today()) as ok
 union all select 'no attendance',        not exists (select 1 from attendance)
 union all select 'no resolutions',       not exists (select 1 from alert_resolutions)
 union all select 'no audit entries',     not exists (select 1 from audit_log)
