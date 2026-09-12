@@ -252,6 +252,21 @@ function exceptionsTable(rows, { showDay = false } = {}) {
  * sheet reads top to bottom like a register and the row a name sits on is the
  * row its marks sit on.
  */
+/**
+ * '6 KRISHNA' -> '6 Krishna'.
+ *
+ * The section is stored upper-case because that is how the school's own
+ * spreadsheet had it, and shouting it on a printed page helps nobody. Grade
+ * numbers and the single-section 'A' are left exactly as they are.
+ */
+const className = (label) =>
+  String(label || "")
+    .split(/\s+/)
+    .map((w) => (w.length > 1 && w === w.toUpperCase() && /[A-Z]/.test(w)
+      ? w[0] + w.slice(1).toLowerCase()
+      : w))
+    .join(" ");
+
 function registerTable(students, checkpoints) {
   // Numbered columns, keyed by the checkpoint table above. 7mm holds a single
   // bold character at 10pt with room either side.
@@ -269,18 +284,25 @@ function registerTable(students, checkpoints) {
         .join("");
       return `<tr>
         <td class="num">${esc(s.roll ?? "")}</td>
+        <td>${esc(className(s.classLabel))}</td>
         <td>${esc(clip(s.name))}</td>
-        <td>${esc(s.classLabel)}</td>
         ${cells}
       </tr>`;
     })
     .join("");
 
+  // Class before Student, and 26mm rather than 16mm.
+  //
+  // It used to sit last, squeezed between the name and the mark columns, and
+  // 16mm truncated '6 Krishna' to '6 KRISH…'. There was never a shortage of
+  // room — with one column per checkpoint the table uses 63mm of 186mm — so
+  // the name was taking width it did not need while the class went without.
+  // Reading order matches the register too: which class, then who.
   return `<table>
     <thead><tr>
       <th class="num" style="width:12mm">Roll</th>
+      <th style="width:26mm">Class</th>
       <th>Student</th>
-      <th style="width:16mm">Class</th>
       ${heads}
     </tr></thead>
     <tbody>${rows}</tbody>
@@ -295,7 +317,7 @@ const LEGEND = `<div class="legend key">
 </div>`;
 
 /** One day: the checkpoint key, who was not present, then the full register. */
-export function dayReportHtml({ day, checkpoints, students }, { generatedBy } = {}) {
+export function dayReportHtml({ day, checkpoints, students }, { generatedBy, classLabel } = {}) {
   const summaryRows = checkpoints
     .map((c, i) => {
       let marked = 0;
@@ -308,11 +330,19 @@ export function dayReportHtml({ day, checkpoints, students }, { generatedBy } = 
         if (m.status === "A") absent += 1;
         else if (!m.present) elsewhere += 1;
       });
+      // Who actually took it. The column used to be Group, which named one
+      // of the eighteen duties behind a checkpoint and has been empty since
+      // columns were keyed by checkpoint instead. Who filled the register in
+      // is worth the space: a week covered by a substitute should say so on
+      // the page the school signs, not only in the audit log.
+      const who = c.takenBy
+        ? esc(clip(c.takenBy, 22)) + (c.cover ? ' <span class="key">(cover)</span>' : "")
+        : "";
       return `<tr>
         <td class="c"><b>${i + 1}</b></td>
         <td>${esc(c.name)}</td>
         <td>${esc(fmtTime(c.startMin))}</td>
-        <td>${esc(clip(c.group, 26))}</td>
+        <td>${who}</td>
         <td class="num">${marked}</td>
         <td class="num">${marked - absent - elsewhere}</td>
         <td class="num">${absent}</td>
@@ -324,16 +354,23 @@ export function dayReportHtml({ day, checkpoints, students }, { generatedBy } = 
   return page(
     `${header(
       "Attendance",
-      `${fmtDay(day)} · ${students.length} students · ${checkpoints.length} checkpoints`
+      [
+        classLabel || null,
+        fmtDay(day),
+        `${students.length} ${students.length === 1 ? "student" : "students"}`,
+        `${checkpoints.length} ${checkpoints.length === 1 ? "checkpoint" : "checkpoints"}`,
+      ]
+        .filter(Boolean)
+        .join(" · ")
     )}
 
 <h2>Checkpoints</h2>
 <table>
   <thead><tr>
     <th class="c" style="width:8mm">#</th>
-    <th style="width:28%">Checkpoint</th>
-    <th style="width:14%">Time</th>
-    <th style="width:22%">Group</th>
+    <th style="width:26%">Checkpoint</th>
+    <th style="width:12%">Time</th>
+    <th style="width:26%">Taken by</th>
     <th class="num" style="width:9%">Marked</th>
     <th class="num" style="width:9%">Present</th>
     <th class="num" style="width:9%">Absent</th>
@@ -354,16 +391,24 @@ ${footer(generatedBy)}`
  * 700 all-present children is forty thousand cells and nothing to act on.
  */
 export function rangeReportHtml(
-  { from, to, days, exceptions, totalMarks, students },
-  { generatedBy } = {}
+  { from, to, days, exceptions, totalMarks, students, takenBy = {} },
+  { generatedBy, classLabel } = {}
 ) {
   const absent = exceptions.filter((e) => e.status === "A").length;
 
   const perDay = days
     .map((day) => {
       const rows = exceptions.filter((e) => e.day === day);
+      // The question this answers: a class teacher goes on leave for three
+      // days and somebody covers. The marks are the class's either way, so
+      // without a name on the page there is nothing to show that the hand
+      // changed — and the school signs these sheets.
+      const who = (takenBy[day] || [])
+        .map((t) => esc(t.name) + (t.cover ? " (cover)" : ""))
+        .join(", ");
       return `<tr>
         <td>${esc(fmtDay(day))}</td>
+        <td>${who}</td>
         <td class="num">${rows.filter((r) => r.status === "A").length}</td>
         <td class="num">${rows.filter((r) => r.status !== "A").length}</td>
       </tr>`;
@@ -374,8 +419,8 @@ export function rangeReportHtml(
     ? `<table>
         <thead><tr>
           <th class="num" style="width:12mm">Roll</th>
+          <th style="width:26mm">Class</th>
           <th>Student</th>
-          <th style="width:16mm">Class</th>
           ${days.map((d) => `<th class="c" style="width:11mm">${esc(fmtDay(d).slice(0, 3))}</th>`).join("")}
           <th class="num" style="width:14mm">Absent</th>
         </tr></thead>
@@ -410,9 +455,10 @@ export function rangeReportHtml(
 <h2>By day</h2>
 <table>
   <thead><tr>
-    <th style="width:50%">Day</th>
-    <th class="num" style="width:25%">Absent</th>
-    <th class="num" style="width:25%">Elsewhere</th>
+    <th style="width:26%">Day</th>
+    <th style="width:34%">Taken by</th>
+    <th class="num" style="width:20%">Absent</th>
+    <th class="num" style="width:20%">Elsewhere</th>
   </tr></thead>
   <tbody>${perDay}</tbody>
 </table>

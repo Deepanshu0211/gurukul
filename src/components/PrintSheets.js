@@ -39,6 +39,12 @@ export default function PrintSheets({
   day,
   format = REPORT_FORMAT.REGISTER,
   subtitle,
+  // The class to print, or null for the whole school. A class teacher
+  // pressing Print wants their own thirty children, not eleven pages of
+  // the register to find them in — which is what this did before, because
+  // the report was written when the register was one pilot class.
+  classKey = null,
+  classLabel = null,
 }) {
   const { user } = useAuth();
   const dialog = useDialog();
@@ -73,7 +79,17 @@ export default function PrintSheets({
     if (exporting) return;
     setExporting(true);
     try {
-      const report = await buildReport({ from, to, generatedBy: user?.name, format: fmt });
+      const report = await buildReport({
+        from,
+        to,
+        generatedBy: user?.name,
+        format: fmt,
+        // The headcount and the Saturday assembly sheet are school-wide
+        // documents by definition, so they ignore the class even when one
+        // is showing.
+        classKey: fmt === REPORT_FORMAT.REGISTER ? classKey : null,
+        classLabel: fmt === REPORT_FORMAT.REGISTER ? classLabel : null,
+      });
       if (report.empty) {
         onClose();
         dialog.alert({

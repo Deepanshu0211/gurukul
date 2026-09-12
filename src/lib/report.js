@@ -93,7 +93,22 @@ export const REPORT_FORMAT = {
  * flag: a single day is just a range whose ends are equal, and the caller
  * should not have to know which report that produces.
  */
-export async function buildReport({ from, to, generatedBy, format = REPORT_FORMAT.REGISTER }) {
+/**
+ * @param classKey   '8|BALRAM' to print one class, or null for the school.
+ * @param classLabel 'Class 8 Balram', for the heading.
+ *
+ * The register formats are scoped; the headcount and the Saturday assembly
+ * sheet are not, because both are school-wide documents by definition — a
+ * one-class headcount is a register with the names taken out.
+ */
+export async function buildReport({
+  from,
+  to,
+  generatedBy,
+  format = REPORT_FORMAT.REGISTER,
+  classKey = null,
+  classLabel = null,
+}) {
   // Picked out of order — swap rather than refuse. Rejecting it would mean an
   // error message to read and a second attempt, for something with exactly
   // one sensible interpretation.
@@ -126,19 +141,24 @@ export async function buildReport({ from, to, generatedBy, format = REPORT_FORMA
     };
   }
 
+  // A filename somebody can find again in a folder of them.
+  const slug = classLabel
+    ? classLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-"
+    : "";
+
   if (start === end) {
-    const data = await fetchDayReport(start);
+    const data = await fetchDayReport(start, classKey);
     return {
-      html: dayReportHtml(data, { generatedBy }),
-      name: `attendance-${start}`,
+      html: dayReportHtml(data, { generatedBy, classLabel }),
+      name: `attendance-${slug}${start}`,
       empty: data.checkpoints.length === 0,
     };
   }
 
-  const data = await fetchRangeReport(start, end);
+  const data = await fetchRangeReport(start, end, classKey);
   return {
-    html: rangeReportHtml(data, { generatedBy }),
-    name: `attendance-${start}_to_${end}`,
+    html: rangeReportHtml(data, { generatedBy, classLabel }),
+    name: `attendance-${slug}${start}_to_${end}`,
     empty: data.totalMarks === 0,
   };
 }

@@ -570,6 +570,12 @@ export default function ClassDayScreen() {
         visible={printOpen}
         onClose={() => setPrintOpen(false)}
         day={day}
+        // The checkpoint being read, not the reader's own class: a
+        // coordinator looking at 8 Balram should print 8 Balram. A
+        // school-wide checkpoint has no class_key and prints everybody,
+        // which is right — Mangalarati covers the whole ashram.
+        classKey={activeDuty?.classKey || null}
+        classLabel={activeDuty?.classKey ? activeDuty.group : null}
       />
 
       <StudentInfoSheet
