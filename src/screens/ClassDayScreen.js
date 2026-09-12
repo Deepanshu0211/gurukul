@@ -175,7 +175,9 @@ export default function ClassDayScreen() {
   );
 
   const statusOf = useCallback(
-    (studentId, duty) => (duty ? records[duty.id]?.statuses[studentId] || "P" : null),
+    // `?.statuses[…]` guarded only the record, not the map inside it, so a
+    // record present but mid-write threw rather than reading as Present.
+    (studentId, duty) => (duty ? records[duty.id]?.statuses?.[studentId] || "P" : null),
     [records]
   );
 

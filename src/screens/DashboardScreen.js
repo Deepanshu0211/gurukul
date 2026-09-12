@@ -28,7 +28,16 @@ import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import FadeIn from "../components/FadeIn";
 import PrintSheets from "../components/PrintSheets";
 import StatusBoardSheet from "../components/StatusBoardSheet";
-import { SectionLabel, Stat, Divider, Card, StatusTag, IconCircle, Chevron } from "../components/ui";
+import {
+  SectionLabel,
+  Stat,
+  Divider,
+  Card,
+  StatusTag,
+  IconCircle,
+  Chevron,
+  ErrorState,
+} from "../components/ui";
 import { useNow } from "../lib/clock";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
@@ -56,7 +65,7 @@ const FEED_TONE = {
 };
 
 export default function DashboardScreen() {
-  const { students, duties, records, studentsForDuty, refresh } = useSchoolData();
+  const { students, duties, records, studentsForDuty, refresh, loading, error } = useSchoolData();
   const { user } = useAuth();
   const toast = useToast();
   const dialog = useDialog();
@@ -115,6 +124,12 @@ export default function DashboardScreen() {
 
   const submitted = duties.filter((d) => dutyStatus(d, records, now) === DUTY_STATUS.DONE);
   const overdue = duties.filter((d) => dutyStatus(d, records, now) === DUTY_STATUS.OVERDUE);
+
+  // "We do not know" is a third state, distinct from "all clear" and "someone
+  // is missing". A failed load leaves `duties` empty, and every count on this
+  // screen derived from an empty list reads as good news.
+  const loadFailed = !!error && duties.length === 0;
+  const stale = loadFailed || (loading && duties.length === 0);
 
   const resolve = async (reason) => {
     if (!reason?.trim() || savingRemark) return;
@@ -183,7 +198,34 @@ export default function DashboardScreen() {
           }
         />
 
-        {/* The safety number leads: it is the reason the system exists. */}
+        {/* The safety number leads: it is the reason the system exists.
+            Which is exactly why it must not be drawn from data that failed to
+            arrive. With no guard, a dropped connection rendered the calm
+            state — "All students accounted for", over "0 of 0 checkpoints" —
+            on the one screen in this app whose entire job is to say when a
+            child is unaccounted for. An all-clear nobody checked is worse
+            than no screen at all, because it is believed. */}
+        {stale ? (
+          <View style={[styles.hero, styles.heroUnknown]}>
+            <View style={styles.heroIcon}>
+              <Ionicons
+                name={loadFailed ? "cloud-offline-outline" : "hourglass-outline"}
+                size={24}
+                color={colors.onDark}
+              />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.heroTitle}>
+                {loadFailed ? "Can't reach the school server" : "Loading today's checkpoints…"}
+              </Text>
+              <Text style={styles.heroSub}>
+                {loadFailed
+                  ? "Nothing below is up to date. Pull down to try again."
+                  : "Counts below are not final yet."}
+              </Text>
+            </View>
+          </View>
+        ) : (
         <View style={[styles.hero, open.length > 0 ? styles.heroAlarm : styles.heroCalm]}>
           {open.length === 0 ? (
             <>
@@ -209,6 +251,16 @@ export default function DashboardScreen() {
             </>
           )}
         </View>
+        )}
+
+        {/* The reason, and a way out of it. The hero above can only afford one
+            line; a teacher who needs to know whether to go and look for a
+            child needs the difference between "offline" and "not allowed". */}
+        {loadFailed && (
+          <View style={styles.loadError}>
+            <ErrorState error={error} title="Can't load today" onRetry={refresh} compact />
+          </View>
+        )}
 
         <View style={styles.statsRow}>
           <Card tone="card" style={styles.statCard}>
@@ -454,6 +506,9 @@ const styles = StyleSheet.create({
   },
   heroCalm: { backgroundColor: colors.primaryDeep, borderColor: colors.primary },
   heroAlarm: { backgroundColor: colors.danger, borderColor: colors.danger },
+  // Neither green nor red: the honest colour for "we could not find out".
+  heroUnknown: { backgroundColor: colors.textMuted, borderColor: colors.textMuted },
+  loadError: { marginTop: spacing.sm },
   heroIcon: {
     width: 48,
     height: 48,

@@ -11,7 +11,14 @@ const TYPE_CODE = {
   "Day Boarding": "B",
 };
 
-const secShort = (sec) => (sec === "A" ? "A" : sec === "Vedic" ? "Vedic" : sec[0]);
+// `sec[0]` on a row whose section is null or empty throws, and it throws
+// inside the map over the whole register — so one malformed import row takes
+// down every screen in the app rather than showing one student oddly.
+const secShort = (sec) => {
+  if (!sec) return "—";
+  if (sec === "A" || sec === "Vedic") return sec;
+  return sec[0];
+};
 
 export const fromRow = (r) => ({
   id: r.admission_no,

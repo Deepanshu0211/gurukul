@@ -1,0 +1,943 @@
+<title>BG-SAAR Crash Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ──────────────────────────────────────────────────────────────
+     Palette and type are taken from the app's own design system —
+     src/theme/theme.js and the login screen's Fraunces/Manrope pair —
+     so the report reads as a document about this app rather than a
+     generic template with this app's name on it.
+     ────────────────────────────────────────────────────────────── */
+  :root {
+    --ground:      #FAF2E6;
+    --surface:     #FFFFFF;
+    --surface-sunk:#F1EADC;
+    --ink:         #0C2B2A;
+    --ink-muted:   #4C6462;
+    --ink-faint:   #7D918E;
+    --rule:        #DCCFB8;
+    --rule-strong: #C2B69F;
+
+    --teal:        #035352;
+    --teal-deep:   #02403F;
+    --teal-wash:   #DDEDEA;
+
+    --wine:        #8E1F3C;
+    --wine-wash:   #FBE4EA;
+    --gold:        #8A5F04;
+    --gold-wash:   #FDF0CE;
+    --olive:       #3F6B28;
+    --olive-wash:  #E8F2DC;
+
+    --shadow: 0 1px 2px rgba(12,43,42,.06), 0 8px 24px -16px rgba(12,43,42,.34);
+
+    --display: "Fraunces", Georgia, "Times New Roman", serif;
+    --body: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #071A19;
+      --surface:     #0E2725;
+      --surface-sunk:#0A201F;
+      --ink:         #EFE6D4;
+      --ink-muted:   #A3B6B3;
+      --ink-faint:   #7A8F8C;
+      --rule:        #1E3B39;
+      --rule-strong: #2C4F4C;
+
+      --teal:        #6FC8C0;
+      --teal-deep:   #9BDBD4;
+      --teal-wash:   #10312F;
+
+      --wine:        #F0899F;
+      --wine-wash:   #33121C;
+      --gold:        #E8BC5B;
+      --gold-wash:   #2E2410;
+      --olive:       #A3CE7F;
+      --olive-wash:  #1A2A12;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #071A19;
+    --surface:     #0E2725;
+    --surface-sunk:#0A201F;
+    --ink:         #EFE6D4;
+    --ink-muted:   #A3B6B3;
+    --ink-faint:   #7A8F8C;
+    --rule:        #1E3B39;
+    --rule-strong: #2C4F4C;
+
+    --teal:        #6FC8C0;
+    --teal-deep:   #9BDBD4;
+    --teal-wash:   #10312F;
+
+    --wine:        #F0899F;
+    --wine-wash:   #33121C;
+    --gold:        #E8BC5B;
+    --gold-wash:   #2E2410;
+    --olive:       #A3CE7F;
+    --olive-wash:  #1A2A12;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 6rem;
+  }
+
+  /* ── Masthead ─────────────────────────────────────────────── */
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 1.75rem; }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1rem;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 6vw, 3.4rem);
+    line-height: 1.04;
+    letter-spacing: -.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: 1.0625rem;
+    color: var(--ink-muted);
+    max-width: 40rem;
+    margin: 1rem 0 0;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 2rem;
+    margin-top: 1.75rem;
+    font-family: var(--mono);
+    font-size: .75rem;
+    color: var(--ink-faint);
+  }
+  .meta b { color: var(--ink-muted); font-weight: 500; }
+
+  /* ── Verdict strip ────────────────────────────────────────── */
+  .verdict {
+    margin-top: 2.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  .verdict > div {
+    background: var(--surface);
+    padding: 1.1rem 1.15rem 1.2rem;
+  }
+  .verdict .n {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 2rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    display: block;
+  }
+  .verdict .l {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-top: .5rem;
+    display: block;
+  }
+  .n-wine  { color: var(--wine); }
+  .n-gold  { color: var(--gold); }
+  .n-olive { color: var(--olive); }
+  .n-teal  { color: var(--teal); }
+
+  /* ── Sections ─────────────────────────────────────────────── */
+  section { margin-top: 4rem; }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.75rem;
+    line-height: 1.18;
+    letter-spacing: -.012em;
+    margin: 0 0 .35rem;
+    text-wrap: balance;
+  }
+  .section-note {
+    color: var(--ink-muted);
+    font-size: .95rem;
+    max-width: 44rem;
+    margin: 0 0 1.75rem;
+  }
+
+  h3 {
+    font-family: var(--body);
+    font-weight: 700;
+    font-size: 1.02rem;
+    letter-spacing: -.005em;
+    margin: 2.25rem 0 .5rem;
+  }
+
+  p { max-width: 44rem; }
+
+  /* ── Status tag: the app's own device — filled dot, tinted
+        ground, uppercase word. Reused here so severity reads the
+        way state reads inside the app. ───────────────────────── */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: .4em;
+    padding: .22em .62em .22em .5em;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-family: var(--mono);
+    font-size: .64rem;
+    font-weight: 500;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    vertical-align: .08em;
+  }
+  .tag::before {
+    content: "";
+    width: .42em; height: .42em;
+    border-radius: 50%;
+    background: currentColor;
+    flex: none;
+  }
+  .tag-blocker { color: var(--wine);  background: var(--wine-wash); }
+  .tag-high    { color: var(--gold);  background: var(--gold-wash); }
+  .tag-medium  { color: var(--teal);  background: var(--teal-wash); }
+  .tag-fixed   { color: var(--olive); background: var(--olive-wash); }
+  .tag-open    { color: var(--ink-muted); background: var(--surface-sunk); border-color: var(--rule-strong); }
+
+  /* ── The crash, given its own treatment ───────────────────── */
+  .crash {
+    border: 1px solid var(--rule-strong);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    margin-top: 1.5rem;
+  }
+  .crash-head {
+    background: var(--teal-deep);
+    color: #FFFFFF;
+    padding: 1.15rem 1.5rem;
+  }
+  :root[data-theme="dark"] .crash-head { color: #071A19; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .crash-head { color: #071A19; }
+  }
+  .crash-head h3 {
+    margin: .3rem 0 0;
+    font-size: 1.15rem;
+    color: inherit;
+  }
+  .crash-head .kicker { color: rgba(255,255,255,.66); margin: 0; }
+  :root[data-theme="dark"] .crash-head .kicker { color: rgba(7,26,25,.66); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .crash-head .kicker { color: rgba(7,26,25,.66); }
+  }
+
+  .crash-body { padding: 1.5rem; display: grid; gap: 1.4rem; }
+  .crash-body p { margin: 0; }
+
+  .chain {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0;
+    counter-reset: step;
+  }
+  .chain li {
+    position: relative;
+    padding: .7rem 0 .7rem 2.6rem;
+    border-top: 1px solid var(--rule);
+    font-size: .94rem;
+  }
+  .chain li:first-child { border-top: none; }
+  .chain li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0; top: .78rem;
+    width: 1.6rem; height: 1.6rem;
+    border-radius: 50%;
+    background: var(--surface-sunk);
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-muted);
+    font-family: var(--mono);
+    font-size: .72rem;
+    display: grid;
+    place-items: center;
+    line-height: 1;
+  }
+  .chain li:last-child::before {
+    background: var(--wine-wash);
+    border-color: var(--wine);
+    color: var(--wine);
+  }
+
+  pre {
+    margin: 0;
+    background: var(--surface-sunk);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule-strong);
+    padding: .9rem 1.1rem;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: .8rem;
+    line-height: 1.7;
+    color: var(--ink);
+  }
+  pre.proof { border-left-color: var(--wine); }
+  pre.cure  { border-left-color: var(--olive); }
+
+  code {
+    font-family: var(--mono);
+    font-size: .86em;
+    background: var(--surface-sunk);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: .08em .34em;
+    white-space: nowrap;
+  }
+  pre code { background: none; border: none; padding: 0; white-space: pre; font-size: 1em; }
+
+  /* ── Findings ledger ──────────────────────────────────────── */
+  .ledger { display: grid; gap: 0; border-top: 1px solid var(--rule-strong); }
+
+  .finding {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr;
+    gap: 0 1.1rem;
+    padding: 1.4rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .finding .id {
+    font-family: var(--mono);
+    font-size: .78rem;
+    color: var(--ink-faint);
+    padding-top: .18rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .finding h4 {
+    margin: 0 0 .3rem;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.4;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .5rem .6rem;
+  }
+  .finding p { margin: .35rem 0 0; font-size: .93rem; color: var(--ink-muted); max-width: 46rem; }
+  .finding p.cure { color: var(--ink); }
+  .finding p.cure b { color: var(--olive); font-weight: 700; }
+  .where {
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--ink-faint);
+    margin-top: .45rem;
+    word-break: break-word;
+  }
+
+  /* ── Verified table ───────────────────────────────────────── */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 34rem; font-size: .9rem; }
+  th, td { text-align: left; padding: .65rem .9rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    background: var(--surface-sunk);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.mono { font-family: var(--mono); font-size: .8rem; }
+  td.pass { color: var(--olive); font-weight: 600; }
+
+  /* ── Callout ──────────────────────────────────────────────── */
+  .callout {
+    border: 1px solid var(--wine);
+    background: var(--wine-wash);
+    padding: 1.1rem 1.3rem;
+    margin-top: 1.5rem;
+  }
+  .callout h3 { margin: 0 0 .4rem; color: var(--wine); font-size: 1rem; }
+  .callout p { margin: 0; color: var(--ink); font-size: .93rem; }
+  .callout p + p { margin-top: .6rem; }
+
+  ul.plain { margin: .6rem 0 0; padding-left: 1.1rem; max-width: 44rem; }
+  ul.plain li { margin-bottom: .4rem; font-size: .94rem; color: var(--ink-muted); }
+  ul.plain li b { color: var(--ink); font-weight: 600; }
+
+  footer {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 2rem;
+  }
+
+  a { color: var(--teal); text-underline-offset: .18em; }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  @media print {
+    body { background: #fff; }
+    .page { padding: 0; max-width: none; }
+    .crash, .tablewrap, .callout { break-inside: avoid; }
+    .finding { break-inside: avoid; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="kicker">Bhaktivedanta Gurukula &amp; International School · BG-SAAR</p>
+    <h1>The build crashed because it was built without its keys</h1>
+    <p class="standfirst">
+      A full audit of the Expo attendance app, run against the crash reported on the first
+      installable build. The crash has one cause, it is proven below, and it is fixed. Nineteen
+      further findings came out of the sweep — ten are fixed in this pass, nine are recorded for
+      a decision.
+    </p>
+    <div class="meta">
+      <span><b>Audited</b> 12 September 2026</span>
+      <span><b>Commit</b> 0c83b6e · branch master</span>
+      <span><b>Scope</b> 13,277 lines · 42 modules · 24 migrations</span>
+      <span><b>Target</b> Expo SDK 57 · RN 0.86 · Android</span>
+    </div>
+  </header>
+
+  <div class="verdict">
+    <div><span class="n n-wine">1</span><span class="l">Blocker · fixed</span></div>
+    <div><span class="n n-gold">5</span><span class="l">High · fixed</span></div>
+    <div><span class="n n-teal">4</span><span class="l">Medium · fixed</span></div>
+    <div><span class="n n-olive">9</span><span class="l">Open · recorded</span></div>
+    <div><span class="n n-olive">7</span><span class="l">Verified sound</span></div>
+  </div>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section>
+    <h2>The crash</h2>
+    <p class="section-note">
+      One cause, reproducible on demand, with nothing wrong in the app's own logic. The dev
+      server worked the entire time it was broken, which is why it was not caught earlier.
+    </p>
+
+    <div class="crash">
+      <div class="crash-head">
+        <p class="kicker">F01 · Blocker</p>
+        <h3>The app dies before React mounts, so there is no screen to show an error on</h3>
+      </div>
+      <div class="crash-body">
+
+        <ol class="chain">
+          <li>
+            Expo reads <code>EXPO_PUBLIC_*</code> variables at <b>build</b> time and inlines their
+            literal values into the JavaScript bundle. They are not read at runtime.
+          </li>
+          <li>
+            Those two values live in <code>.env</code>, and <code>.env</code> is listed in
+            <code>.gitignore</code>. A build server clones the repository, so it never sees the file.
+          </li>
+          <li>
+            The bundle is therefore compiled with both values as <code>undefined</code>.
+          </li>
+          <li>
+            <code>createClient(undefined, undefined)</code> throws <code>supabaseUrl is required.</code>
+            at module scope — while the bundle is still evaluating, before React mounts and before
+            any error boundary exists. The process goes away on the splash screen with nothing on
+            screen and nothing in the app to explain it.
+          </li>
+        </ol>
+
+        <div>
+          <p class="kicker" style="margin-bottom:.5rem">Proof — the emitted bundle, built the way a build server builds it</p>
+<pre class="proof"><code>$ EXPO_NO_DOTENV=1 npx expo export --platform android --no-bytecode
+$ grep -o "createClient)(void 0,void 0" index-*.js
+createClient)(void 0,void 0</code></pre>
+        </div>
+
+        <div>
+          <p class="kicker" style="margin-bottom:.5rem">The same command after the fix</p>
+<pre class="cure"><code>$ EXPO_NO_DOTENV=1 npx expo export --platform android --no-bytecode
+$ grep -o "unconfigured.invalid" index-*.js
+unconfigured.invalid        # placeholder — no throw, ConfigError screen renders</code></pre>
+        </div>
+
+        <div>
+          <h3 style="margin-top:0">What was changed</h3>
+          <ul class="plain">
+            <li><b>eas.json</b> — every build profile now carries the two <code>EXPO_PUBLIC_</code>
+              values in an <code>env</code> block, so a build has them whether or not
+              <code>.env</code> exists.</li>
+            <li><b>src/lib/supabase.js</b> — never throws. Missing configuration becomes an
+              exported value, <code>supabaseConfigError</code>, and the client falls back to a
+              host in the reserved <code>.invalid</code> TLD so a stray request can never reach
+              somebody else's server.</li>
+            <li><b>src/components/ConfigError.js</b> — a new screen that says what is missing, in
+              words for the person holding the phone and then for the person who can fix it.</li>
+            <li><b>docs/BUILD.md</b> — the rule about which secrets may enter a build, written
+              down. The service-role key must never go in: it bypasses every access rule in the
+              database, and anything inlined into a bundle is readable by anyone holding the APK.</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section>
+    <h2>Fixed in this pass</h2>
+    <p class="section-note">
+      Nine further defects, found by reading every module and by driving the running app against
+      the live school database. All are applied and the Android bundle builds clean.
+    </p>
+
+    <div class="ledger">
+
+      <div class="finding">
+        <div class="id">F02</div>
+        <div>
+          <h4>The Dashboard reported “All students accounted for” when it had failed to load anything
+            <span class="tag tag-high">High</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            <code>DashboardScreen</code> destructured <code>students</code>, <code>duties</code>,
+            <code>records</code> and <code>refresh</code> from the data context but never read
+            <code>loading</code> or <code>error</code>. A dropped connection leaves
+            <code>duties</code> empty — and every count on the screen derived from an empty list
+            reads as good news. The calm hero rendered, over “0 of 0 checkpoints marked so far”,
+            on the one screen in this app whose entire job is to say when a child is unaccounted
+            for.
+          </p>
+          <p class="cure"><b>Fixed —</b> “we do not know” is now a third state, distinct from all-clear
+            and from someone-is-missing: a neutral hero, plus the real reason and a retry, so
+            offline never reads as safe.</p>
+          <p class="where">src/screens/DashboardScreen.js:131 · new <code>loadFailed</code> / <code>stale</code> guards</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F03</div>
+        <div>
+          <h4>No error boundary anywhere in the tree
+            <span class="tag tag-high">High</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            A render-time exception below the root unmounts the whole app. In a release build that
+            shows nothing at all — a blank screen, or a process that simply goes away, which every
+            user reports as “it crashed” with no detail to act on.
+          </p>
+          <p class="cure"><b>Fixed —</b> a new <code>ErrorBoundary</code> wraps everything, outside every
+            provider so a throw from any of them still lands somewhere that can draw. Styling is
+            literal rather than themed, because the theme is one of the things that could be broken.</p>
+          <p class="where">src/components/ErrorBoundary.js (new) · App.js:107</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F04</div>
+        <div>
+          <h4>A font that never loaded left the app frozen on the splash screen
+            <span class="tag tag-high">High</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            The splash was held until <code>fontsLoaded</code> turned true, and the error value from
+            <code>useFonts</code> was discarded. A loader that fails or never settles therefore
+            parked the app on the splash indefinitely. To a teacher at Mangalarati that is
+            indistinguishable from a crash.
+          </p>
+          <p class="cure"><b>Fixed —</b> the error is honoured and a six-second ceiling added. The app is
+            perfectly usable in the system font; a missing typeface is not a reason to withhold the
+            register.</p>
+          <p class="where">App.js:50 · <code>FONT_TIMEOUT_MS</code></p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F05</div>
+        <div>
+          <h4>The “Deactivate” button on a staff member did nothing at all
+            <span class="tag tag-high">High</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            The Roster's staff row opened a <code>dialog.confirm</code> with a red, destructive
+            “Deactivate” button and <em>no</em> <code>onConfirm</code> behind it. Tapping it
+            dismissed the dialog and changed nothing. A coordinator who had just “removed” somebody
+            would keep seeing them on the roster and conclude the app was stale rather than that
+            the action had never happened. Deactivation is built nowhere — not in the app, not in
+            the database.
+          </p>
+          <p class="cure"><b>Fixed —</b> now a plain detail dialog that says deactivation is not available
+            yet and who to ask. The whole codebase was then swept for the same shape: no other
+            <code>confirm</code> is missing its handler, and no touchable is missing its
+            <code>onPress</code>.</p>
+          <p class="where">src/screens/RosterScreen.js:501</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F06</div>
+        <div>
+          <h4>A failed sign-in attempt could show nothing whatsoever
+            <span class="tag tag-high">High</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            <code>handleContinue</code> had a <code>try</code> and a <code>finally</code> and no
+            <code>catch</code>. Supabase reports a wrong password through its returned
+            <code>error</code>, but it <em>throws</em> for a transport failure — no signal, DNS
+            down, a captive portal on the school wi-fi. That throw escaped as an unhandled
+            rejection: the button came back to life, no message appeared, and the teacher was left
+            tapping Sign in at a screen that had already given up.
+          </p>
+          <p class="cure"><b>Fixed —</b> caught and routed through <code>describeError</code>, which already
+            knows how to tell offline apart from a permission refusal and from a missing migration.</p>
+          <p class="where">src/screens/LoginScreen.js:270</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F07</div>
+        <div>
+          <h4>“Forgot password?” was a dead link
+            <span class="tag tag-medium">Medium</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            A styled, tappable link with no handler — on the screen where somebody who cannot get
+            in is most likely to tap it. Self-service reset needs a redirect URL and a deep link,
+            neither of which this build has.
+          </p>
+          <p class="cure"><b>Fixed —</b> it now says who can actually reset a password, rather than
+            pretending to do it.</p>
+          <p class="where">src/screens/LoginScreen.js · Forgot password control</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F08</div>
+        <div>
+          <h4>An overseer could be shown an empty class over a record that was already full
+            <span class="tag tag-medium">Medium</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            The marking screen seeded its marks from the stored record at <em>mount only</em>. Open
+            a submitted checkpoint while the Duties list's background refresh is still in flight and
+            the marks arrive to a screen that has already decided it is empty — a full class shown
+            as all-present, with a Save button in front of an overseer.
+          </p>
+          <p class="cure"><b>Fixed —</b> the record is adopted once, the first time it appears, and never
+            afterwards, so a later refresh cannot discard marks somebody is in the middle of making.</p>
+          <p class="where">src/screens/DutyMarkingScreen.js:108</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F09</div>
+        <div>
+          <h4>One malformed register row would have taken down every screen
+            <span class="tag tag-medium">Medium</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            <code>secShort</code> ended in <code>sec[0]</code>, which throws on a null or empty
+            section — inside the map over the whole 415-student register, which every screen in the
+            app awaits. One bad import row, and nothing loads.
+          </p>
+          <p class="cure"><b>Fixed —</b> a missing section now renders as a dash on that one student.</p>
+          <p class="where">src/lib/students.js:17</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F10</div>
+        <div>
+          <h4>An optional-chain guard that stopped one level short
+            <span class="tag tag-medium">Medium</span><span class="tag tag-fixed">Fixed</span></h4>
+          <p>
+            <code>records[duty.id]?.statuses[studentId]</code> guarded the record but not the map
+            inside it, so a record present but mid-write threw instead of reading as Present.
+          </p>
+          <p class="cure"><b>Fixed —</b> <code>?.statuses?.[studentId]</code>.</p>
+          <p class="where">src/screens/ClassDayScreen.js:180</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section>
+    <h2>Open — recorded, not fixed</h2>
+    <p class="section-note">
+      These need a decision or a piece of work beyond a defect fix. None of them stops the pilot.
+      The first two are the ones worth reading before the school is told the system is watching.
+    </p>
+
+    <div class="callout">
+      <h3>F11 · Nothing sends the alert. The app knows; nobody is told.</h3>
+      <p>
+        The went-missing check itself works, and was watched working against the live database
+        during this audit: forty-five students correctly classed as <em>present earlier, absent
+        now</em>, each naming the checkpoint they were last seen at. But
+        <code>supabase/functions/</code> does not exist. <code>send-summary</code> and
+        <code>cron-reminders</code> — the summary email on every submission, the immediate alert to
+        Coordinator, MOD and Principal, and the whole missed-checkpoint escalation ladder — are
+        unbuilt.
+      </p>
+      <p>
+        Until they exist, the safety net only catches a child if somebody happens to open the
+        Dashboard. That is the difference between the system described to the school and the
+        system installed, and it should be stated plainly before the pilot rather than discovered
+        during it.
+      </p>
+    </div>
+
+    <div class="callout">
+      <h3>F12 · Twenty-six development logins share one password, on the live project</h3>
+      <p>
+        <code>supabase/seed-auth-users.sql</code> issues every staff row an account with the
+        password <code>Gurukula@123</code>, and those accounts answer right now on the school's
+        real Supabase project — this audit signed in as the coordinator with them. The file says so
+        in its own header. They have to be deleted and replaced with real logins before any
+        genuine student data is entered.
+      </p>
+    </div>
+
+    <div class="ledger" style="margin-top:2.25rem">
+
+      <div class="finding">
+        <div class="id">F13</div>
+        <div>
+          <h4>The Dashboard mounts every alert and every checkpoint at once
+            <span class="tag tag-medium">Medium</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            It is a plain <code>ScrollView</code>, not a virtualised list. On today's data that is
+            45 alert cards plus 24 checkpoint rows — roughly 7,000px of content, each card running
+            its own entrance animation, all mounted before the first frame. The marking screen and
+            the register both virtualise properly; this screen is the one that does not, and it is
+            the screen the coordinator opens at 4:30 AM.
+          </p>
+          <p class="where">src/screens/DashboardScreen.js:307, 327 · <code>open.map</code> / <code>duties.map</code></p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F14</div>
+        <div>
+          <h4>Every tab focus refetches the whole day, one query per submitted checkpoint
+            <span class="tag tag-medium">Medium</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            Four screens call <code>refresh()</code> in <code>useFocusEffect</code>, and
+            <code>SchoolDataContext.load</code> issues one attendance query per submitted duty —
+            24 today, more as the checkpoint list grows. Switching tabs therefore costs 27 round
+            trips on school wi-fi. <code>fetchDayAttendance</code> in <code>lib/history.js</code>
+            already solves exactly this with a single paged <code>.in(duty_id, …)</code> query;
+            the live path should use the same shape.
+          </p>
+          <p class="where">src/context/SchoolDataContext.js · <code>load()</code></p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F15</div>
+        <div>
+          <h4>The Roster's student tab fetches its own second copy of the register
+            <span class="tag tag-medium">Medium</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            <code>StudentsTab</code> calls <code>useStudents()</code> rather than reading
+            <code>useSchoolData()</code>, so opening that tab pulls all 415 rows again when they
+            are already in memory. CLAUDE.md §3 says every screen reads from the shared context
+            “rather than fetching its own copy”; this is the one place that does not.
+          </p>
+          <p class="where">src/screens/RosterScreen.js:725</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F16</div>
+        <div>
+          <h4>“33/36 present” with no absent count reads as three unexplained children
+            <span class="tag tag-medium">Medium</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            The submitted-duty caption prints present-of-total and the absent count, and omits the
+            <em>elsewhere</em> figure — the children at home, in the sick bay or on an outing. Seen
+            live on today's data: “33/36 present · Dharmshila Mt”, three students unaccounted for
+            as far as anyone reading the line can tell, when in fact all three are accounted for.
+            The distinction between <em>absent</em> and <em>elsewhere</em> is the core distinction
+            in this app; the summary line is the one place it is dropped.
+          </p>
+          <p class="where">src/screens/DutiesScreen.js:475 · <code>DoneRow</code></p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F17</div>
+        <div>
+          <h4>A failed sign-up leaves an orphan request in the coordinator's queue
+            <span class="tag tag-medium">Medium</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            <code>submitAccessRequest</code> runs before <code>supabase.auth.signUp</code> —
+            deliberately, so the request is visible even though email confirmation withholds the
+            session. But when the sign-up then fails (address already registered, rate limited),
+            the request stays behind, from somebody who has no account to approve.
+          </p>
+          <p class="where">src/screens/RegisterScreen.js:76</p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F18</div>
+        <div>
+          <h4>Eleven packages are behind the versions SDK 57 expects
+            <span class="tag tag-medium">Medium</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            Including <code>expo</code> itself (57.0.12 against 57.0.22) and
+            <code>react-native</code> (0.86.2 against 0.86.3). All patch-level within the same SDK,
+            so the upgrade is low risk — but it is churn in the dependency tree, and this is not
+            the day for it. Run <code>npx expo install --check</code> after the pilot week, not
+            before the handover.
+          </p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F19</div>
+        <div>
+          <h4>Dead code left over from the mock-data era
+            <span class="tag tag-medium">Low</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            <code>isResidential</code> in <code>lib/duties.js:21</code> is defined and never called
+            — and it tests <code>row.stype</code>, the raw database spelling, where the live filter
+            two functions below correctly tests the mapped <code>s.type</code> code. It would read
+            as the authority on the rule and is not one. <code>data/mockData.js</code> still
+            exports <code>STAFF</code>, <code>DUTIES</code> and <code>SEED_RECORDS</code>, none of
+            which any screen uses; only <code>STATUS_META</code> and <code>SPANNING</code> are live.
+          </p>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="id">F20</div>
+        <div>
+          <h4><code>useSyncExternalStore</code> has no server snapshot
+            <span class="tag tag-medium">Low</span><span class="tag tag-open">Open</span></h4>
+          <p>
+            The shared clock in <code>lib/clock.js</code> omits the third argument. Harmless on
+            device; it would throw if the web build were ever server-rendered.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section>
+    <h2>Checked and sound</h2>
+    <p class="section-note">
+      The things most likely to be wrong in an app like this, and what was found instead. Each was
+      exercised rather than read.
+    </p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th scope="col">Area</th><th scope="col">How it was checked</th><th scope="col">Result</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Row-level security</td>
+            <td class="mono">anon GET on students, staff, attendance, duties, alert_resolutions, audit_log, staff_requests</td>
+            <td class="pass">All return <code>[]</code></td>
+          </tr>
+          <tr>
+            <td>The went-missing check</td>
+            <td>Signed in as coordinator against the live project</td>
+            <td class="pass">45 alerts, correctly split into <em>went missing</em> and <em>not seen</em>, each naming the last checkpoint</td>
+          </tr>
+          <tr>
+            <td>Atomic submission</td>
+            <td>Read of <code>submit_duty</code> RPC and migration 010</td>
+            <td class="pass">Marks and lock in one call; submitter taken from the caller's own token, not the client</td>
+          </tr>
+          <tr>
+            <td>The 1,000-row PostgREST cap</td>
+            <td>Read of all three bulk readers</td>
+            <td class="pass">Paged in <code>fetchStudents</code>, <code>fetchDayAttendance</code>, <code>fetchMarkedDaysInMonth</code></td>
+          </tr>
+          <tr>
+            <td>Session persistence</td>
+            <td>Reloaded the running app</td>
+            <td class="pass">Came back signed in, straight to Duties</td>
+          </tr>
+          <tr>
+            <td>Module graph</td>
+            <td class="mono">expo export --platform android</td>
+            <td class="pass">1,089 modules, clean, no warnings</td>
+          </tr>
+          <tr>
+            <td>Dead controls</td>
+            <td>Swept every touchable and every confirm dialog for a missing handler</td>
+            <td class="pass">Two found (F05, F07), both fixed; none remain</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────── -->
+  <section>
+    <h2>Build it again</h2>
+    <p class="section-note">
+      The fix is in the repository. This is the command that produces an installable APK with the
+      configuration compiled into it.
+    </p>
+<pre><code>npx eas build --platform android --profile preview</code></pre>
+    <p style="margin-top:1.25rem">
+      Check the build log for the line listing the environment variables in scope. If
+      <code>EXPO_PUBLIC_SUPABASE_URL</code> is not among them, the app will open on the “not set up
+      yet” screen instead of the login — which is now the honest failure, rather than a crash.
+    </p>
+  </section>
+
+  <footer>
+    <span>BG-SAAR crash audit</span>
+    <span>12 September 2026</span>
+    <span>20 findings · 10 fixed · 9 open · 1 blocker cleared</span>
+  </footer>
+
+</div>
