@@ -22,7 +22,7 @@ import { isOversight } from "../domain/roles";
 import { fmtTime, fmtDay, fmtDayCompact, fmtClock, plural, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
-import { useDayAttendance, useMarkingTotals } from "../lib/history";
+import { useDayAttendance } from "../lib/history";
 import { resolveGroup } from "../lib/duties";
 import { useStudentHistory, RANGES } from "../lib/studentHistory";
 import PrintSheets from "../components/PrintSheets";
@@ -114,7 +114,18 @@ export default function ClassDayScreen() {
 
   // Re-tallied whenever a checkpoint is submitted — the record count is what
   // changes then, not the duty count, which is fixed for the day.
-  const totals = useMarkingTotals(user?.id, Object.keys(liveRecords).length);
+  // Deliberately NOT the reader's own marking record any more. That is now
+  // on Account, where "you, all time" is the obvious reading.
+  //
+  // It used to sit here, directly under 'Class 6 Krishna · 28 students' and
+  // directly above the date — so everything around it said 'this class,
+  // this day' while the numbers meant 'you, ever'. A teacher read 27 and
+  // reasonably asked whether it was 27 days. It was 27 checkpoints she had
+  // submitted since the app was installed.
+  //
+  // Computed from what the screen already holds, so no extra request: the
+  // roster is the class's strength, `readable` is what was taken, and the
+  // marks are already in `records`.
 
   useFocusEffect(
     useCallback(() => {
@@ -180,6 +191,21 @@ export default function ClassDayScreen() {
     (studentId, duty) => (duty ? records[duty.id]?.statuses?.[studentId] || "P" : null),
     [records]
   );
+
+  // The day's own numbers for the group being read.
+  const dayTotals = useMemo(() => {
+    const marks = readable.flatMap((d) =>
+      Object.entries(records[d.id]?.statuses || {}).map(([, code]) => code)
+    );
+    return {
+      strength: roster.length,
+      taken: readable.length,
+      // Only 'A' is unaccounted for. Home, sick, outing and the rest mean
+      // the school knows where the child is, and counting them here would
+      // make a well-run day look like a bad one.
+      absent: marks.filter((m) => m === "A").length,
+    };
+  }, [readable, records, roster.length]);
 
   const tally = useMemo(() => {
     let present = 0;
@@ -312,7 +338,7 @@ export default function ClassDayScreen() {
         }
       />
 
-      <StatStrip totals={totals} />
+      <StatStrip totals={dayTotals} day={day} />
 
       {/* One joined control, full width, split by a hairline. As two separate
           content-width pills this row ended in a band of empty background
@@ -588,19 +614,18 @@ export default function ClassDayScreen() {
   );
 }
 
-/** The teacher's own marking record, all-time. */
+/** This group, on the day being shown. Nothing about the reader. */
 function StatStrip({ totals }) {
   return (
     <View style={styles.strip}>
-      <StripCell value={totals.taken} label="Attendance taken" loading={totals.loading} />
+      <StripCell value={totals.strength} label="On the register" />
       <View style={styles.stripDivider} />
-      <StripCell value={totals.marked} label="Students marked" loading={totals.loading} />
+      <StripCell value={totals.taken} label="Checkpoints taken" />
       <View style={styles.stripDivider} />
       <StripCell
         value={totals.absent}
-        label="Absences found"
+        label="Absent"
         tone={totals.absent > 0 ? colors.danger : undefined}
-        loading={totals.loading}
       />
     </View>
   );

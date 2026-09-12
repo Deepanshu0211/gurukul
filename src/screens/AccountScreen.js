@@ -18,6 +18,7 @@ import ScreenHeader from "../components/ScreenHeader";
 import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import { SectionLabel, Divider, Stat, TextAction, PrimaryButton, Chevron } from "../components/ui";
+import { useMarkingTotals } from "../lib/history";
 import { roleLabel } from "../domain/roles";
 import { describeError } from "../lib/errors";
 import { useAuth } from "../context/AuthContext";
@@ -60,6 +61,14 @@ export default function AccountScreen({ navigation }) {
   const phone = user.phone || "";
   const myDuties = duties.filter((d) => d.staffId === user.id);
   const submitted = myDuties.filter((d) => records[d.id]).length;
+  // Moved here from the Records screen, where it sat under a class heading
+  // and a date and was read as belonging to them. Beside your own name and
+  // photograph, "you, all time" needs no explaining.
+  //
+  // Declared after `submitted` because it takes it: `const` is not hoisted,
+  // so reading it above its declaration is a ReferenceError at render, not
+  // an undefined.
+  const totals = useMarkingTotals(user?.id, submitted);
 
   const savePhone = async () => {
     const next = draftPhone.trim();
@@ -200,6 +209,17 @@ export default function AccountScreen({ navigation }) {
             <Stat value={myDuties.length - submitted} label="Remaining" />
           </View>
         )}
+
+        <SectionLabel>Your record</SectionLabel>
+        <View style={styles.group}>
+          <View style={styles.statsRow}>
+            <Stat value={totals.loading ? "—" : totals.taken} label="Checkpoints taken" />
+            <View style={styles.statDivider} />
+            <Stat value={totals.loading ? "—" : totals.marked} label="Students marked" />
+            <View style={styles.statDivider} />
+            <Stat value={totals.loading ? "—" : totals.absent} label="Absences found" />
+          </View>
+        </View>
 
         <SectionLabel>Your details</SectionLabel>
         <View style={styles.group}>
