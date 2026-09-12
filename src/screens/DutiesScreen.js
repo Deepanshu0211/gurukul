@@ -261,7 +261,7 @@ export default function DutiesScreen({ navigation }) {
 
       <EdgeFade top={0} height={topInset} visible={scrolled} />
 
-      <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} />
+      <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} day={day} />
 
       <CalendarSheet
         visible={calendarOpen}
@@ -315,7 +315,11 @@ function DutiesHeader({
     <>
       <GreetingHeader
         user={user}
-        meta={`${scopeNote} · ${weekdayName()}, ${fmtTime(now)}`}
+        // The clock is only shown on today. On a past day the header read
+        // 'Your duties · Thursday, 10 Sep · Saturday, 11:38 PM' — two
+        // different days in one line — and the time answers a question
+        // ('am I late?') that a finished day cannot be asked.
+        meta={isToday ? `${scopeNote} · ${weekdayName()}, ${fmtTime(now)}` : scopeNote}
         done={done}
         total={total}
         badge={badge}
@@ -379,7 +383,7 @@ function DutiesHeader({
           <Ionicons name="stats-chart-outline" size={16} color={colors.primary} />
         </IconCircle>
         <View style={styles.statusText}>
-          <Text style={styles.statusTitle}>Today's status</Text>
+          <Text style={styles.statusTitle}>{isToday ? "Today's status" : `Status · ${fmtDay(day)}`}</Text>
           <Text style={styles.statusSub} numberOfLines={1}>
             {user?.classLabel
               ? `Counts for ${user.classLabel}`

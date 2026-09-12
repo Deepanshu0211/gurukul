@@ -34,11 +34,16 @@ import { colors, spacing, typography, radius, numeric } from "../theme/theme";
  * This prints nothing and changes nothing about what is printed. The paper
  * sheets are built by `reportHtml.js` and are untouched.
  */
-export default function StatusBoardSheet({ visible, onClose }) {
+/**
+ * @param day the day to open on. Defaults to today; the Duties screen
+ *            passes whichever day it is showing, so opening the sheet from
+ *            a past day does not silently jump back to this morning.
+ */
+export default function StatusBoardSheet({ visible, onClose, day: initialDay }) {
   const { user } = useAuth();
   const oversight = isOversight(user?.role);
 
-  const [day, setDay] = useState(todayISO());
+  const [day, setDay] = useState(initialDay || todayISO());
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -49,10 +54,10 @@ export default function StatusBoardSheet({ visible, onClose }) {
   // reopened next week would show stale numbers under a heading nobody reads.
   useEffect(() => {
     if (visible) {
-      setDay(todayISO());
+      setDay(initialDay || todayISO());
       setOpen(null);
     }
-  }, [visible]);
+  }, [visible, initialDay]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,7 +92,7 @@ export default function StatusBoardSheet({ visible, onClose }) {
       <BottomSheet
         visible={visible}
         onClose={onClose}
-        title="Today's status"
+        title={day === todayISO() ? "Today's status" : "Status"}
         subtitle={subtitle}
         showClose
       >
