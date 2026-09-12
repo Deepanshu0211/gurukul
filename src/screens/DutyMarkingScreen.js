@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -98,6 +98,19 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const readOnly = submitted && !isOverride;
 
   const [statuses, setStatuses] = useState(existing ? existing.statuses : {});
+  // Seeded from `existing` at MOUNT only, which is wrong whenever the record
+  // lands after the screen does — open a submitted checkpoint while the
+  // background refresh triggered by the Duties list is still in flight and
+  // the marks arrive to an empty screen. An overseer would then be looking at
+  // a full class shown as all-present, with a Save button in front of them.
+  // Adopt the record once, when it first appears, and never afterwards: a
+  // later refresh must not discard marks the user is in the middle of making.
+  const adopted = useRef(!!existing);
+  useEffect(() => {
+    if (adopted.current || !existing?.statuses) return;
+    adopted.current = true;
+    setStatuses(existing.statuses);
+  }, [existing]);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   // Which student's status sheet is open — null when closed.

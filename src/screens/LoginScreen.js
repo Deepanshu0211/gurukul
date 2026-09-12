@@ -19,6 +19,8 @@ import { colors, radius, spacing, layout, loginFonts } from "../theme/theme";
 import { PrimaryButton } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { describeError } from "../lib/errors";
+import { useDialog } from "../components/Dialog";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -190,6 +192,7 @@ function SwipeableToast({ message, onDismiss, duration = 3500 }) {
 
 export default function LoginScreen({ navigation }) {
   const { resolveSession } = useAuth();
+  const dialog = useDialog();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -264,6 +267,19 @@ export default function LoginScreen({ navigation }) {
       // AuthContext routes them to the waiting screen instead.
       const { data: sessionData } = await supabase.auth.getSession();
       await resolveSession(sessionData?.session);
+    } catch (e) {
+      // There was no catch here at all. GoTrue reports a bad password through
+      // the returned `error`, but it THROWS for a transport failure — no
+      // signal, DNS down, captive portal — and for anything `getSession` or
+      // `resolveSession` hits afterwards. Without this, that throw escaped as
+      // an unhandled rejection: the button came back to life, nothing
+      // appeared, and the teacher was left tapping Sign in at a screen that
+      // had already decided it was not going to work.
+      const shown = describeError(e, {
+        title: "Could not sign in",
+        message: "Something went wrong signing in. Try again in a moment.",
+      });
+      triggerNotification(shown.offline ? "No connection. Check the device's internet and retry." : shown.message);
     } finally {
       setSubmitting(false);
     }
@@ -364,8 +380,22 @@ export default function LoginScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
+            {/* This had no `onPress` at all — a link that looked live and did
+                nothing, on the screen where somebody who cannot get in is
+                most likely to tap it. Self-service reset needs a redirect URL
+                and a deep link, which this build does not have, so it says
+                who can actually reset it rather than pretending. */}
             <TouchableOpacity
               style={styles.forgotBtn}
+              onPress={() =>
+                dialog.alert({
+                  icon: "key-outline",
+                  title: "Forgot password",
+                  message:
+                    "Password resets are done by the school office. Ask a coordinator or the " +
+                    "administrator to set a new password for your account.",
+                })
+              }
               accessibilityRole="button"
               accessibilityLabel="Forgot password"
             >

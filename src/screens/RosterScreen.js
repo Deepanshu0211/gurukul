@@ -528,14 +528,23 @@ They keep their sign-in but see nothing, and can ask again.`,
             style={styles.personRow}
             accessibilityRole="button"
             accessibilityLabel={`${item.name}, ${roleLabel(item.role)}`}
+            // An `alert`, not a `confirm`. This was a confirm offering a
+            // destructive "Deactivate" button with no `onConfirm` behind it:
+            // tapping it dismissed the dialog and did nothing at all, so a
+            // coordinator who had just "removed" a staff member would keep
+            // seeing them on the roster and assume the app was stale rather
+            // than that the action had never happened. Deactivation is not
+            // built — not in the app and not in the database (see the note in
+            // migrations/012) — so the screen says so instead of miming it.
             onPress={() =>
-              dialog.confirm({
+              dialog.alert({
                 icon: "person-outline",
                 title: item.name,
-                message: `${roleLabel(item.role)} · ${item.email}\n\nDeactivating flags their pending duties for reassignment.`,
-                cancelLabel: "Close",
-                confirmLabel: "Deactivate",
-                destructive: true,
+                message:
+                  `${roleLabel(item.role)} · ${item.email}` +
+                  (n > 0 ? `\n${plural(n, "duty", "duties")} today` : "") +
+                  "\n\nDeactivating a staff member is not available yet. Ask the administrator to " +
+                  "mark them inactive on the school server.",
               })
             }
           >
