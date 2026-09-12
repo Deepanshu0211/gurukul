@@ -191,7 +191,21 @@ export default function DutiesScreen({ navigation }) {
         ListHeaderComponent={
           <DutiesHeader
             user={user}
-            scopeNote={showingMine ? "Your duties today" : "All duties today"}
+            day={day}
+            isToday={isToday}
+            onPickDay={() => setCalendarOpen(true)}
+            onBackToToday={() => setDay(todayISO())}
+            scopeNote={
+              // 'today' is a lie on any other day, and the header is the one
+              // place a reader looks to find out which day they are on.
+              isToday
+                ? showingMine
+                  ? "Your duties today"
+                  : "All duties today"
+                : showingMine
+                  ? `Your duties · ${fmtDay(day)}`
+                  : `All duties · ${fmtDay(day)}`
+            }
             done={done.length}
             total={duties.length}
             pending={urgent.length}
@@ -264,6 +278,13 @@ export default function DutiesScreen({ navigation }) {
 
 function DutiesHeader({
   user,
+  // The day the screen is showing, and the two things needed to change it.
+  // Props, not context: this component is rendered inside a SectionList
+  // header and reads nothing from useSchoolData itself.
+  day,
+  isToday,
+  onPickDay,
+  onBackToToday,
   scopeNote,
   done,
   total,
@@ -315,7 +336,7 @@ function DutiesHeader({
           the database already allowed while it was still pending. */}
       <TouchableOpacity
         style={[styles.dayPill, !isToday && styles.dayPillPast]}
-        onPress={() => setCalendarOpen(true)}
+        onPress={onPickDay}
         accessibilityRole="button"
         accessibilityLabel={`Showing ${fmtDay(day)}. Change day`}
       >
@@ -328,7 +349,7 @@ function DutiesHeader({
           {fmtDay(day)}
         </Text>
         {!isToday && (
-          <Text style={styles.dayPillBack} onPress={() => setDay(todayISO())}>
+          <Text style={styles.dayPillBack} onPress={onBackToToday}>
             Back to today
           </Text>
         )}
