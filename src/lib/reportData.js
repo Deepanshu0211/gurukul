@@ -35,11 +35,46 @@ async function fetchAll(build) {
 const detail = () => supabase.from("attendance_detail").select("*");
 
 /**
+ * Staff names by id, for crediting a checkpoint to whoever actually took it.
+ *
+ * A separate request rather than a join: `attendance_detail` carries
+ * `submitted_by` as an id, and embedding the name would repeat it on every
+ * one of a day's seventeen hundred rows to end up with five distinct values.
+ * The staff table is twenty-six rows.
+ */
+async function staffNames() {
+  const { data, error } = await supabase.from("staff").select("id, name, class_key");
+  if (error) throw new Error(error.message);
+  const byId = new Map();
+  const teacherOfClass = new Map();
+  (data || []).forEach((r) => {
+    byId.set(r.id, r.name);
+    if (r.class_key) teacherOfClass.set(r.class_key, r.id);
+  });
+  return { byId, teacherOfClass };
+}
+
+/**
  * One day, in full: every mark, so the sheet can show a student × checkpoint
  * grid rather than only the exceptions.
  */
-export async function fetchDayReport(day) {
-  const rows = await fetchAll(() => detail().eq("day", day).order("start_min").order("roll_no"));
+/**
+ * @param day      'YYYY-MM-DD'
+ * @param classKey '8|BALRAM' to print one class, or null for the school.
+ *
+ * Class scoping matters more than it sounds. Without it a class teacher
+ * pressing Print got all 411 students in the school — eleven pages to find
+ * their own thirty — because the report was written when the register was a
+ * single pilot class.
+ */
+export async function fetchDayReport(day, classKey = null) {
+  const rows = await fetchAll(() => {
+    let q = detail().eq("day", day);
+    if (classKey) q = q.eq("class_key", classKey);
+    return q.order("start_min").order("roll_no");
+  });
+
+  const { byId, teacherOfClass } = await staffNames();
 
   // ONE COLUMN PER CHECKPOINT, NOT PER DUTY.
   //
@@ -78,6 +113,29 @@ export async function fetchDayReport(day) {
         submittedBy: r.submitted_by,
         submittedAt: r.submitted_at,
         correctedBy: r.corrected_by,
+        // Who actually took this checkpoint, by name, and whether that was
+        // the class's own teacher. A substitute covering a week of leave is
+        // the case this exists for: the marks are the class's either way,
+        // but a register that does not say who filled it in cannot be
+        // audited, and the school signs these.
+        takenBy: byId.get(r.submitted_by) || null,
+        // `duty_class_key`, not `class_key` (031). The first is the DUTY's
+        // class and is null for anything school-wide; the second is the
+        // STUDENT's and is always set. Using the student's marked every
+        // checkpoint of the day as a cover — Mangalarati is taken by the
+        // Ashram Coordinator, who was never 8 Balram's teacher, so four of
+        // five rows claimed a substitute stood in when nobody had.
+        //
+        // The comparison is against the CURRENT class teacher, the only
+        // record there is: `class_teacher_history` was specified in 004 and
+        // never built. A class that permanently changed teacher will label
+        // its older days as cover. The NAME is always right; only the label
+        // can mislead, which is why the name is printed and not just a flag.
+        cover:
+          !!r.submitted_by &&
+          !!r.duty_class_key &&
+          teacherOfClass.has(r.duty_class_key) &&
+          teacherOfClass.get(r.duty_class_key) !== r.submitted_by,
       });
     }
 
@@ -116,18 +174,54 @@ export async function fetchDayReport(day) {
  * instead, and only the exceptions are listed by name — which is also the
  * only part anyone reads.
  */
-export async function fetchRangeReport(from, to) {
-  const rows = await fetchAll(() =>
-    detail().gte("day", from).lte("day", to).not("status", "is", null).order("day").order("start_min")
-  );
+/** @param classKey '8|BALRAM' to print one class, or null for the school. */
+export async function fetchRangeReport(from, to, classKey = null) {
+  const rows = await fetchAll(() => {
+    let q = detail().gte("day", from).lte("day", to).not("status", "is", null);
+    if (classKey) q = q.eq("class_key", classKey);
+    return q.order("day").order("start_min");
+  });
+
+  // Every checkpoint in the range, marks or not — the exception list above
+  // only carries days where somebody was away, so on its own it cannot say
+  // who took a day on which everyone turned up.
+  const taken = await fetchAll(() => {
+    let q = supabase.from("duties").select("day, class_key, submitted_by, state")
+      .gte("day", from).lte("day", to).eq("state", "submitted");
+    if (classKey) q = q.eq("class_key", classKey);
+    return q.order("day");
+  });
+  const { byId, teacherOfClass } = await staffNames();
+
+  // day -> the distinct people who submitted anything that day.
+  const takenByDay = new Map();
+  taken.forEach((d) => {
+    if (!d.submitted_by) return;
+    if (!takenByDay.has(d.day)) takenByDay.set(d.day, new Map());
+    takenByDay.get(d.day).set(d.submitted_by, {
+      name: byId.get(d.submitted_by) || "—",
+      // Read straight off `duties`, so this is already the duty's own class
+      // and needs no 031 equivalent — null for the school-wide checkpoints,
+      // which therefore never count as covered.
+      cover:
+        !!d.class_key &&
+        teacherOfClass.has(d.class_key) &&
+        teacherOfClass.get(d.class_key) !== d.submitted_by,
+    });
+  });
 
   // Marks per day, so a percentage has a denominator. `head: true` asks for
   // the count without the rows.
-  const { count: totalMarks, error } = await supabase
+  // The denominator for a percentage: every mark in the range, including
+  // the days nobody was away. Scoped the same way or the percentage would
+  // be one class's absences over the whole school's marks.
+  let countQuery = supabase
     .from("attendance_detail")
     .select("*", { count: "exact", head: true })
     .gte("day", from)
     .lte("day", to);
+  if (classKey) countQuery = countQuery.eq("class_key", classKey);
+  const { count: totalMarks, error } = await countQuery;
   if (error) throw new Error(error.message);
 
   const byDay = new Map();
@@ -163,6 +257,11 @@ export async function fetchRangeReport(from, to) {
     days: [...byDay.keys()].sort(),
     exceptions: rows,
     totalMarks: totalMarks || 0,
+    // Who took each day, so a week covered by a substitute reads as a week
+    // covered by a substitute rather than as an unexplained change of hand.
+    takenBy: Object.fromEntries(
+      [...takenByDay.entries()].map(([d, m]) => [d, [...m.values()]])
+    ),
     // Worst first — this list exists to be acted on, not filed.
     students: [...byStudent.values()].sort(
       (a, b) => b.absent - a.absent || b.elsewhere - a.elsewhere || a.name.localeCompare(b.name)
