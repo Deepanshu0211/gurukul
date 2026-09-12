@@ -137,35 +137,26 @@ export async function fetchMarkingTotals(staffId) {
   const empty = { taken: 0, marked: 0, absent: 0 };
   if (!staffId) return empty;
 
-  // Filtered through an inner join rather than by collecting duty ids and
-  // passing them to `.in(...)`. That version built a query string containing
-  // every duty the teacher had ever submitted — fine in week one, and a URL
-  // over the gateway's length limit by the end of a term, failing with a 414
-  // that would have looked like a server outage.
-  const scoped = (q) =>
-    q
-      .select("*, duties!inner(submitted_by, state)", { count: "exact", head: true })
-      .eq("duties.submitted_by", staffId)
-      .eq("duties.state", "submitted");
+  // One RPC, not three counts.
+  //
+  // The previous version counted `attendance` through an embedded inner join
+  // to `duties`. That is a count over the join — 1,700 rows on a database one
+  // day old, 46,000 after a month of term — and it timed out with a 500. The
+  // hook below catches any failure and zeroes ALL THREE numbers, so one slow
+  // query wiped out the duty count that had worked, and a teacher who had
+  // submitted twenty-four registers was told she had marked nothing.
+  //
+  // `marking_totals` (032) answers all three in one indexed statement.
+  const { data, error } = await supabase.rpc("marking_totals", { p_staff: staffId });
+  if (error) throw new Error(error.message);
 
-  const [taken, marked, absent] = await Promise.all([
-    supabase
-      .from("duties")
-      .select("*", { count: "exact", head: true })
-      .eq("submitted_by", staffId)
-      .eq("state", "submitted"),
-    scoped(supabase.from("attendance")),
-    scoped(supabase.from("attendance")).eq("status", "A"),
-  ]);
-
-  for (const r of [taken, marked, absent]) {
-    if (r.error) throw new Error(r.error.message);
-  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return empty;
 
   return {
-    taken: taken.count || 0,
-    marked: marked.count || 0,
-    absent: absent.count || 0,
+    taken: Number(row.taken) || 0,
+    marked: Number(row.marked) || 0,
+    absent: Number(row.absent) || 0,
   };
 }
 
