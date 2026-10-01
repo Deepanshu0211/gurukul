@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -18,8 +18,9 @@ import ScreenHeader from "../components/ScreenHeader";
 import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import { SectionLabel, Divider, Stat, TextAction, PrimaryButton, Chevron } from "../components/ui";
+import { plural } from "../utils/format";
 import { useMarkingTotals } from "../lib/history";
-import { roleLabel } from "../domain/roles";
+import { canDeclareHoliday, canWorkGate, roleLabel } from "../domain/roles";
 import { describeError } from "../lib/errors";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
@@ -29,6 +30,29 @@ import Avatar from "../components/Avatar";
 import { pickImage, uploadAvatar, removeAvatar } from "../lib/avatars";
 import { updateOwnPhone } from "../lib/staff";
 import { haptics, isHapticsEnabled, setHapticsEnabled } from "../lib/haptics";
+import {
+  areRemindersEnabled,
+  loadReminderPreference,
+  cancelAllReminders,
+  ensureReminderPermission,
+  remindersSupported,
+  remindersUnavailableReason,
+  setRemindersEnabled,
+  syncDutyReminders,
+} from "../lib/reminders";
+
+/**
+ * Keyed by `remindersUnavailableReason()`, so a build that cannot schedule
+ * anything says which build can. The row used to read "a browser cannot
+ * schedule notifications" on an Android phone running Expo Go, which is both
+ * wrong and no help to the person holding it.
+ */
+const REMINDER_HINT = {
+  null: "A notification 10 minutes before each checkpoint you are down to mark, and again 10 minutes before it closes if it is still unmarked. Only your own checkpoints, and only on this phone.",
+  web: "Available in the phone app. A browser cannot schedule notifications.",
+  "expo-go":
+    "Not available in Expo Go — it has no notification support on Android. Install the development build of this app to use reminders.",
+};
 
 const ICON = 18;
 // Row text starts after the padding, the icon and the gap. Dividers use the
@@ -56,6 +80,81 @@ export default function AccountScreen({ navigation }) {
     setHapticsEnabled(value);
     // Fire once when switching on, so the setting demonstrates itself.
     if (value) haptics.select();
+  };
+
+  // The cached value is right once something has read storage, and this screen
+  // can be the first thing rendered after a cold start. Without the effect, a
+  // teacher who turned reminders off sees the switch back on.
+  const [remindersOn, setRemindersOn] = useState(areRemindersEnabled());
+  const [remindersBusy, setRemindersBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadReminderPreference().then((saved) => {
+      if (!cancelled) setRemindersOn(saved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Switching reminders on is the one place the app asks for the notification
+   * permission with the user's intent already on the screen.
+   *
+   * The switch is put back if the operating system refuses. A toggle left
+   * sitting on "on" over a permission that was declined is the worst outcome
+   * available here: the teacher believes they will be reminded at 4:20 AM, and
+   * nothing will happen.
+   */
+  const toggleReminders = async (value) => {
+    setRemindersOn(value);
+    setRemindersBusy(true);
+    try {
+      await setRemindersEnabled(value);
+
+      if (!value) {
+        await cancelAllReminders();
+        toast.show("Reminders switched off");
+        return;
+      }
+
+      const permission = await ensureReminderPermission({ ask: true });
+      if (permission !== "granted") {
+        setRemindersOn(false);
+        await setRemindersEnabled(false);
+        dialog.alert({
+          icon: "notifications-off-outline",
+          title:
+            permission === "unsupported" ? "Reminders are not available here" : "Notifications are blocked",
+          message:
+            permission === "unsupported"
+              ? REMINDER_HINT[remindersUnavailableReason()]
+              : "Android is holding the permission for this app. Open Settings → Apps → BG-SAAR → Notifications and allow them, then switch this back on.",
+        });
+        return;
+      }
+
+      const { checkpoints } = await syncDutyReminders(user);
+      toast.show(
+        checkpoints
+          ? `Reminders set for your next ${plural(checkpoints, "checkpoint")}`
+          : "Reminders on. Nothing left for you to mark."
+      );
+    } catch (e) {
+      setRemindersOn(false);
+      const shown = describeError(
+        e,
+        {
+          title: "Could not set reminders",
+          message: "Nothing has been scheduled. Try again.",
+        },
+        null
+      );
+      toast.show(shown.message, { tone: "danger" });
+    } finally {
+      setRemindersBusy(false);
+    }
   };
 
   const phone = user.phone || "";
@@ -242,6 +341,28 @@ export default function AccountScreen({ navigation }) {
           them.
         </Text>
 
+        <SectionLabel>Reminders</SectionLabel>
+        <View style={styles.group}>
+          <View style={styles.row}>
+            <Ionicons name="alarm-outline" size={ICON} color={colors.textMuted} />
+            <View style={styles.rowMain}>
+              <Text style={styles.rowValue}>Remind me before a checkpoint</Text>
+              <Text style={styles.rowHint}>{REMINDER_HINT[remindersUnavailableReason()]}</Text>
+            </View>
+            <Switch
+              // Forced off in a browser rather than shown on-but-disabled: a
+              // switch sitting in the "on" position over a line saying nothing
+              // can be scheduled is a promise the page cannot keep.
+              value={remindersOn && remindersSupported()}
+              onValueChange={toggleReminders}
+              disabled={remindersBusy || !remindersSupported()}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.white}
+              accessibilityLabel="Remind me before a checkpoint"
+            />
+          </View>
+        </View>
+
         {/* <SectionLabel>Preferences</SectionLabel> */}
         {/* <View style={styles.group}>
           <View style={styles.row}>
@@ -262,6 +383,34 @@ export default function AccountScreen({ navigation }) {
             />
           </View>
         </View> */}
+
+        {/* The school's calendar and its gate register. Both hang off Account
+            rather than taking a tab, for the same reason the activity log
+            does: they are opened occasionally by two roles, and the roles
+            that need them already have four tabs with no room for a fifth.
+            Reception is the exception — the gate IS their job, so they get it
+            as a tab in RootNavigator. */}
+        {(canDeclareHoliday(user?.role) || canWorkGate(user?.role)) && (
+          <>
+            <SectionLabel>School</SectionLabel>
+            <View style={styles.group}>
+              {canDeclareHoliday(user?.role) && (
+                <ActionRow
+                  icon="calendar-outline"
+                  label="Holidays"
+                  onPress={() => navigation.navigate("Holidays")}
+                />
+              )}
+              {canWorkGate(user?.role) && (
+                <ActionRow
+                  icon="exit-outline"
+                  label="Gate — sign students in and out"
+                  onPress={() => navigation.navigate("Gate")}
+                />
+              )}
+            </View>
+          </>
+        )}
 
         <SectionLabel>Records</SectionLabel>
         <View style={styles.group}>

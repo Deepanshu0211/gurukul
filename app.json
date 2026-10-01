@@ -33,7 +33,14 @@
     "plugins": [
       "expo-font",
       "expo-splash-screen",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#035352"
+        }
+      ]
     ],
     "extra": {
       "eas": {
