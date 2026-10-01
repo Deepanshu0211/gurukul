@@ -101,6 +101,9 @@ duplicate them under a different name.
 | Shared data + actions | `useSchoolData()` → `{ students, duties, records, studentsForDuty, submitDuty, reassignDuty, refresh }` | reads/writes Supabase; every screen uses this rather than fetching its own copy |
 | Safety alerts | `deriveAlerts()` in `domain/alerts.js` | DERIVED from attendance, not stored. Kinds: `went_missing`, `not_seen`. Resolutions are not yet persisted |
 | Get a duty's student list | `studentsForDuty(duty)` from `useSchoolData()` | resolves the group against the real register (`resolveGroup` in lib/duties.js) |
+| A day with no register | Supabase `holidays`, mapped by `lib/holidays.js` | one row per DAY (a week off is seven rows). `hostelCheckpoints` true = classes off, boarders still marked; false = campus closed, nothing marked. Declared by coordinator/admin only |
+| A student signed out at the gate | Supabase `student_leave`, mapped by `lib/leave.js` | open while `in_at` is null. Written only through `sign_student_out` / `sign_student_in` — there is no INSERT or UPDATE policy on the table |
+| Is this student away right now? | `leaveFor(admissionNo)` from `useSchoolData()` | null when they are on campus. The marking screen locks the row and pre-fills the status when it is not |
 
 ## 4. Roles and navigation (already wired — don't restructure without reason)
 
@@ -111,6 +114,11 @@ duplicate them under a different name.
 - **management** → Dashboard, Account
 - **admin** → Dashboard, Roster, Account
 - **nurse** → Dashboard, Account (nurse-specific screens are out of scope for now — sick bay is a later module)
+- **reception** → Gate, Account (the front desk: sign a student out to family, sign them back in. No Duties and no Dashboard — they hold the gate register, they do not mark a class or read the whole school's whereabouts)
+
+Holidays and the gate desk hang off the **Account** stack for coordinator and
+admin (`Holidays`, `Gate`), the same way the activity log does — those two
+roles already have four tabs and no room for a fifth.
 
 This is a finer-grained version of the earlier "3 main options" idea (Mark
 Attendance / Roster & People / Reports & Alerts) — **Duties = Mark Attendance**,

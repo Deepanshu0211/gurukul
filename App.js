@@ -27,6 +27,7 @@ import { DialogProvider } from "./src/components/Dialog";
 import { ToastProvider } from "./src/components/Toast";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import ConfigError from "./src/components/ConfigError";
+import DutyReminders from "./src/components/DutyReminders";
 import RootNavigator from "./src/navigation/RootNavigator";
 
 // Hold the native splash until the fonts are ready, so text never flashes
@@ -118,6 +119,11 @@ export default function App() {
                       from a dialog's onConfirm handler. */}
                   <ToastProvider>
                     <StatusBar style="dark" backgroundColor="transparent" translucent />
+                    {/* Draws nothing. It keeps the duty reminders sitting on
+                        the phone in step with the roster, and has to be inside
+                        both providers to see who is signed in and what they
+                        are down to mark. */}
+                    <DutyReminders />
                     <RootNavigator />
                   </ToastProvider>
                 </DialogProvider>

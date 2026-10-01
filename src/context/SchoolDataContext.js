@@ -9,6 +9,12 @@ import {
   overrideAttendance as overrideAttendanceInDb,
   reassignDuty as reassignDutyInDb,
 } from "../lib/duties";
+import { fetchHoliday, declareHoliday as declareHolidayInDb, cancelHoliday as cancelHolidayInDb } from "../lib/holidays";
+import {
+  fetchOpenLeaves,
+  signStudentOut as signStudentOutInDb,
+  signStudentIn as signStudentInInDb,
+} from "../lib/leave";
 import { todayISO } from "../utils/format";
 
 /**
@@ -28,6 +34,15 @@ export function SchoolDataProvider({ children }) {
   const [duties, setDuties] = useState([]);
   // { [dutyId]: { statuses: { admissionNo: code }, submittedBy, submittedAt } }
   const [records, setRecords] = useState({});
+  // The declared holiday on `day`, or null. Screens need this to tell an empty
+  // Duties list apart from a failed nightly generation — the two look
+  // identical and mean opposite things.
+  const [holiday, setHoliday] = useState(null);
+  // Everyone currently signed out at the gate, as { [admissionNo]: leave }.
+  // NOT scoped to `day`: a leave is open until reception closes it, so this is
+  // a fact about right now, which is why the marking screen can trust it while
+  // looking at any day's register.
+  const [openLeaves, setOpenLeaves] = useState({});
   const [loading, setLoading] = useState(true);
   // The day every screen is working on. Today, until somebody picks another.
   //
@@ -43,14 +58,18 @@ export function SchoolDataProvider({ children }) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [studentRows, staffRows, dutyRows] = await Promise.all([
+      const [studentRows, staffRows, dutyRows, holidayRow, leaveMap] = await Promise.all([
         fetchStudents(),
         fetchStaff(),
         fetchDuties(day),
+        fetchHoliday(day),
+        fetchOpenLeaves(),
       ]);
       setStudents(studentRows);
       setStaff(staffRows);
       setDuties(dutyRows);
+      setHoliday(holidayRow);
+      setOpenLeaves(leaveMap);
 
       // Pull attendance only for duties already submitted — there is nothing
       // to fetch for pending ones, and it keeps the initial load small.
@@ -164,6 +183,61 @@ export function SchoolDataProvider({ children }) {
     [duties, students]
   );
 
+  /**
+   * Declare a holiday, or cancel one.
+   *
+   * Both reload rather than patching local state. Declaring a holiday deletes
+   * that day's pending checkpoints inside the database (migration 033), so the
+   * duties list this context is holding is wrong the instant the write
+   * returns — and "wrong" here means showing a teacher a register she is no
+   * longer allowed to submit. A refetch is the only honest answer.
+   */
+  const declareHoliday = useCallback(
+    async (input) => {
+      const rows = await declareHolidayInDb(input);
+      await load();
+      return rows;
+    },
+    [load]
+  );
+
+  const cancelHoliday = useCallback(
+    async (targetDay) => {
+      await cancelHolidayInDb(targetDay);
+      await load();
+    },
+    [load]
+  );
+
+  /**
+   * The gate desk. Signing a student out changes what every later checkpoint
+   * records for them, so the open-leave map is updated immediately — a
+   * teacher's marking screen reads it on every row.
+   *
+   * The duties and marks are untouched by either call, so this deliberately
+   * does NOT do a full `load()`: reception signs children in and out through
+   * the day, and refetching the whole 415-student register each time would
+   * make the desk unusable on a slow connection.
+   */
+  const signStudentOut = useCallback(async (input) => {
+    const leave = await signStudentOutInDb(input);
+    setOpenLeaves((prev) => ({ ...prev, [leave.adm]: leave }));
+    return leave;
+  }, []);
+
+  const signStudentIn = useCallback(async (adm) => {
+    const leave = await signStudentInInDb(adm);
+    setOpenLeaves((prev) => {
+      const next = { ...prev };
+      delete next[adm];
+      return next;
+    });
+    return leave;
+  }, []);
+
+  /** The open leave for one student, or null. Used per row while marking. */
+  const leaveFor = useCallback((adm) => openLeaves[adm] || null, [openLeaves]);
+
   const reassignDuty = useCallback(async (dutyId, staffId) => {
     await reassignDutyInDb(dutyId, staffId);
     setDuties((prev) => prev.map((d) => (d.id === dutyId ? { ...d, staffId } : d)));
@@ -185,6 +259,13 @@ export function SchoolDataProvider({ children }) {
       day,
       setDay,
       isToday: day === todayISO(),
+      // The holiday on `day`, or null. `campusClosed` is the distinction that
+      // matters to a screen: on a classes-off holiday the boarders are still
+      // here and the residential checkpoints are still in the list below.
+      holiday,
+      campusClosed: !!holiday && !holiday.hostelCheckpoints,
+      openLeaves,
+      leaveFor,
       refresh: load,
       studentsForDuty,
       staffById,
@@ -192,6 +273,10 @@ export function SchoolDataProvider({ children }) {
       submitDuty,
       overrideDuty,
       reassignDuty,
+      declareHoliday,
+      cancelHoliday,
+      signStudentOut,
+      signStudentIn,
     }),
     [
       students,
@@ -208,6 +293,13 @@ export function SchoolDataProvider({ children }) {
       submitDuty,
       overrideDuty,
       reassignDuty,
+      holiday,
+      openLeaves,
+      leaveFor,
+      declareHoliday,
+      cancelHoliday,
+      signStudentOut,
+      signStudentIn,
     ]
   );
 

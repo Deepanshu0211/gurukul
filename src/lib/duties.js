@@ -67,6 +67,23 @@ export async function fetchDuties(day) {
   if (error) throw error;
 
   if (!data?.length) {
+    // A DECLARED holiday is an empty day on purpose, and the fallback must not
+    // reach past it. Without this check, declaring Diwali a holiday deletes
+    // that day's pending checkpoints (migration 033) and the fallback
+    // immediately serves the most recent day that still has some — so every
+    // teacher opens the app on a holiday and finds last Friday's register,
+    // presented as today's and already submitted. The one day the app has been
+    // told nothing is happening is the day it would invent a full schedule.
+    const holiday = await supabase
+      .from("holidays")
+      .select("day")
+      .eq("day", target)
+      .maybeSingle();
+    // Ignore the error rather than throw: on a server where 033 has not been
+    // run the table does not exist, and Duties — the reason this app exists —
+    // must not go down over a calendar it does not have yet.
+    if (holiday.data) return [];
+
     const latest = await supabase
       .from("duties")
       .select("day")
@@ -193,4 +210,30 @@ export async function overrideAttendance({ dutyId, students, statuses }) {
 export async function reassignDuty(dutyId, staffId) {
   const { error } = await supabase.from("duties").update({ staff_id: staffId }).eq("id", dutyId);
   if (error) throw new Error(error.message);
+}
+
+/**
+ * A staff member's own checkpoints that are still unmarked, over a few days.
+ *
+ * Separate from `fetchDuties` because it answers a different question and must
+ * not share that function's behaviour. `fetchDuties` serves the screens, so it
+ * takes the ONE day the user is looking at and falls back to the most recent
+ * day that has duties when today is empty. Reminders need neither: they look
+ * forward across days, and a fallback to last Tuesday would schedule an alarm
+ * for a checkpoint that has already happened.
+ */
+export async function fetchPendingDutiesForStaff(staffId, days) {
+  if (!staffId || !days?.length) return [];
+
+  const { data, error } = await supabase
+    .from("duties")
+    .select("*, checkpoints(name, start_min, end_min)")
+    .eq("staff_id", staffId)
+    .eq("state", "pending")
+    .in("day", days)
+    .order("day")
+    .order("id");
+  if (error) throw error;
+
+  return (data || []).map(fromRow);
 }

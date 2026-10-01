@@ -17,6 +17,8 @@ import RosterScreen from "../screens/RosterScreen";
 import AccountScreen from "../screens/AccountScreen";
 import ClassDayScreen from "../screens/ClassDayScreen";
 import ActivityScreen from "../screens/ActivityScreen";
+import GateScreen from "../screens/GateScreen";
+import HolidaysScreen from "../screens/HolidaysScreen";
 
 const navTheme = {
   ...DefaultTheme,
@@ -62,6 +64,13 @@ function AccountStack() {
     >
       <Stack.Screen name="AccountHome" component={AccountScreen} />
       <Stack.Screen name="Activity" component={ActivityScreen} />
+      {/* Registered for every role and gated inside each screen, not here.
+          A route that exists but refuses is one honest message; a route that
+          does not exist is a navigation crash, and the difference matters
+          because `role` comes from the server and can change under a session
+          that is already open. */}
+      <Stack.Screen name="Holidays" component={HolidaysScreen} />
+      <Stack.Screen name="Gate" component={GateScreen} />
     </Stack.Navigator>
   );
 }
@@ -107,6 +116,16 @@ function RoleTabs({ role }) {
     ],
     nurse: [
       { name: "Dashboard", component: DashboardScreen },
+      { name: "Account", component: AccountStack },
+    ],
+    // Two tabs, and deliberately no Duties and no Dashboard. Reception holds
+    // the gate register and nothing else: they do not mark a checkpoint, and
+    // the database refuses the write even if this list were wrong (migration
+    // 034). Giving them a Dashboard would put 415 children's live whereabouts
+    // on a screen at the front desk, which is a different question from the
+    // one this role exists to answer.
+    reception: [
+      { name: "Gate", component: GateScreen },
       { name: "Account", component: AccountStack },
     ],
   };

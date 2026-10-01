@@ -17,6 +17,7 @@ export const ROLES = {
   MANAGEMENT: "management",
   ADMIN: "admin",
   NURSE: "nurse",
+  RECEPTION: "reception",
 };
 
 /**
@@ -32,6 +33,7 @@ export const ROLE_LABELS = {
   management: "MOD / Management",
   admin: "Administrator",
   nurse: "Nurse",
+  reception: "Reception",
 };
 
 /** Always use this rather than indexing ROLE_LABELS directly: a role that is
@@ -44,8 +46,19 @@ export const OVERSIGHT = [ROLES.COORDINATOR, ROLES.MANAGEMENT, ROLES.ADMIN];
 
 export const isOversight = (role) => OVERSIGHT.includes(role);
 
-/** Can open a checkpoint and submit it — including covering for someone else. */
-export const canMark = (role) => role !== ROLES.NURSE;
+/**
+ * Can open a checkpoint and submit it — including covering for someone else.
+ *
+ * Nurse and reception are both excluded, for the same reason: each holds a
+ * record of their own — the sick bay, the gate register — and reads the board,
+ * but neither files a class register.
+ *
+ * Migration 034 enforces this independently. Until it landed, this line was
+ * the ONLY thing stopping the nurse: 005 widened attendance writes to "any
+ * staff member" for cover marking, so the database would have accepted a
+ * submission from a hand-rolled request with a nurse's token.
+ */
+export const canMark = (role) => role !== ROLES.NURSE && role !== ROLES.RECEPTION;
 
 /** Moving a duty to a different teacher for the day (SRS B2). */
 export const canReassign = (role) => role === ROLES.COORDINATOR || role === ROLES.ADMIN;
@@ -97,6 +110,37 @@ export const canPrintReports = (role) => isOversight(role);
  * database rather than in this file.
  */
 export const canApproveStaff = (role) => role === ROLES.COORDINATOR || role === ROLES.ADMIN;
+
+/**
+ * Declaring a holiday — a day the school does not take a register.
+ *
+ * Coordinator and admin, deliberately NOT management, for the same reason
+ * `canApproveStaff` excludes them: the MOD reads the board, they do not set
+ * the school's calendar. A holiday cancels every other teacher's duties for
+ * that day, so it belongs with the people who roster them.
+ *
+ * Enforced independently by the `holidays_write` policy in migration 033.
+ * Note that policy carries both USING and WITH CHECK — `for all` without a
+ * WITH CHECK leaves INSERT unguarded entirely, which would have let any
+ * signed-in teacher declare the school shut.
+ */
+export const canDeclareHoliday = (role) =>
+  role === ROLES.COORDINATOR || role === ROLES.ADMIN;
+
+/**
+ * Working the gate desk: signing a student out to family and back in again.
+ *
+ * Reception's whole job. Coordinator and admin are included because the desk
+ * is not staffed at 10pm and somebody senior has to be able to sign a child
+ * back in — not because this is an oversight function. Management is excluded
+ * on purpose: this records a child physically leaving the campus, and the
+ * person who writes it should be the person who watched them go.
+ *
+ * `sign_student_out` and `sign_student_in` in migration 034 check the same
+ * three roles; this decides who is offered the screen.
+ */
+export const canWorkGate = (role) =>
+  role === ROLES.RECEPTION || role === ROLES.COORDINATOR || role === ROLES.ADMIN;
 
 /** Whether the Duties list should default to "my duties only". */
 export const defaultsToOwnDuties = (role) => role === ROLES.TEACHER;

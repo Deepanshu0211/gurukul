@@ -15,11 +15,28 @@ one password because the accounts themselves are disposable.
 ## Creating them
 
 Run [`supabase/seed-auth-users.sql`](../supabase/seed-auth-users.sql) in the SQL
-editor. It creates an Auth account for every staff row in one statement,
+editor after adding the Reception staff row below. It creates an Auth account for every staff row in one statement,
 confirms the address, and points the staff row at it.
 
 Doing it by hand — Authentication → Users → **Add user**, with **Auto Confirm**
-on — still works and is worth knowing, but it is 26 accounts.
+on — still works and is worth knowing, but it is 27 accounts including Reception.
+
+### Adding the Reception test login
+
+Apply migrations `033_holidays.sql` and `034_reception_gate.sql` first. Then
+run this in the SQL editor on the development database:
+
+```sql
+insert into public.staff (id, name, role, email)
+values ('r1', 'Reception Desk', 'reception', 'reception@gurukula.org')
+on conflict (id) do nothing;
+```
+
+Run `supabase/seed-auth-users.sql` afterward to create and link the login.
+For an existing test database, rerun only that auth seed after adding this row;
+there is no need to reset the student register. Existing passwords are preserved
+by the seed, so the shared password below applies to newly created accounts.
+Adding this entry to the documentation does not create the account on the server.
 
 The email must match the `staff` row exactly. Both seed files link the two by
 address, and a staff row with no `auth_user_id` can do nothing at all under
@@ -41,6 +58,7 @@ Krishna and Balram.
 | `principal@gurukula.org` | Principal Office | MOD / Management | — |
 | `admin@gurukula.org` | Admin Desk | Administrator | — |
 | `nurse@gurukula.org` | Sister Nurse | Nurse | — |
+| `reception@gurukula.org` | Reception Desk | Reception | — |
 
 ## Class teachers
 
@@ -80,15 +98,30 @@ coordinator reassigns a duty to when a class teacher is away.
 
 ## A good starting set
 
-You do not need all 26. One class teacher, the coordinator, the MOD, the admin
-and one cover teacher exercises every screen and every permission boundary:
+Start with these accounts to exercise attendance, holidays and the gate flow:
 
 | Email | Why |
 |---|---|
 | `krishna.saha@gurukula.org` | A class teacher with a class — marking, "My Class", their own status |
-| `coordinator@gurukula.org` | Reassigning duties, approving access requests, overruling a mark |
-| `mod@gurukula.org` | Oversight without the power to re-roster — the narrower of the two |
-| `admin@gurukula.org` | The office view |
+| `coordinator@gurukula.org` | Reassigning duties, approving access requests, overruling a mark, declaring holidays and working the gate |
+| `principal@gurukula.org` | MOD / Management oversight without the power to re-roster or declare holidays |
+| `admin@gurukula.org` | The office view, holiday declaration and gate access |
+| `reception@gurukula.org` | Gate tab: sign students OUT and IN; cannot submit attendance or declare holidays |
+| `nurse@gurukula.org` | Confirm that attendance submission is unavailable |
 | `gopal.das@gurukula.org` | Duty staff with no class, which is its own set of edge cases |
 
 The rest stay as names a duty can be assigned to.
+
+Despite its name, `mod@gurukula.org` is seeded as **Coordinator**. Use
+`principal@gurukula.org` when testing the narrower Management permissions.
+
+## Holiday and gate checks
+
+1. As coordinator or admin, open **Account → Holidays** and declare a date
+   range. Check both classes-off (hostel checkpoints remain) and campus-closed
+   (no attendance) holidays. Teacher and Reception logins must not declare them.
+2. As Reception, find a student in **Gate** and sign them OUT as Home.
+3. As a teacher, open a pending checkpoint containing that student. They must
+   appear as Home with marking locked, including after refreshing.
+4. As Reception, mark the student IN. Refresh the teacher's pending checkpoint
+   and confirm that they can mark the student present again.

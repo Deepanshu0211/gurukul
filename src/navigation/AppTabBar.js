@@ -19,6 +19,7 @@ const ICONS = {
   Dashboard: { on: "grid", off: "grid-outline" },
   Roster: { on: "people", off: "people-outline" },
   Account: { on: "person-circle", off: "person-circle-outline" },
+  Gate: { on: "exit", off: "exit-outline" },
 };
 
 // Bar height only — the safe-area inset is added on top at render time and

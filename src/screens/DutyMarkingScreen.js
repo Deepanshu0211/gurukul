@@ -25,7 +25,7 @@ import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import { haptics } from "../lib/haptics";
-import { plural } from "../utils/format";
+import { fmtDay, plural } from "../utils/format";
 import { describeError } from "../lib/errors";
 
 /**
@@ -77,7 +77,7 @@ const STATUS_HINT = {
 export default function DutyMarkingScreen({ route, navigation }) {
   const { dutyId } = route.params;
   const { user } = useAuth();
-  const { duties, records, studentsForDuty, submitDuty, overrideDuty, staffName } =
+  const { duties, records, studentsForDuty, submitDuty, overrideDuty, staffName, leaveFor } =
     useSchoolData();
   const dialog = useDialog();
   const toast = useToast();
@@ -144,6 +144,81 @@ export default function DutyMarkingScreen({ route, navigation }) {
 
   const openSheet = useCallback((student) => setSheetFor(student), []);
 
+  /**
+   * The children reception has signed out at the gate.
+   *
+   * Their status is not the teacher's to set. While the gate register has them
+   * off campus they carry Home (or Outing, or Gita Nagari) at every checkpoint
+   * and the row is locked — which is the whole point: a teacher standing in
+   * front of a line cannot know whether the child she cannot see went home on
+   * Friday or walked out this morning, and until now she was being asked to
+   * decide anyway, one checkpoint at a time, with nothing carrying her answer
+   * to the next one.
+   *
+   * Keyed on `duty.day`, not on today, so opening a past register while a
+   * child is currently away does not retro-lock a day they were here for —
+   * the same boundary the database trigger draws (`dd.day >= l.out_day`).
+   */
+  const locked = useMemo(() => {
+    const map = {};
+    if (!duty?.day) return map;
+    students.forEach((s) => {
+      const leave = leaveFor(s.adm);
+      if (leave && duty.day >= leave.outDay) map[s.id] = leave;
+    });
+    return map;
+  }, [students, leaveFor, duty?.day]);
+
+  const anyLocked = useMemo(() => Object.keys(locked).length, [locked]);
+
+  /**
+   * What the register actually says, as opposed to what the teacher has typed.
+   *
+   * A signed-out child's status is merged in here rather than pushed into
+   * `statuses` by an effect. Writing it into the editable state would fight
+   * with whatever the teacher is doing at that moment, and would leave the
+   * marks looking like hers when they are not. Deriving it means the tallies,
+   * the rows and the submission all read the same thing and none of them can
+   * drift.
+   *
+   * The database coerces these marks too (migration 034), so this screen being
+   * out of date cannot put a signed-out child on the register as present. This
+   * is so the teacher SEES it, not so it is true.
+   */
+  const effective = useMemo(() => {
+    if (!anyLocked) return statuses;
+    const merged = { ...statuses };
+    Object.entries(locked).forEach(([id, leave]) => {
+      merged[id] = leave.status;
+    });
+    return merged;
+  }, [statuses, locked, anyLocked]);
+
+  /**
+   * Tapping a locked row. It has to do SOMETHING — a control that ignores a
+   * tap reads as broken, and the teacher's next move is to tap it harder. So
+   * it answers the question she is actually asking, which is not "why is this
+   * disabled" but "where is this child and who do I talk to".
+   */
+  const explainLock = useCallback(
+    (student) => {
+      const leave = locked[student.id];
+      if (!leave) return;
+      haptics.warn();
+      const what = STATUS_META[leave.status]?.label || "away";
+      dialog.alert({
+        icon: "lock-closed-outline",
+        title: `${student.name} is signed out`,
+        message:
+          `Reception signed ${student.name} out on ${fmtDay(leave.outDay)}` +
+          `${leave.reason ? ` — ${leave.reason}` : ""}. ` +
+          `Every checkpoint records them as ${what} until they are signed back in at the gate. ` +
+          `You can mark them present again as soon as reception does that.`,
+      });
+    },
+    [locked, dialog]
+  );
+
   const searchable = students.length > SEARCH_THRESHOLD;
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -153,9 +228,12 @@ export default function DutyMarkingScreen({ route, navigation }) {
     );
   }, [students, query]);
 
-  const marked = Object.keys(statuses).length;
+  // Against `effective`, so the footer counts a signed-out child under
+  // "Elsewhere" rather than silently under "Present" — which is exactly the
+  // arithmetic a teacher uses to decide whether her line is complete.
+  const marked = Object.keys(effective).length;
   const present = students.length - marked;
-  const absent = Object.values(statuses).filter((s) => s === "A").length;
+  const absent = Object.values(effective).filter((s) => s === "A").length;
   const elsewhere = marked - absent;
 
   // Cover marking: anyone may submit a pending checkpoint, and the duty stays
@@ -170,13 +248,13 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const changedCount = useMemo(() => {
     if (!isOverride) return 0;
     const before = existing?.statuses || {};
-    const touched = new Set([...Object.keys(before), ...Object.keys(statuses)]);
+    const touched = new Set([...Object.keys(before), ...Object.keys(effective)]);
     let n = 0;
     touched.forEach((id) => {
-      if ((statuses[id] || null) !== (before[id] || null)) n += 1;
+      if ((effective[id] || null) !== (before[id] || null)) n += 1;
     });
     return n;
-  }, [isOverride, existing, statuses]);
+  }, [isOverride, existing, effective]);
 
   const covering = !!duty && duty.staffId !== user?.id;
   // Falls back to a generic phrase — the warning matters more than the name,
@@ -207,7 +285,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const handleOverride = async () => {
     setSaving(true);
     try {
-      const changed = await overrideDuty(dutyId, statuses, user.id);
+      const changed = await overrideDuty(dutyId, effective, user.id);
       haptics.success();
       toast.show(
         changed === 0
@@ -253,7 +331,10 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await submitDuty(dutyId, statuses, user.id);
+      // `effective`, not `statuses` — the gate register's marks go up with the
+      // teacher's own. The database would coerce them anyway (034); sending
+      // them means what is stored matches what she was looking at.
+      await submitDuty(dutyId, effective, user.id);
       haptics.success();
       // A toast, not a dialog. Submitting is the last step of a round and the
       // teacher is already walking to the next checkpoint — a modal they have
@@ -356,15 +437,25 @@ export default function DutyMarkingScreen({ route, navigation }) {
         <View style={styles.summary}>
           <Text style={styles.summaryText}>
             <Text style={styles.summaryStrong}>{students.length}</Text> students
-            {marked > 0 ? (
+            {anyLocked > 0 ? (
               <Text>
                 {" · "}
-                <Text style={styles.summaryStrong}>{marked}</Text> marked as an exception
+                <Text style={styles.summaryStrong}>{anyLocked}</Text> signed out at the gate
+              </Text>
+            ) : null}
+            {/* `marked - anyLocked`: the gate's marks are counted on their own
+                line above, and adding them here again would tell a teacher
+                she had made an exception she never made. */}
+            {marked - anyLocked > 0 ? (
+              <Text>
+                {" · "}
+                <Text style={styles.summaryStrong}>{marked - anyLocked}</Text> marked as an
+                exception
               </Text>
             ) : readOnly ? (
               ""
             ) : (
-              " · everyone present unless you say otherwise"
+              ` · ${anyLocked ? "everyone else" : "everyone"} present unless you say otherwise`
             )}
           </Text>
         </View>
@@ -433,10 +524,12 @@ export default function DutyMarkingScreen({ route, navigation }) {
         renderItem={({ item }) => (
           <StudentRow
             student={item}
-            code={statuses[item.id]}
+            code={effective[item.id]}
             readOnly={readOnly}
+            leave={locked[item.id]}
             onSet={setStatus}
             onOpenSheet={openSheet}
+            onExplainLock={explainLock}
           />
         )}
       />
@@ -524,16 +617,32 @@ const StudentRow = React.memo(function StudentRow({
   student,
   code,
   readOnly,
+  leave,
   onSet,
   onOpenSheet,
+  onExplainLock,
 }) {
   const isAbsent = code === "A";
   const isElsewhere = !!code && !isAbsent;
   const meta = code ? STATUS_META[code] : null;
   const label = meta ? meta.label : "Present";
 
+  // Signed out at the gate. Locked for the same reason a submitted register
+  // is locked — the answer is already on the record and this is not the place
+  // it gets changed. Distinct from `readOnly`, which is about the duty: a
+  // locked child in an editable register still has a tap that explains itself,
+  // and the rest of the class is still markable around them.
+  const gated = !!leave;
+
   return (
-    <View style={[styles.row, isAbsent && styles.rowAbsent, isElsewhere && styles.rowElsewhere]}>
+    <View
+      style={[
+        styles.row,
+        isAbsent && styles.rowAbsent,
+        isElsewhere && styles.rowElsewhere,
+        gated && styles.rowGated,
+      ]}
+    >
       {/* Full-height colour edge: the only thing that makes two exceptions
           findable when scrolling back through 300 rows. */}
       <View
@@ -546,22 +655,50 @@ const StudentRow = React.memo(function StudentRow({
 
       <Row
         style={styles.rowMain}
-        onPress={() => onOpenSheet(student)}
-        disabled={readOnly}
+        onPress={() => (gated ? onExplainLock(student) : onOpenSheet(student))}
+        disabled={readOnly && !gated}
         accessibilityRole="button"
-        accessibilityState={{ disabled: readOnly }}
-        accessibilityLabel={`${student.name}, roll ${student.roll}, currently ${label}`}
-        accessibilityHint={readOnly ? undefined : "Opens the full list of statuses"}
+        accessibilityState={{ disabled: readOnly && !gated }}
+        accessibilityLabel={
+          gated
+            ? `${student.name}, roll ${student.roll}, signed out at the gate, recorded as ${label}`
+            : `${student.name}, roll ${student.roll}, currently ${label}`
+        }
+        accessibilityHint={
+          gated
+            ? "Locked until reception signs them back in. Opens an explanation"
+            : readOnly
+              ? undefined
+              : "Opens the full list of statuses"
+        }
       >
         <Text style={styles.name} numberOfLines={1}>
           {student.name}
         </Text>
         <Text style={typography.caption} numberOfLines={1}>
-          Roll {student.roll} · {student.type === "D" ? "Day scholar" : "Residential"}
+          {gated
+            ? `Signed out ${fmtDay(leave.outDay)}${leave.reason ? ` · ${leave.reason}` : ""}`
+            : `Roll ${student.roll} · ${student.type === "D" ? "Day scholar" : "Residential"}`}
         </Text>
       </Row>
 
-      {isElsewhere ? (
+      {gated ? (
+        // No switch and no status picker: this mark belongs to the gate
+        // register, not to whoever is holding the phone. The padlock is the
+        // whole message — it says "answered already", not "broken".
+        <TouchableOpacity
+          onPress={() => onExplainLock(student)}
+          activeOpacity={0.7}
+          style={[styles.elsewhereChip, styles.gatedChip]}
+          accessibilityRole="button"
+          accessibilityLabel={`${student.name} is ${label} — signed out at the gate. Why?`}
+        >
+          <Ionicons name="lock-closed" size={11} color={colors.textMuted} />
+          <Text style={styles.elsewhereText} numberOfLines={1}>
+            {label}
+          </Text>
+        </TouchableOpacity>
+      ) : isElsewhere ? (
         // A named status can't be shown on a two-way switch, so it takes the
         // whole control and stays tappable to change.
         <TouchableOpacity
@@ -734,6 +871,11 @@ const styles = StyleSheet.create({
   },
   rowAbsent: { borderColor: colors.danger, backgroundColor: colors.dangerBg },
   rowElsewhere: { backgroundColor: colors.cardAlt },
+  // Same fill as any other exception, and deliberately so: a child signed out
+  // at the gate is accounted for, which is the only distinction the colours in
+  // this screen are allowed to make. Red is reserved for unaccounted-for. The
+  // padlock carries the difference instead.
+  rowGated: { backgroundColor: colors.cardAlt },
 
   stripe: { width: 4, height: "100%", backgroundColor: "transparent" },
   stripeAbsent: { backgroundColor: colors.danger },
@@ -776,6 +918,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     flexShrink: 0,
   },
+  // A dashed edge, not a greyed-out one: disabled styling says "this control
+  // is unavailable", and the control is not unavailable — it is answered.
+  gatedChip: { borderStyle: "dashed", backgroundColor: colors.cardAlt },
   elsewhereText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.text },
 
   footer: {

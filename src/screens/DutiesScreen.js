@@ -64,6 +64,8 @@ export default function DutiesScreen({ navigation }) {
     day,
     setDay,
     isToday,
+    holiday,
+    campusClosed,
   } = useSchoolData();
   const [refreshing, setRefreshing] = useState(false);
   const tabInset = useTabContentInset();
@@ -189,6 +191,7 @@ export default function DutiesScreen({ navigation }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
         ListHeaderComponent={
+          <>
           <DutiesHeader
             user={user}
             day={day}
@@ -221,13 +224,53 @@ export default function DutiesScreen({ navigation }) {
             searchable={(showingMine ? myDuties : allDuties).length > SEARCH_THRESHOLD}
             resultCount={duties.length}
           />
+          {/* Below the header, not above it: the header owns the gap under
+              the status bar, and anything placed before it sits in that gap.
+
+              On a classes-off holiday the list is NOT empty — the residential
+              checkpoints still run — so the empty state never fires and this
+              is the only place the day gets named. Without it a class teacher
+              finds her morning register gone and no reason given. */}
+          {!!holiday && (
+            <View style={styles.holidayBanner}>
+              <Ionicons
+                name={campusClosed ? "home-outline" : "school-outline"}
+                size={16}
+                color={colors.warning}
+              />
+              <Text style={styles.holidayText} numberOfLines={3}>
+                <Text style={styles.holidayName}>{holiday.label}</Text>
+                {campusClosed
+                  ? ` · the campus is closed on ${fmtDay(day)}. No attendance is taken.`
+                  : ` · classes are off on ${fmtDay(day)}. Only the residential checkpoints are taken.`}
+              </Text>
+            </View>
+          )}
+          </>
         }
         ListEmptyComponent={
-          <EmptyState
-            icon="checkmark-done-outline"
-            title="Nothing assigned today"
-            body="Duties appear here as the coordinator assigns them."
-          />
+          // A declared holiday and a failed nightly generation produce the
+          // identical empty screen and mean opposite things — "nothing to do"
+          // versus "the school has no registers this morning and nobody
+          // knows". Naming the holiday is the only thing that tells a teacher
+          // which one she is looking at.
+          holiday ? (
+            <EmptyState
+              icon="calendar-outline"
+              title={holiday.label}
+              body={
+                campusClosed
+                  ? `No attendance is taken on ${fmtDay(day)} — the campus is closed. Nothing is expected of you.`
+                  : `Classes are off on ${fmtDay(day)}. The residential checkpoints still run, so anything rostered to you appears here.`
+              }
+            />
+          ) : (
+            <EmptyState
+              icon="checkmark-done-outline"
+              title="Nothing assigned today"
+              body="Duties appear here as the coordinator assigns them."
+            />
+          )
         }
         renderSectionHeader={({ section }) => (
           <SectionLabel count={section.data.length} tone={section.tone}>
@@ -565,6 +608,22 @@ function DoneRow({ duty, count, owner, record, onPress, index }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.gutter },
+
+  // Warning-toned, not danger: a declared holiday is a normal, expected thing
+  // that changes what is expected of the reader. Red would put it on the same
+  // footing as an overdue checkpoint, which is the one colour on this screen
+  // that has to keep meaning "act now".
+  holidayBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  holidayText: { ...typography.caption, flex: 1, minWidth: 0, color: colors.warning, lineHeight: 17 },
+  holidayName: { fontFamily: fonts.semibold },
 
   scope: { marginTop: spacing.sm },
   dayPill: {
