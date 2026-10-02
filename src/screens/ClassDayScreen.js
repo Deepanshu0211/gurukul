@@ -24,6 +24,8 @@ import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDayAttendance } from "../lib/history";
 import { resolveGroup } from "../lib/duties";
+import { classCoversClass } from "../domain/classGroups";
+import { recordDuties, recordRoster, recordAbsences } from "../lib/classRecords";
 import { useStudentHistory, RANGES } from "../lib/studentHistory";
 import PrintSheets from "../components/PrintSheets";
 import { STATUS_META } from "../data/mockData";
@@ -32,20 +34,16 @@ import { STATUS_META } from "../data/mockData";
  * Reading attendance back: pick a day, pick a checkpoint, see the whole group
  * that checkpoint covered and where every child was.
  *
- * Scope is the CHECKPOINT'S group, not the reader's own class. Mangalarati
- * covers every residential student, so it lists all ~300 of them; a
- * class-section duty lists that section. An earlier version intersected the
- * group with the signed-in teacher's class, which quietly turned a 300-child
- * roll call into 14 rows and made the count on screen wrong rather than
- * merely narrow.
+ * Teachers read only their academic class/section, including its part of a
+ * combined-grade or school-wide checkpoint. Oversight reads the full group.
+ * The totals and printed registers follow that same scope.
  *
  * This replaced a student × checkpoint matrix. The matrix fitted a whole day
  * on one screen, but every cell was a 24px dot with no room for a name, a
  * time, or who marked it — and the question a teacher actually arrives with
  * is about ONE roll call ("was he at Mangalarati on Tuesday?"), not the grid.
  *
- * The three numbers at the top are the reader's own marking record: they
- * answer "how much have I done", which nothing else in the app reported.
+ * The three numbers at the top describe this class on the selected day.
  */
 
 /** Fixed so the list can skip measuring 300 rows and jump straight to an
@@ -159,12 +157,10 @@ export default function ClassDayScreen() {
   // policy in 005, not a filter here.
   //
   // Oversight keeps the whole school: reading across classes is the job.
-  const readable = useMemo(() => {
-    if (isOversight(user?.role) || !user?.classKey) return submitted;
-    // A school-wide checkpoint (Mangalarati, lunch) has no class_key and
-    // covers this teacher's students along with everyone else's, so it stays.
-    return submitted.filter((d) => !d.classKey || d.classKey === user.classKey);
-  }, [submitted, user?.role, user?.classKey]);
+  const readable = useMemo(
+    () => recordDuties(submitted, students, user),
+    [submitted, students, user]
+  );
 
   // Falling back to the first readable checkpoint rather than tracking the
   // day change in an effect: when the teacher moves to a day that has no
@@ -172,17 +168,16 @@ export default function ClassDayScreen() {
   const activeDuty = useMemo(
     () =>
       readable.find((d) => d.id === selectedDutyId) ||
-      (user?.classKey && readable.find((d) => d.classKey === user.classKey)) ||
+      (user?.classKey && readable.find((d) => classCoversClass(d.classKey, user.classKey))) ||
       readable[0] ||
       null,
     [readable, selectedDutyId, user?.classKey]
   );
 
-  // Everyone the checkpoint covered — the same set the duty teacher marked,
-  // in the same order, so the two screens can be read against each other.
+  // Teachers see only their section inside the checkpoint's full register.
   const roster = useMemo(
-    () => (activeDuty ? resolveGroup(activeDuty, students) : []),
-    [activeDuty, students]
+    () => (activeDuty ? recordRoster(activeDuty, students, user) : []),
+    [activeDuty, students, user]
   );
 
   const statusOf = useCallback(
@@ -194,18 +189,15 @@ export default function ClassDayScreen() {
 
   // The day's own numbers for the group being read.
   const dayTotals = useMemo(() => {
-    const marks = readable.flatMap((d) =>
-      Object.entries(records[d.id]?.statuses || {}).map(([, code]) => code)
-    );
     return {
       strength: roster.length,
       taken: readable.length,
       // Only 'A' is unaccounted for. Home, sick, outing and the rest mean
       // the school knows where the child is, and counting them here would
       // make a well-run day look like a bad one.
-      absent: marks.filter((m) => m === "A").length,
+      absent: recordAbsences(readable, records, students, user),
     };
-  }, [readable, records, roster.length]);
+  }, [readable, records, roster.length, students, user]);
 
   const tally = useMemo(() => {
     let present = 0;
@@ -322,12 +314,13 @@ export default function ClassDayScreen() {
         title="Records"
         subtitle={
           activeDuty
-            ? `${activeDuty.group} · ${plural(roster.length, "student")}`
+            ? `${isOversight(user?.role) ? activeDuty.group : user?.classLabel} · ${plural(roster.length, "student")}`
             : "Pick a day to read back"
         }
         right={
           <TouchableOpacity
             onPress={() => setPrintOpen(true)}
+            disabled={!isOversight(user?.role) && !user?.classKey}
             activeOpacity={0.7}
             style={styles.printBtn}
             accessibilityRole="button"
@@ -472,6 +465,9 @@ export default function ClassDayScreen() {
     if (past.error) {
       return <ErrorState error={past.error} title="Can't load that day" />;
     }
+    if (!isOversight(user?.role) && !user?.classKey) {
+      return <EmptyState icon="people-outline" title="No class assigned" body="Ask the school office to assign your class before viewing its records." />;
+    }
     if (!activeDuty) {
       // Naming the class matters. 'Nothing marked yet' next to a register
       // full of another class's children was the confusing part; on its own
@@ -582,7 +578,7 @@ export default function ClassDayScreen() {
           <SheetOption
             key={d.id}
             label={d.checkpoint}
-            hint={`${fmtTime(d.start)} · ${d.group}`}
+            hint={`${fmtTime(d.start)} · ${isOversight(user?.role) ? d.group : user?.classLabel}`}
             active={activeDuty?.id === d.id}
             onPress={() => {
               setSelectedDutyId(d.id);
@@ -592,17 +588,14 @@ export default function ClassDayScreen() {
         ))}
       </BottomSheet>
 
-      <PrintSheets
+      {(isOversight(user?.role) || user?.classKey) && <PrintSheets
         visible={printOpen}
         onClose={() => setPrintOpen(false)}
         day={day}
-        // The checkpoint being read, not the reader's own class: a
-        // coordinator looking at 8 Balram should print 8 Balram. A
-        // school-wide checkpoint has no class_key and prints everybody,
-        // which is right — Mangalarati covers the whole ashram.
-        classKey={activeDuty?.classKey || null}
-        classLabel={activeDuty?.classKey ? activeDuty.group : null}
-      />
+        // Teacher exports stay within their academic section for every date.
+        classKey={isOversight(user?.role) ? activeDuty?.classKey || null : user?.classKey}
+        classLabel={isOversight(user?.role) ? activeDuty?.classKey ? activeDuty.group : null : user?.classLabel}
+      />}
 
       <StudentInfoSheet
         student={infoFor}

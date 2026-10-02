@@ -25,8 +25,10 @@ import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import { haptics } from "../lib/haptics";
-import { fmtDay, plural } from "../utils/format";
+import { fmtDay, fmtTime, plural, todayISO } from "../utils/format";
+import { useNow } from "../lib/clock";
 import { describeError } from "../lib/errors";
+import { combinedClassGrade } from "../domain/classGroups";
 
 /**
  * Marking one checkpoint.
@@ -95,7 +97,10 @@ export default function DutyMarkingScreen({ route, navigation }) {
   // stripped-down form that hides the rest of the group.
   const submitted = duty?.state === "submitted";
   const isOverride = submitted && canOverride(user?.role);
-  const readOnly = submitted && !isOverride;
+  const now = useNow();
+  const outsideWindow = !!duty?.pilotWindow && !isOverride &&
+    (duty.day !== todayISO() || now < duty.start || now >= duty.end);
+  const readOnly = (submitted && !isOverride) || outsideWindow;
 
   const [statuses, setStatuses] = useState(existing ? existing.statuses : {});
   // Seeded from `existing` at MOUNT only, which is wrong whenever the record
@@ -460,6 +465,19 @@ export default function DutyMarkingScreen({ route, navigation }) {
           </Text>
         </View>
 
+        {outsideWindow && (
+          <View style={styles.overrideBanner}>
+            <Ionicons name="time-outline" size={16} color={colors.warning} />
+            <Text style={styles.overrideText}>
+              {duty.day === todayISO()
+                ? `Marking opens at ${fmtTime(duty.start)} and closes at midnight.`
+                : duty.day > todayISO()
+                  ? `Marking opens ${fmtDay(duty.day)} at ${fmtTime(duty.start)}.`
+                  : "This day's marking window has closed. Its attendance is preserved in Records."}
+            </Text>
+          </View>
+        )}
+
         {isOverride && (
           <View style={styles.overrideBanner}>
             <Ionicons name="create-outline" size={16} color={colors.warning} />
@@ -524,6 +542,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
         renderItem={({ item }) => (
           <StudentRow
             student={item}
+            showSection={combinedClassGrade(duty?.classKey) !== null}
             code={effective[item.id]}
             readOnly={readOnly}
             leave={locked[item.id]}
@@ -614,6 +633,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
  * marking one child absent re-renders one row rather than the whole class.
  */
 const StudentRow = React.memo(function StudentRow({
+  showSection,
   student,
   code,
   readOnly,
@@ -678,7 +698,7 @@ const StudentRow = React.memo(function StudentRow({
         <Text style={typography.caption} numberOfLines={1}>
           {gated
             ? `Signed out ${fmtDay(leave.outDay)}${leave.reason ? ` · ${leave.reason}` : ""}`
-            : `Roll ${student.roll} · ${student.type === "D" ? "Day scholar" : "Residential"}`}
+            : `Roll ${student.roll ?? "—"}${showSection ? ` · ${student.label.split(" ").slice(1).join(" ")}` : ""} · ${student.type === "D" ? "Day scholar" : "Residential"}`}
         </Text>
       </Row>
 

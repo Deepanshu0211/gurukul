@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { supabase } from "./supabase";
 import { fromRow as dutyFromRow } from "./duties";
 
@@ -160,22 +161,21 @@ export async function fetchMarkingTotals(staffId) {
   };
 }
 
-/** The stat strip at the top of Records. Refetched whenever `nonce` changes. */
+/** Personal totals refresh on screen focus and after attendance changes. */
 export function useMarkingTotals(staffId, nonce = 0) {
-  const [totals, setTotals] = useState({ taken: 0, marked: 0, absent: 0, loading: true });
+  const [totals, setTotals] = useState({ taken: 0, marked: 0, absent: 0, loading: true, error: false });
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let cancelled = false;
-    setTotals((t) => ({ ...t, loading: true }));
+    setTotals((t) => ({ ...t, loading: true, error: false }));
     fetchMarkingTotals(staffId)
-      .then((res) => !cancelled && setTotals({ ...res, loading: false }))
-      // A failed tally is not worth an error state on the whole screen — the
-      // list below it is the part the teacher came for.
-      .catch(() => !cancelled && setTotals({ taken: 0, marked: 0, absent: 0, loading: false }));
+      .then((res) => !cancelled && setTotals({ ...res, loading: false, error: false }))
+      // A failed read must not claim that no attendance has been recorded.
+      .catch(() => !cancelled && setTotals((t) => ({ ...t, loading: false, error: true })));
     return () => {
       cancelled = true;
     };
-  }, [staffId, nonce]);
+  }, [staffId, nonce]));
 
   return totals;
 }

@@ -11,13 +11,10 @@ const TYPE_CODE = {
   "Day Boarding": "B",
 };
 
-// `sec[0]` on a row whose section is null or empty throws, and it throws
-// inside the map over the whole register — so one malformed import row takes
-// down every screen in the app rather than showing one student oddly.
-const secShort = (sec) => {
+// Show the school's section names in full while retaining database keys.
+const sectionLabel = (sec) => {
   if (!sec) return "—";
-  if (sec === "A" || sec === "Vedic") return sec;
-  return sec[0];
+  return { KRISHNA: "Krishna", BALRAM: "Balram", VEDIC: "Vedic" }[sec.toUpperCase()] || sec;
 };
 
 export const fromRow = (r) => ({
@@ -27,7 +24,7 @@ export const fromRow = (r) => ({
   grade: r.grade,
   sec: r.section,
   key: `${r.grade}|${r.section}`,
-  label: `${r.grade} ${secShort(r.section)}`,
+  label: `${r.grade} ${sectionLabel(r.section)}`,
   type: TYPE_CODE[r.stype] || "D",
   roll: r.roll_no,
   remedial: !!r.remedial,

@@ -3,6 +3,7 @@
 // functions stay exactly as they are — they operate on plain objects.
 //
 // Rules referenced here come from the SRS in docs/reference/.
+import { todayISO } from "../utils/format";
 
 /** Duty lifecycle as shown to the user. Note this is COMPUTED from the clock;
  *  the database only ever stores 'pending' or 'submitted' (duties.state). */
@@ -24,8 +25,13 @@ const DUE_LEAD_MIN = 15;
 export const dutyStatus = (duty, records, now) => {
   if (!duty) return DUTY_STATUS.UPCOMING;
   if (records && records[duty.id]) return DUTY_STATUS.DONE;
+  if (duty.pilotWindow && duty.day) {
+    const today = todayISO();
+    if (duty.day > today) return DUTY_STATUS.UPCOMING;
+    if (duty.day < today) return DUTY_STATUS.OVERDUE;
+  }
   if (now > duty.end) return DUTY_STATUS.OVERDUE;
-  if (now >= duty.start - DUE_LEAD_MIN) return DUTY_STATUS.DUE;
+  if (now >= duty.start - (duty.pilotWindow ? 0 : DUE_LEAD_MIN)) return DUTY_STATUS.DUE;
   return DUTY_STATUS.UPCOMING;
 };
 
@@ -40,6 +46,7 @@ export const isActionable = (status) =>
  */
 export const escalationStage = (duty, now) => {
   if (!duty) return null;
+  if (duty.pilotWindow && duty.day !== todayISO()) return null;
   const late = now - duty.end;
   if (late < -10) return null;
   if (late < 0) return { level: "reminded", text: "Reminder sent to you" };

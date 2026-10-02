@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { combinedClassGrade, scopeAttendanceQuery, scopeDutyHistoryQuery } from "../domain/classGroups";
 
 /**
  * Gathering what a printed report needs.
@@ -70,7 +71,7 @@ async function staffNames() {
 export async function fetchDayReport(day, classKey = null) {
   const rows = await fetchAll(() => {
     let q = detail().eq("day", day);
-    if (classKey) q = q.eq("class_key", classKey);
+    q = scopeAttendanceQuery(q, classKey);
     return q.order("start_min").order("roll_no");
   });
 
@@ -134,8 +135,9 @@ export async function fetchDayReport(day, classKey = null) {
         cover:
           !!r.submitted_by &&
           !!r.duty_class_key &&
-          teacherOfClass.has(r.duty_class_key) &&
-          teacherOfClass.get(r.duty_class_key) !== r.submitted_by,
+          (combinedClassGrade(r.duty_class_key) !== null
+            ? !!r.rostered_to && r.rostered_to !== r.submitted_by
+            : teacherOfClass.has(r.duty_class_key) && teacherOfClass.get(r.duty_class_key) !== r.submitted_by),
       });
     }
 
@@ -178,7 +180,7 @@ export async function fetchDayReport(day, classKey = null) {
 export async function fetchRangeReport(from, to, classKey = null) {
   const rows = await fetchAll(() => {
     let q = detail().gte("day", from).lte("day", to).not("status", "is", null);
-    if (classKey) q = q.eq("class_key", classKey);
+    q = scopeAttendanceQuery(q, classKey);
     return q.order("day").order("start_min");
   });
 
@@ -186,9 +188,9 @@ export async function fetchRangeReport(from, to, classKey = null) {
   // only carries days where somebody was away, so on its own it cannot say
   // who took a day on which everyone turned up.
   const taken = await fetchAll(() => {
-    let q = supabase.from("duties").select("day, class_key, submitted_by, state")
+    let q = supabase.from("duties").select("day, class_key, staff_id, submitted_by, state")
       .gte("day", from).lte("day", to).eq("state", "submitted");
-    if (classKey) q = q.eq("class_key", classKey);
+    q = scopeDutyHistoryQuery(q, classKey);
     return q.order("day");
   });
   const { byId, teacherOfClass } = await staffNames();
@@ -205,8 +207,9 @@ export async function fetchRangeReport(from, to, classKey = null) {
       // which therefore never count as covered.
       cover:
         !!d.class_key &&
-        teacherOfClass.has(d.class_key) &&
-        teacherOfClass.get(d.class_key) !== d.submitted_by,
+        (combinedClassGrade(d.class_key) !== null
+          ? !!d.staff_id && d.staff_id !== d.submitted_by
+          : teacherOfClass.has(d.class_key) && teacherOfClass.get(d.class_key) !== d.submitted_by),
     });
   });
 
@@ -220,7 +223,7 @@ export async function fetchRangeReport(from, to, classKey = null) {
     .select("*", { count: "exact", head: true })
     .gte("day", from)
     .lte("day", to);
-  if (classKey) countQuery = countQuery.eq("class_key", classKey);
+  countQuery = scopeAttendanceQuery(countQuery, classKey);
   const { count: totalMarks, error } = await countQuery;
   if (error) throw new Error(error.message);
 

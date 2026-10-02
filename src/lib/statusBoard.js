@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { classCoversClass } from "../domain/classGroups";
 
 /**
  * The Morning Attendance Report, on screen.
@@ -106,4 +107,30 @@ export async function fetchStatusBoard(day, checkpoint = "morning") {
  * shows the whole board instead.
  */
 export const ownRow = (rows, classKey) =>
-  (classKey && rows.find((r) => r.classKey === classKey)) || null;
+  (classKey && (rows.find((r) => r.classKey === classKey) ||
+    rows.find((r) => r.classKey === `${classKey.split("|")[0]}|*`))) || null;
+
+/** The day's checkpoint assignments, independent of the staff profile's primary class. */
+export const assignedStatusDuties = (duties, staffId, day, checkpoint = "morning") =>
+  (duties || []).filter((d) => staffId && d.staffId === staffId && d.day === day && d.checkpointId === checkpoint);
+
+export const assignedStatusRows = (rows, duties, staffId, day, checkpoint = "morning") => {
+  const assigned = assignedStatusDuties(duties, staffId, day, checkpoint);
+  return rows.filter((row) => assigned.some((duty) =>
+    !duty.classKey || classCoversClass(duty.classKey, row.classKey) || classCoversClass(row.classKey, duty.classKey)
+  ));
+};
+
+/** Use the same assignments for the shortcut label and the opened status board. */
+export const assignmentStatusLabel = (duties, staffId, day) => {
+  const assigned = assignedStatusDuties(duties, staffId, day);
+  if (!assigned.length) return "No classes assigned for this day";
+  if (assigned.some((d) => !d.classKey)) return "Attendance counts, class by class";
+  const labels = [...new Set(assigned.map((d) => d.group))]
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const joined = (list) => list.length < 2 ? list[0] : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
+  if (labels.length === 1) return `Counts for ${labels[0]}`;
+  return labels.every((label) => /^Class \d+$/.test(label))
+    ? `Counts for Classes ${joined(labels.map((label) => label.slice(6)))}`
+    : `Counts for ${joined(labels)}`;
+};

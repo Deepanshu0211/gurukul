@@ -1,4 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
+import { supabase } from "../lib/supabase";
 import { fetchStudents } from "../lib/students";
 import { fetchStaff } from "../lib/staff";
 import {
@@ -32,6 +34,7 @@ export function SchoolDataProvider({ children }) {
   const [students, setStudents] = useState([]);
   const [staff, setStaff] = useState([]);
   const [duties, setDuties] = useState([]);
+  const [trialSettings, setTrialSettings] = useState({});
   // { [dutyId]: { statuses: { admissionNo: code }, submittedBy, submittedAt } }
   const [records, setRecords] = useState({});
   // The declared holiday on `day`, or null. Screens need this to tell an empty
@@ -52,25 +55,57 @@ export function SchoolDataProvider({ children }) {
   // roles allowed to correct a submitted register (coordinator, MOD, the
   // Principal's office) could not reach one. The permission existed in the
   // database and had no button attached to it.
-  const [day, setDay] = useState(todayISO());
+  const [day, setSelectedDay] = useState(todayISO());
+  const selectedDayRef = useRef(day);
+  const loadVersion = useRef(0);
+  const followToday = useRef(true);
+  const setDay = useCallback((target) => {
+    followToday.current = target === todayISO();
+    if (target !== selectedDayRef.current) {
+      selectedDayRef.current = target;
+      loadVersion.current += 1;
+      // Never show yesterday's registers beneath tomorrow's date while loading.
+      setDuties([]);
+      setRecords({});
+      setHoliday(null);
+      setLoading(true);
+    }
+    setSelectedDay(target);
+  }, []);
+  useEffect(() => {
+    const rollOver = () => {
+      if (followToday.current) {
+        const today = todayISO();
+        setDay(today);
+      }
+    };
+    const timer = setInterval(rollOver, 30000);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") rollOver();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [setDay]);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
+    // A foreground event can arrive between midnight's setDay and its render.
+    if (day !== selectedDayRef.current) return;
+    const version = ++loadVersion.current;
+    setLoading(true);
     setError(null);
     try {
-      const [studentRows, staffRows, dutyRows, holidayRow, leaveMap] = await Promise.all([
+      const [studentRows, staffRows, dutyRows, holidayRow, leaveMap, settingsResult] = await Promise.all([
         fetchStudents(),
         fetchStaff(),
         fetchDuties(day),
         fetchHoliday(day),
         fetchOpenLeaves(),
+        supabase.from("app_env").select("key,value").in("key", ["trial_start", "trial_end", "attendance_mode", "attendance_scope"]),
       ]);
-      setStudents(studentRows);
-      setStaff(staffRows);
-      setDuties(dutyRows);
-      setHoliday(holidayRow);
-      setOpenLeaves(leaveMap);
-
+      const settings = Object.fromEntries((settingsResult.data || []).map((row) => [row.key, row.value]));
       // Pull attendance only for duties already submitted — there is nothing
       // to fetch for pending ones, and it keeps the initial load small.
       const submitted = dutyRows.filter((d) => d.state === "submitted");
@@ -86,16 +121,34 @@ export function SchoolDataProvider({ children }) {
           },
         ])
       );
+      if (version !== loadVersion.current) return;
+      // Publish duties with their saved marks. A correction screen must never
+      // see "submitted" before the absences have arrived.
       setRecords(Object.fromEntries(entries));
+      setTrialSettings(settings);
+      setStudents(studentRows);
+      setStaff(staffRows);
+      setDuties(dutyRows);
+      setHoliday(holidayRow);
+      setOpenLeaves(leaveMap);
     } catch (e) {
-      setError(e.message || "Could not load school data");
+      if (version === loadVersion.current) setError(e.message || "Could not load school data");
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, [day]);
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // A phone may sleep overnight or while a colleague submits/reassigns a duty.
+  // Screen focus does not change when the same screen returns from background.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") load();
+    });
+    return () => subscription.remove();
   }, [load]);
 
   /**
@@ -132,6 +185,12 @@ export function SchoolDataProvider({ children }) {
         statuses,
       });
 
+      if (duty.day !== selectedDayRef.current) return;
+      // A request started before this write may still contain "pending".
+      // It must not erase a successful submission when it finally arrives.
+      loadVersion.current += 1;
+      setLoading(false);
+
       // Update locally so the UI responds immediately, then reload so every
       // screen sees the same server state.
       setRecords((prev) => ({
@@ -167,6 +226,10 @@ export function SchoolDataProvider({ children }) {
         students: resolveGroup(duty, students),
         statuses,
       });
+
+      if (duty.day !== selectedDayRef.current) return changed;
+      loadVersion.current += 1;
+      setLoading(false);
 
       const correctedAt = new Date().toISOString();
       setRecords((prev) => ({
@@ -239,9 +302,14 @@ export function SchoolDataProvider({ children }) {
   const leaveFor = useCallback((adm) => openLeaves[adm] || null, [openLeaves]);
 
   const reassignDuty = useCallback(async (dutyId, staffId) => {
+    const duty = duties.find((d) => d.id === dutyId);
     await reassignDutyInDb(dutyId, staffId);
+    if (duty?.day !== selectedDayRef.current) return;
+    loadVersion.current += 1;
+    setLoading(false);
     setDuties((prev) => prev.map((d) => (d.id === dutyId ? { ...d, staffId } : d)));
-  }, []);
+  }, [duties]);
+
 
   /** Directory lookups. `staffName` returns "" for an id that is not in the
    *  directory, so a caller can fall back rather than print "undefined". */
@@ -253,6 +321,7 @@ export function SchoolDataProvider({ children }) {
       students,
       staff,
       duties,
+      trialSettings,
       records,
       loading,
       error,
@@ -282,11 +351,13 @@ export function SchoolDataProvider({ children }) {
       students,
       staff,
       duties,
+      trialSettings,
       records,
       loading,
       error,
       day,
       load,
+      setDay,
       studentsForDuty,
       staffById,
       staffName,

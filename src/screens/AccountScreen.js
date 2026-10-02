@@ -164,10 +164,9 @@ export default function AccountScreen({ navigation }) {
   // and a date and was read as belonging to them. Beside your own name and
   // photograph, "you, all time" needs no explaining.
   //
-  // Declared after `submitted` because it takes it: `const` is not hoisted,
-  // so reading it above its declaration is a ReferenceError at render, not
-  // an undefined.
-  const totals = useMarkingTotals(user?.id, submitted);
+  // Cover submissions and corrections also change your personal totals,
+  // even when none of the duties were originally assigned to you.
+  const totals = useMarkingTotals(user?.id, records);
 
   const savePhone = async () => {
     const next = draftPhone.trim();
@@ -312,11 +311,11 @@ export default function AccountScreen({ navigation }) {
         <SectionLabel>Your record</SectionLabel>
         <View style={styles.group}>
           <View style={styles.statsRow}>
-            <Stat value={totals.loading ? "—" : totals.taken} label="Checkpoints taken" />
+            <Stat value={totals.loading || totals.error ? "—" : totals.taken} label="Checkpoints taken" />
             <View style={styles.statDivider} />
-            <Stat value={totals.loading ? "—" : totals.marked} label="Students marked" />
+            <Stat value={totals.loading || totals.error ? "—" : totals.marked} label="Students marked" />
             <View style={styles.statDivider} />
-            <Stat value={totals.loading ? "—" : totals.absent} label="Absences found" />
+            <Stat value={totals.loading || totals.error ? "—" : totals.absent} label="Absences found" />
           </View>
         </View>
 

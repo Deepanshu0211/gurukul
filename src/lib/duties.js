@@ -1,14 +1,15 @@
 import { supabase } from "./supabase";
 import { fromRow as studentFromRow } from "./students";
 import { todayISO } from "../utils/format";
+import { classIncludesStudent } from "../domain/classGroups";
 
 /**
  * Duties, and resolving each one to the students it covers.
  *
- * Group resolution mirrors SRS §3: a duty targets a class-section, a grade
+ * Group resolution mirrors SRS Â§3: a duty targets a class-section, a grade
  * band, residential-only, or the whole school. The rules live here rather
  * than in a screen so the marking screen and the roster agree on who is in a
- * group — a disagreement there would mean a child silently missing from a
+ * group â€” a disagreement there would mean a child silently missing from a
  * roll call.
  */
 
@@ -34,6 +35,7 @@ export const fromRow = (r) => ({
   band: r.band || null,
   house: r.house || null,
   staffId: r.staff_id,
+  pilotWindow: !!r.pilot_window,
   state: r.state,
   submittedBy: r.submitted_by || null,
   submittedAt: r.submitted_at || null,
@@ -43,17 +45,13 @@ export const fromRow = (r) => ({
 });
 
 /**
- * Today's duties, with their checkpoint's name and time window joined in.
- *
- * Falls back to the most recent day that HAS duties when today has none.
- * That is a stand-in for the nightly `cron-generate-duties` job, which does
- * not exist yet — without it the app shows an empty list every morning and
- * looks broken. Once that job runs, this fallback stops being reached.
+ * Duties for the requested day, with the checkpoint name and time window.
+ * An empty day stays empty; another date must never be presented as today.
  */
 export async function fetchDuties(day) {
   // `todayISO()`, not `toISOString().slice(0, 10)`. The latter is the UTC
   // date: India is +5:30, so between midnight and 5:30am local it names
-  // YESTERDAY. Mangalarati is at 4:30, squarely inside that window — the
+  // YESTERDAY. Mangalarati is at 4:30, squarely inside that window â€” the
   // app would ask for the previous day's duties, and the fallback below
   // would quietly serve them as though they were today's, already
   // submitted. `todayISO` exists in utils/format.js for exactly this and
@@ -66,48 +64,20 @@ export async function fetchDuties(day) {
   let { data, error } = await query().eq("day", target);
   if (error) throw error;
 
-  if (!data?.length) {
-    // A DECLARED holiday is an empty day on purpose, and the fallback must not
-    // reach past it. Without this check, declaring Diwali a holiday deletes
-    // that day's pending checkpoints (migration 033) and the fallback
-    // immediately serves the most recent day that still has some — so every
-    // teacher opens the app on a holiday and finds last Friday's register,
-    // presented as today's and already submitted. The one day the app has been
-    // told nothing is happening is the day it would invent a full schedule.
-    const holiday = await supabase
-      .from("holidays")
-      .select("day")
-      .eq("day", target)
-      .maybeSingle();
-    // Ignore the error rather than throw: on a server where 033 has not been
-    // run the table does not exist, and Duties — the reason this app exists —
-    // must not go down over a calendar it does not have yet.
-    if (holiday.data) return [];
-
-    const latest = await supabase
-      .from("duties")
-      .select("day")
-      .order("day", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (latest.data?.day) {
-      ({ data, error } = await query().eq("day", latest.data.day));
-      if (error) throw error;
-    }
-  }
-
-  return (data || []).map(fromRow);
+  return (data || []).map(fromRow).sort((a, b) =>
+    a.start - b.start || a.group.localeCompare(b.group, undefined, { numeric: true })
+  );
 }
 
 /**
  * Which students a duty covers, resolved against the register.
- * Pure — takes the full student list so callers can fetch it once.
+ * Pure â€” takes the full student list so callers can fetch it once.
  *
  * The narrowings COMPOSE rather than compete, which is what lets one duty be
  * a row of the Saturday assembly sheet: band cuts by grade, house cuts by
- * house, and "Middle · Nandgaon" is both. `band` and `house` used to be an
+ * house, and "Middle Â· Nandgaon" is both. `band` and `house` used to be an
  * either/or with `classKey` on an if/else chain, so a duty carrying both
- * silently honoured only the first — a house teacher would have been handed
+ * silently honoured only the first â€” a house teacher would have been handed
  * every child in the school of their band, four times too many, with nothing
  * on screen to say the house had been ignored.
  *
@@ -121,7 +91,7 @@ export function resolveGroup(duty, students) {
   let pool = students;
 
   if (duty.classKey) {
-    pool = pool.filter((s) => s.key === duty.classKey);
+    pool = pool.filter((s) => classIncludesStudent(duty.classKey, s));
   } else {
     if (duty.band && BANDS[duty.band]) {
       const [min, max] = BANDS[duty.band];
@@ -129,8 +99,8 @@ export function resolveGroup(duty, students) {
     }
     // A house duty covers the children IN that house, so a student with no
     // house yet matches nothing and is marked by nobody. That is the honest
-    // outcome — the alternative is quietly sweeping them into a house they
-    // are not in — and it is visible: the printed sheet counts them in its
+    // outcome â€” the alternative is quietly sweeping them into a house they
+    // are not in â€” and it is visible: the printed sheet counts them in its
     // unmarked column and says the rows do not add up.
     if (duty.house) pool = pool.filter((s) => s.house === duty.house);
   }
@@ -159,11 +129,11 @@ export async function fetchAttendance(dutyId) {
 }
 
 /**
- * Save a submission and lock the duty — one atomic call (migrations/010).
+ * Save a submission and lock the duty â€” one atomic call (migrations/010).
  *
  * This used to be two statements from the app: upsert the marks, then flip the
  * duty to 'submitted'. Losing signal between them left attendance saved
- * against a duty that still read 'pending' — a checkpoint that looks unmarked
+ * against a duty that still read 'pending' â€” a checkpoint that looks unmarked
  * but is full of marks, which nobody would notice until it escalated.
  *
  * The same call handles a correction to an already-submitted record. Which one
@@ -174,7 +144,7 @@ export async function fetchAttendance(dutyId) {
  * so this app can no longer name somebody else as the person who marked a
  * checkpoint.
  *
- * @returns { marked, changed, absent } — `changed` is 0 when a correction
+ * @returns { marked, changed, absent } â€” `changed` is 0 when a correction
  *          altered nothing, which the marking screen uses to skip the write.
  */
 export async function submitDuty({ dutyId, students, statuses }) {

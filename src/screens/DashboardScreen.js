@@ -41,7 +41,7 @@ import {
 import { useNow } from "../lib/clock";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
-import { fmtTime, fmtClock, plural, weekdayName, todayISO } from "../utils/format";
+import { fmtTime, fmtClock, plural, weekdayName, todayISO, fmtDay } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useAuth } from "../context/AuthContext";
 import { useResolutions, resolveAlert } from "../lib/alerts";
@@ -65,7 +65,7 @@ const FEED_TONE = {
 };
 
 export default function DashboardScreen() {
-  const { students, duties, records, studentsForDuty, refresh, loading, error } = useSchoolData();
+  const { students, duties, records, studentsForDuty, refresh, loading, error, day: selectedDay, isToday, trialSettings } = useSchoolData();
   const { user } = useAuth();
   const toast = useToast();
   const dialog = useDialog();
@@ -179,10 +179,8 @@ export default function DashboardScreen() {
         }
       >
         <ScreenHeader
-          title="Today"
-          subtitle={`Bhaktivedanta Gurukula & International School · ${weekdayName()}, ${fmtTime(
-            now
-          )}`}
+          title={isToday ? "Today" : fmtDay(selectedDay)}
+          subtitle={`Bhaktivedanta Gurukula & International School${isToday ? ` · ${weekdayName()}, ${fmtTime(now)}` : ""}`}
           right={
             mayPrint ? (
               <TouchableOpacity
@@ -230,10 +228,10 @@ export default function DashboardScreen() {
           {open.length === 0 ? (
             <>
               <View style={styles.heroIcon}>
-                <Ionicons name="shield-checkmark" size={24} color={colors.onDark} />
+                <Ionicons name={duties.length > 0 && submitted.length === duties.length ? "shield-checkmark" : "hourglass-outline"} size={24} color={colors.onDark} />
               </View>
               <View style={styles.heroText}>
-                <Text style={styles.heroTitle}>All students accounted for</Text>
+                <Text style={styles.heroTitle}>{duties.length > 0 && submitted.length === duties.length ? "All students accounted for" : duties.length ? "Attendance pending" : "No registers scheduled"}</Text>
                 <Text style={styles.heroSub}>
                   {submitted.length} of {duties.length} checkpoints marked so far.
                 </Text>
@@ -264,7 +262,7 @@ export default function DashboardScreen() {
 
         <View style={styles.statsRow}>
           <Card tone="card" style={styles.statCard}>
-            <Stat value={students.length} label="Students" />
+            <Stat value={trialSettings.attendance_scope === "residential" ? students.filter((s) => s.type !== "D").length : students.length} label={trialSettings.attendance_scope === "residential" ? "Residential" : "Students"} />
           </Card>
           <Card tone="card" style={styles.statCard}>
             <Stat value={`${submitted.length}/${duties.length}`} label="Marked" />
@@ -288,11 +286,11 @@ export default function DashboardScreen() {
               <Ionicons name="stats-chart-outline" size={18} color={colors.primary} />
             </IconCircle>
             <View style={styles.statusText}>
-              <Text style={styles.statusTitle}>Today's status</Text>
+              <Text style={styles.statusTitle}>{isToday ? "Today's status" : `Status · ${fmtDay(selectedDay)}`}</Text>
               <Text style={styles.statusSub}>
                 {user?.classLabel
-                  ? `Residential and day counts for ${user.classLabel}`
-                  : "Residential and day counts, class by class"}
+                  ? `Attendance counts for ${user.classLabel}`
+                  : "Attendance counts, class by class"}
               </Text>
             </View>
             <Chevron />
@@ -431,7 +429,7 @@ export default function DashboardScreen() {
         format={REPORT_FORMAT.HEADCOUNT}
       />
 
-      <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} />
+      <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} day={selectedDay} />
     </SafeAreaView>
   );
 }

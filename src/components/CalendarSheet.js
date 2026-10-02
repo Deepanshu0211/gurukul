@@ -38,7 +38,7 @@ const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const pad = (n) => String(n).padStart(2, "0");
 const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
 
-export default function CalendarSheet({ visible, selected, onSelect, onClose }) {
+export default function CalendarSheet({ visible, selected, onSelect, onClose, maxDay }) {
   // Which month the grid is showing. Opens on the selected day's month so the
   // current choice is always the first thing visible.
   const [cursor, setCursor] = useState(() => {
@@ -72,6 +72,7 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose }) 
   }, [visible, cursor.year, cursor.month]);
 
   const today = todayISO();
+  const latest = maxDay || today;
 
   /**
    * The month as rows of exactly seven, nulls padding both ends.
@@ -111,10 +112,9 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose }) 
     });
   };
 
-  // Never page past the current month — there is no attendance in the future,
-  // and an endlessly forward-scrolling calendar just invites empty screens.
+  // History defaults to today; Duties may also preview scheduled trial dates.
   const atCurrentMonth =
-    cursor.year === Number(today.slice(0, 4)) && cursor.month === Number(today.slice(5, 7)) - 1;
+    cursor.year === Number(latest.slice(0, 4)) && cursor.month === Number(latest.slice(5, 7)) - 1;
 
   return (
     <BottomSheet
@@ -181,7 +181,7 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose }) 
             const value = iso(cursor.year, cursor.month, d);
             const isSelected = value === selected;
             const isToday = value === today;
-            const isFuture = value > today;
+            const isFuture = value > latest;
             const hasData = markedDays.has(value);
 
             return (

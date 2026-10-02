@@ -5,7 +5,9 @@ import BottomSheet from "./BottomSheet";
 import CalendarSheet from "./CalendarSheet";
 import { EmptyState, ErrorState } from "./ui";
 import { useAuth } from "../context/AuthContext";
-import { fetchStatusBoard, totalOf, ownRow, COLUMNS } from "../lib/statusBoard";
+import { fetchStatusBoard, totalOf, assignedStatusRows, COLUMNS } from "../lib/statusBoard";
+import { fetchDuties } from "../lib/duties";
+import { useSchoolData } from "../context/SchoolDataContext";
 import { isOversight } from "../domain/roles";
 import { fmtClock, fmtDay, todayISO } from "../utils/format";
 import { colors, spacing, typography, radius, numeric } from "../theme/theme";
@@ -21,9 +23,8 @@ import { colors, spacing, typography, radius, numeric } from "../theme/theme";
  * header line of each class rather than as two more columns to scan.
  *
  * WHO SEES WHAT
- * A class teacher gets their own class, opened, and nothing else to wade
- * through. Oversight gets every class and a Total, and can move to any past
- * day.
+ * A teacher sees every class assigned to them for this day and checkpoint.
+ * Oversight gets every class and a Total, and can move to any past day.
  *
  * The narrowing happens HERE, not in the database. class_status_board hands
  * all eighteen classes to any staff token — 005 made marks school-wide
@@ -41,10 +42,12 @@ import { colors, spacing, typography, radius, numeric } from "../theme/theme";
  */
 export default function StatusBoardSheet({ visible, onClose, day: initialDay }) {
   const { user } = useAuth();
+  const { duties: liveDuties } = useSchoolData();
   const oversight = isOversight(user?.role);
 
   const [day, setDay] = useState(initialDay || todayISO());
   const [rows, setRows] = useState([]);
+  const [assignedDuties, setAssignedDuties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [calendar, setCalendar] = useState(false);
@@ -63,29 +66,30 @@ export default function StatusBoardSheet({ visible, onClose, day: initialDay }) 
     setLoading(true);
     setError(null);
     try {
-      setRows(await fetchStatusBoard(day, "morning"));
+      const [board, dutyRows] = await Promise.all([
+        fetchStatusBoard(day, "morning"),
+        oversight ? Promise.resolve([]) : fetchDuties(day),
+      ]);
+      setRows(board);
+      setAssignedDuties(dutyRows);
     } catch (e) {
       setError(e);
     } finally {
       setLoading(false);
     }
-  }, [day]);
+  }, [day, oversight]);
 
   useEffect(() => {
     if (visible) load();
-  }, [visible, load]);
+  }, [visible, load, liveDuties]);
 
-  const mine = ownRow(rows, user?.classKey);
-  // A teacher with a class sees only it. Everyone else — oversight, and duty
-  // staff with no class of their own — sees the whole board.
-  const shown = !oversight && mine ? [mine] : rows;
+  // No assignment means an empty personal board, never somebody else's classes.
+  const shown = oversight ? rows : assignedStatusRows(rows, assignedDuties, user?.id, day);
   const total = shown.length > 1 ? totalOf(shown) : null;
 
   const subtitle = oversight
     ? `Morning attendance · ${fmtDay(day)}`
-    : mine
-      ? `${mine.classLabel} · ${fmtDay(day)}`
-      : `Morning attendance · ${fmtDay(day)}`;
+    : `${shown.length === 1 ? shown[0].classLabel : "Your assigned classes"} · ${fmtDay(day)}`;
 
   return (
     <>
@@ -113,8 +117,8 @@ export default function StatusBoardSheet({ visible, onClose, day: initialDay }) 
         ) : shown.length === 0 ? (
           <EmptyState
             icon="clipboard-outline"
-            title="No classes"
-            body="The register has no classes for this day."
+            title={oversight ? "No classes" : "No classes assigned"}
+            body={oversight ? "The register has no classes for this day." : "You have no class duties for this checkpoint on the selected day."}
             compact
           />
         ) : (

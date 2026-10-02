@@ -42,7 +42,7 @@ import { usePendingRequests, approveRequest, rejectRequest } from "../lib/access
 import { describeError } from "../lib/errors";
 import { roleLabel, canReassign, canApproveStaff } from "../domain/roles";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
-import { fmtTime, plural, initial, weekdayName} from "../utils/format";
+import { fmtTime, plural, initial, weekdayName, fmtDay } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useAuth } from "../context/AuthContext";
 import { useStudents } from "../lib/students";
@@ -65,6 +65,8 @@ export default function RosterScreen() {
     reassignDuty,
     refresh,
     staffName: nameOf,
+    day,
+    isToday,
   } = useSchoolData();
   const { user } = useAuth();
   const dialog = useDialog();
@@ -131,7 +133,7 @@ export default function RosterScreen() {
           setHeaderH((prev) => (Math.abs(prev - h) > 1 ? h : prev));
         }}
       >
-        <ScreenHeader title="Roster" subtitle={`${weekdayName()}, ${fmtTime(now)}`} />
+        <ScreenHeader title="Roster" subtitle={isToday ? `${weekdayName()}, ${fmtTime(now)}` : fmtDay(day)} />
 
         {/* Same control as the Duties scope switch — this screen used to draw
             its own, with a white selected pill instead of a teal one. */}

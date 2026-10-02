@@ -36,6 +36,7 @@ import { DUTY_STATUS, groupDuties, escalationStage, summarise } from "../domain/
 import { plural, fmtTime, fmtDuration, weekdayName, fmtDay, todayISO } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
+import { assignmentStatusLabel } from "../lib/statusBoard";
 
 const SECTIONS = {
   URGENT: "urgent",
@@ -66,6 +67,7 @@ export default function DutiesScreen({ navigation }) {
     isToday,
     holiday,
     campusClosed,
+    trialSettings,
   } = useSchoolData();
   const [refreshing, setRefreshing] = useState(false);
   const tabInset = useTabContentInset();
@@ -133,10 +135,10 @@ export default function DutiesScreen({ navigation }) {
     () =>
       [
         { key: SECTIONS.URGENT, title: "Needs attention", tone: "due", data: urgent },
-        { key: SECTIONS.LATER, title: "Later today", tone: "pending", data: later },
+        { key: SECTIONS.LATER, title: isToday ? "Later today" : "Scheduled", tone: "pending", data: later },
         { key: SECTIONS.DONE, title: "Submitted", tone: "submitted", data: done },
       ].filter((s) => s.data.length > 0),
-    [urgent, later, done]
+    [urgent, later, done, isToday]
   );
 
   // Resolved once per duty rather than inside renderItem. Group resolution
@@ -194,6 +196,9 @@ export default function DutiesScreen({ navigation }) {
           <>
           <DutiesHeader
             user={user}
+            statusSummary={ownFirst
+              ? assignmentStatusLabel(allDuties, user?.id, day)
+              : "Attendance counts, class by class"}
             day={day}
             isToday={isToday}
             onPickDay={() => setCalendarOpen(true)}
@@ -307,6 +312,7 @@ export default function DutiesScreen({ navigation }) {
       <StatusBoardSheet visible={statusOpen} onClose={() => setStatusOpen(false)} day={day} />
 
       <CalendarSheet
+        maxDay={trialSettings.trial_end}
         visible={calendarOpen}
         selected={day}
         onSelect={(d) => {
@@ -321,6 +327,7 @@ export default function DutiesScreen({ navigation }) {
 
 function DutiesHeader({
   user,
+  statusSummary,
   // The day the screen is showing, and the two things needed to change it.
   // Props, not context: this component is rendered inside a SectionList
   // header and reads nothing from useSchoolData itself.
@@ -428,9 +435,7 @@ function DutiesHeader({
         <View style={styles.statusText}>
           <Text style={styles.statusTitle}>{isToday ? "Today's status" : `Status · ${fmtDay(day)}`}</Text>
           <Text style={styles.statusSub} numberOfLines={1}>
-            {user?.classLabel
-              ? `Counts for ${user.classLabel}`
-              : "Residential and day counts, class by class"}
+            {statusSummary}
           </Text>
         </View>
         <Chevron />

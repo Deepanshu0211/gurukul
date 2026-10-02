@@ -155,7 +155,7 @@ async function ensureChannel() {
       name: "Duty reminders",
       description: "Before a checkpoint you are due to mark.",
       importance: N.AndroidImportance.HIGH,
-      sound: "default",
+      // Omitting sound uses Android's default. A string names a custom asset.
       vibrationPattern: [0, 250, 250, 250],
       lightColor: colors.primary,
     });

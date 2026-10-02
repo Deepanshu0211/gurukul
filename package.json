@@ -38,6 +38,8 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:mock": "node scripts/expo-environment.cjs mock",
+    "start:pilot": "node scripts/expo-environment.cjs pilot",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web"
