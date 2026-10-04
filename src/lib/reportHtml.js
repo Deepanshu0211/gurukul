@@ -209,14 +209,32 @@ const CSS = `
   .warn { font-weight: 700; color: #000; }
 `;
 
-const header = (title, sub) => `<h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div>`;
+const header = (title, sub) => `<div class="school-heading">Bhaktivedanta Gurukula &amp; International School, Vrindaranyam</div>
+<div class="school-subheading">Attendance report taken from BG-SAAR app</div>
+<div class="school-subheading">SAAR – System for Attendance &amp; Achievement Reporting</div>
+<h1>${esc(title)}</h1><div class="sub">${esc(sub)}</div>`;
 
-const footer = (by) =>
-  `<div class="foot">Generated ${esc(new Date().toLocaleString())}${
+const footer = (by, final = false) =>
+  `<div class="foot${final ? " final-foot" : ""}">Generated ${esc(new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))} IST${
     by ? ` by ${esc(by)}` : ""
-  } · Bhaktivedanta Gurukula &amp; International School</div>`;
+  }</div>`;
 
-const page = (bodyHtml) => `<style>${CSS}</style>${bodyHtml}`;
+const page = (bodyHtml, runningHeader = "", generatedBy = "") => `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${CSS}
+.school-heading { text-align:center; font-size:14pt; font-weight:700; }
+.school-subheading { text-align:center; font-size:9pt; margin:1mm 0; }
+.class-cell { white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:break-word; }
+.student-details { break-before:page; page-break-before:always; }
+.report-signatures { display:flex; justify-content:space-between; margin:16mm 0 7mm; break-inside:avoid; }
+.report-signatures span { border-top:1px solid #555; padding-top:2mm; min-width:45mm; }
+${runningHeader ? `.report-document { table-layout:auto; }
+.report-document > thead { display:table-header-group; }
+.report-document > tfoot { display:table-footer-group; }
+.report-document > tbody > tr { page-break-inside:auto; }
+.report-document > tbody > tr > td { padding:0; border:0; white-space:normal; overflow:visible; }
+.report-document > thead > tr > td, .report-document > tfoot > tr > td { font-size:8pt; padding:3mm 0; white-space:normal; }
+.foot { display:none; }
+.foot.final-foot { display:block; break-inside:avoid; }` : ""}
+</style></head><body>${runningHeader ? `<table class="report-document"><thead><tr><td>${esc(runningHeader)}</td></tr></thead><tfoot><tr><td>Bhaktivedanta Gurukula &amp; International School${generatedBy ? ` | Prepared by ${esc(generatedBy)}` : ""}</td></tr></tfoot><tbody><tr><td>${bodyHtml}</td></tr></tbody></table>` : bodyHtml}</body></html>`;
 
 /** Marks that are not "present", listed in full — the actionable part. */
 function exceptionsTable(rows, { showDay = false } = {}) {
@@ -227,9 +245,9 @@ function exceptionsTable(rows, { showDay = false } = {}) {
     <thead><tr>
       ${showDay ? '<th style="width:16%">Day</th>' : ""}
       <th style="width:9%">Roll</th>
-      <th style="width:${showDay ? 29 : 37}%">Student</th>
-      <th style="width:11%">Class</th>
-      <th style="width:${showDay ? 21 : 27}%">Checkpoint</th>
+      <th style="width:${showDay ? 25 : 33}%">Student</th>
+      <th style="width:18%">Class</th>
+      <th style="width:${showDay ? 18 : 24}%">Checkpoint</th>
       <th style="width:14%">Status</th>
     </tr></thead>
     <tbody>${rows
@@ -238,7 +256,7 @@ function exceptionsTable(rows, { showDay = false } = {}) {
           ${showDay ? `<td>${esc(fmtDay(r.day))}</td>` : ""}
           <td class="num">${esc(r.roll_no ?? "")}</td>
           <td>${esc(clip(r.student))}</td>
-          <td>${esc(r.grade)} ${esc(r.section)}</td>
+          <td class="class-cell">${esc(className(`${r.grade} ${r.section}`))}</td>
           <td>${esc(clip(r.checkpoint, 24))}</td>
           <td class="${r.status === "A" ? "absent" : "other"}">${esc(r.status_label)}</td>
         </tr>`
@@ -284,7 +302,7 @@ function registerTable(students, checkpoints) {
         .join("");
       return `<tr>
         <td class="num">${esc(s.roll ?? "")}</td>
-        <td>${esc(className(s.classLabel))}</td>
+        <td class="class-cell">${esc(className(s.classLabel))}</td>
         <td>${esc(clip(s.name))}</td>
         ${cells}
       </tr>`;
@@ -428,8 +446,8 @@ export function rangeReportHtml(
           .map(
             (s) => `<tr>
               <td class="num">${esc(s.roll ?? "")}</td>
+              <td class="class-cell">${esc(className(s.classLabel))}</td>
               <td>${esc(clip(s.name))}</td>
-              <td>${esc(s.classLabel)}</td>
               ${days
                 .map((d) =>
                   s.days[d]
@@ -501,14 +519,19 @@ export function headcountReportHtml(
   // Over a range the checkpoint numbers would restart every day and key back
   // to nothing, so the day itself becomes the first column instead.
   const multiDay = days.length > 1;
+  const multiActivity = new Set(checkpoints.map(c => c.name)).size > 1;
 
-  const rows = checkpoints
+  const rows = [...checkpoints]
+    .sort((a, b) => String(a.day).localeCompare(String(b.day)) ||
+      (a.startMin - b.startMin) ||
+      String(a.group || "").localeCompare(String(b.group || ""), undefined, { numeric: true }))
     .map(
       (c, i) => `<tr>
         ${multiDay ? `<td>${esc(fmtDay(c.day))}</td>` : `<td class="c"><b>${i + 1}</b></td>`}
-        <td>${esc(clip(c.name, 24))}</td>
-        <td>${esc(fmtTime(c.startMin))}</td>
-        <td>${esc(clip(c.group, 24))}</td>
+        ${multiActivity ? `<td class="class-cell">${esc(c.name)}</td>` : ""}
+        <td class="class-cell">${esc(c.takenBy || "Not submitted")}</td>
+        <td class="class-cell">${esc(c.submittedAt ? new Date(c.submittedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }) : "—")}</td>
+        <td class="class-cell">${esc(c.group)}</td>
         <td class="num">${c.strength}</td>
         <td class="num">${c.present}</td>
         <td class="num${c.absent ? " absent" : ""}">${c.absent}</td>
@@ -536,15 +559,17 @@ export function headcountReportHtml(
       } checkpoints · ${counted}`
     )}
 
+<div class="sub">Activity: ${esc([...new Set(checkpoints.map(c => c.name))].join(", "))} · Date: ${esc(fmtDayNumeric(from))}${multiDay ? ` to ${esc(fmtDayNumeric(to))}` : ""}</div>
 <h2>Headcount</h2>
 ${
   checkpoints.length
     ? `<table>
   <thead><tr>
     <th${multiDay ? ' style="width:16%"' : ' class="c" style="width:8mm"'}>${multiDay ? "Day" : "#"}</th>
-    <th style="width:${multiDay ? 22 : 28}%">Checkpoint</th>
-    <th style="width:12%">Time</th>
-    <th style="width:${multiDay ? 18 : 22}%">Group</th>
+    ${multiActivity ? `<th class="class-cell" style="width:18%">Activity</th>` : ""}
+    <th style="width:${multiActivity ? 18 : multiDay ? 22 : 28}%">Filled by</th>
+    <th class="class-cell" style="width:12%">Submitted at</th>
+    <th style="width:${multiActivity ? 18 : multiDay ? 18 : 22}%">Class</th>
     <th class="num" style="width:10%">Strength</th>
     <th class="num" style="width:10%">Present</th>
     <th class="num" style="width:9%">Absent</th>
@@ -552,7 +577,7 @@ ${
   </tr></thead>
   <tbody>${rows}</tbody>
   <tfoot><tr>
-    <td colspan="4">Total</td>
+    <td colspan="${multiActivity ? 5 : 4}">Total</td>
     <td class="num">${totals.strength}</td>
     <td class="num">${totals.present}</td>
     <td class="num${totals.absent ? " absent" : ""}">${totals.absent}</td>
@@ -575,9 +600,15 @@ ${
     : `<div class="none-row">Every child was present at every checkpoint.</div>`
 }
 
+<div class="report-signatures"><span>MOD / Incharge</span><span>Principal</span></div>
+${footer(generatedBy)}
+<div class="student-details">
+${header("Students not present", `${fmtDayNumeric(from)}${multiDay ? ` to ${fmtDayNumeric(to)}` : ""} · ${[...new Set(checkpoints.map(c => c.name))].join(", ")}`)}
 <h2>Not present (${exceptions.length})</h2>
 ${exceptionsTable(exceptions, { showDay: multiDay })}
-${footer(generatedBy)}`
+${footer(generatedBy, true)}</div>`,
+    `Date: ${fmtDayNumeric(from)}${multiDay ? ` to ${fmtDayNumeric(to)}` : ""} · Activity: ${[...new Set(checkpoints.map(c => c.name))].join(", ")}`,
+    generatedBy
   );
 }
 

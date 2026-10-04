@@ -64,3 +64,6 @@ supabase/.temp/
 supabase/pending-migrations.sql
 
 graphify-out*
+
+# Private live school login credentials
+/docs/dev-test-credentials-pilot.local.md

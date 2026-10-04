@@ -289,11 +289,20 @@ export async function fetchHeadcountReport(from, to) {
   });
   if (error) throw new Error(error.message);
 
+  // Read submission metadata without changing the attendance RPC or live schema.
+  const submissions = await fetchAll(() => supabase.from("duties")
+    .select("id, submitted_by, submitted_at").gte("day", from).lte("day", to));
+  const staff = await fetchAll(() => supabase.from("staff").select("id, name"));
+  const staffNames = new Map(staff.map(s => [s.id, s.name]));
+  const submissionByDuty = new Map(submissions.map(d => [d.id, d]));
+
   // PostgREST serialises bigint counts as JSON numbers, but a driver that ever
   // hands them back as strings would turn every total into concatenation.
   const checkpoints = (data || []).map((r) => ({
     day: r.day,
     dutyId: r.duty_id,
+    takenBy: staffNames.get(submissionByDuty.get(r.duty_id)?.submitted_by) || null,
+    submittedAt: submissionByDuty.get(r.duty_id)?.submitted_at || null,
     name: r.checkpoint,
     startMin: r.start_min,
     group: r.group_label,
