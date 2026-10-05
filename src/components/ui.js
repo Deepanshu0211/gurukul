@@ -233,14 +233,17 @@ export function Divider({ inset = 0 }) {
 }
 
 /** Big number over a small label. Used by the dashboard and account stat rows. */
-export function Stat({ value, label, tone }) {
-  const color = tone === "warning" ? colors.warning : tone === "danger" ? colors.danger : colors.text;
+export function Stat({ value, label, tone, inverted }) {
+  const color = inverted
+    ? colors.onDark
+    : tone === "warning" ? colors.warning : tone === "danger" ? colors.danger : colors.text;
+  const labelColor = inverted ? colors.onDarkMuted : colors.textMuted;
   return (
     <View style={styles.stat}>
       <Text style={[styles.statValue, { color }]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
-      <Text style={styles.statLabel} numberOfLines={1}>
+      <Text style={[styles.statLabel, { color: labelColor }]} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -406,14 +409,15 @@ const styles = StyleSheet.create({
 
   divider: { height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.divider },
 
-  stat: { flex: 1, alignItems: "center", paddingHorizontal: spacing.xs },
-  statValue: { fontFamily: fonts.bold, fontSize: 21, lineHeight: 27, ...numeric },
+  stat: { flex: 1, alignItems: "center", paddingHorizontal: spacing.sm },
+  statValue: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 30, ...numeric },
   statLabel: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 15,
+    fontFamily: fonts.medium,
+    fontSize: 10,
+    lineHeight: 14,
     color: colors.textMuted,
-    marginTop: 2,
+    letterSpacing: 0.2,
+    marginTop: 3,
   },
 
   empty: {

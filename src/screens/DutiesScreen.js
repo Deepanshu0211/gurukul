@@ -554,7 +554,7 @@ function LaterRow({ duty, count, owner, onPress, index }) {
         <Text style={styles.rowTitle} numberOfLines={1}>
           {duty.checkpoint}
         </Text>
-        <Text style={typography.caption} numberOfLines={1}>
+        <Text style={typography.caption} numberOfLines={2}>
           {duty.group} · {plural(count, "student")}
           {owner ? ` · ${owner}` : ""}
         </Text>
@@ -592,7 +592,7 @@ function DoneRow({ duty, count, owner, record, onPress, index }) {
         <Text style={styles.rowTitleDone} numberOfLines={1}>
           {duty.checkpoint}
         </Text>
-        <Text style={typography.caption} numberOfLines={1}>
+        <Text style={typography.caption} numberOfLines={2}>
           <Text style={styles.doneCount}>
             {present}/{count}
           </Text>{" "}
