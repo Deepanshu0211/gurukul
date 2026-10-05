@@ -28,8 +28,8 @@ function load(relative) {
 
 const { resolveGroup } = load('src/lib/duties.js');
 const { fromRow } = load('src/lib/students.js');
-const { combinedClassGrade, classCoversClass, scopeAttendanceQuery, scopeDutyHistoryQuery } = load('src/domain/classGroups.js');
-const { recordDuties, recordRoster, recordAbsences } = load('src/lib/classRecords.js');
+const { combinedClassGrade, classCoversClass, scopeAttendanceQuery } = load('src/domain/classGroups.js');
+const { recordDuties, recordRoster, recordAbsences, groupAttendanceRecords } = load('src/lib/classRecords.js');
 const { ownRow, assignedStatusRows, assignmentStatusLabel } = load('src/lib/statusBoard.js');
 const { dutyStatus, DUTY_STATUS } = load('src/domain/duties.js');
 const students = [
@@ -63,10 +63,10 @@ test('record visibility and status lookup recognize combined classes without mat
 
 test('combined printed registers filter marks by grade, section registers by exact key', () => {
   const calls = [];
-  const query = { eq: (field, value) => { calls.push([field, value]); return query; } };
+  const query = { eq: (field, value) => { calls.push([field, value]); return query; }, not: (...args) => { calls.push(args); return query; } };
   assert.equal(scopeAttendanceQuery(query, '10|*'), query);
   scopeAttendanceQuery(query, '10|BALRAM');
-  assert.deepEqual(calls, [['grade', 10], ['class_key', '10|BALRAM']]);
+  assert.deepEqual(calls, [['grade', 10], ['section', 'ilike', 'vedic'], ['class_key', '10|BALRAM']]);
   assert.equal(combinedClassGrade('10|*'), 10);
   assert.equal(combinedClassGrade('10|KRISHNA'), null);
 });
@@ -133,12 +133,95 @@ test('Records retains full groups for oversight and never falls back to school-w
   assert.equal(recordRoster(duties[0], students, user).length, 0);
 });
 
-test('class report duty history includes grade and school-wide submissions while mark queries remain section-only', () => {
-  const calls = [];
-  const query = { or: value => { calls.push(value); return query; }, eq: (key, value) => { calls.push([key, value]); return query; } };
-  scopeDutyHistoryQuery(query, '10|KRISHNA');
-  scopeAttendanceQuery(query, '10|KRISHNA');
-  assert.equal(calls[0], 'class_key.eq."10|KRISHNA",class_key.eq."10|*",class_key.is.null');
-  assert.deepEqual(calls[1], ['class_key', '10|KRISHNA']);
-  assert.equal(scopeDutyHistoryQuery(query, null), query);
+const { attendanceStudentLabel, VEDIC_CLASS_KEY } = load('src/domain/classGroups.js');
+const partitionStudents = [...students,
+ fromRow({admission_no:'v4',name:'Vedic four',grade:4,section:'VEDIC',stype:'Residential',roll_no:400}),
+ fromRow({admission_no:'vday',name:'Vedic day',grade:7,section:'Vedic',stype:'Day Scholar',roll_no:700}),
+ fromRow({admission_no:'regular4',name:'Krishna four',grade:4,section:'KRISHNA',stype:'Residential',roll_no:401})];
+test('cross-grade Vedic register is exclusive and preserves original classes',()=>{
+ const group=resolveGroup({classKey:VEDIC_CLASS_KEY,scope:'res'},partitionStudents);
+ assert.deepEqual(Array.from(group,s=>s.id),['v4','v']);
+ assert.equal(attendanceStudentLabel(group[0],{classKey:VEDIC_CLASS_KEY}),'Class 4 Vedic');
+ assert.equal(attendanceStudentLabel(group[1],{classKey:VEDIC_CLASS_KEY}),'Class 10 Vedic');
+ assert.equal(group[0].key,'4|VEDIC');
+ const regular=resolveGroup({classKey:'10|*',scope:'res',excludeVedic:true},partitionStudents);
+ assert.deepEqual(Array.from(regular,s=>s.id).sort(),['b','k']);
+ assert.equal(regular.some(s=>group.some(v=>v.id===s.id)),false);
+});
+test('every checkpoint can separate Vedic without losing its residential or band eligibility',()=>{
+ for(const checkpointId of ['morning','mang','breakfast','lunch','night']) {
+  const regular=resolveGroup({checkpointId,scope:'res',excludeVedic:true},partitionStudents);
+  const vedic=resolveGroup({checkpointId,scope:'res',classKey:VEDIC_CLASS_KEY},partitionStudents);
+  const original=resolveGroup({checkpointId,scope:'res'},partitionStudents);
+  assert.deepEqual([...regular,...vedic].map(s=>s.id).sort(),Array.from(original,s=>s.id).sort());
+  assert.equal(new Set([...regular,...vedic].map(s=>s.id)).size,original.length);
+ }
+ assert.equal(resolveGroup({classKey:VEDIC_CLASS_KEY,scope:'all'},partitionStudents).length,3);
+ assert.deepEqual(Array.from(resolveGroup({band:'Primary',scope:'res',excludeVedic:true},partitionStudents),s=>s.id),['regular4']);
+});
+test('Vedic assignments and academic Records use the correct cross-grade group',()=>{
+ assert.equal(classCoversClass(VEDIC_CLASS_KEY,'10|Vedic'),true);
+ assert.equal(classCoversClass(VEDIC_CLASS_KEY,'4|VEDIC'),true);
+ assert.equal(classCoversClass('10|*','10|Vedic'),false);
+ assert.equal(classCoversClass('10|*','10|KRISHNA'),true);
+ const rows=[{classKey:'10|*',classLabel:'Class 10'},{classKey:VEDIC_CLASS_KEY,classLabel:'Vedic'}];
+ const duties=[{id:'v',classKey:VEDIC_CLASS_KEY,day:'2026-10-05',checkpointId:'morning',staffId:'t11',scope:'res'}];
+ assert.deepEqual(Array.from(assignedStatusRows(rows,duties,'t11','2026-10-05'),r=>r.classKey),[VEDIC_CLASS_KEY]);
+ assert.equal(ownRow(rows,'10|Vedic'),rows[1]);
+ assert.equal(ownRow(rows,'10|KRISHNA'),rows[0]);
+ assert.deepEqual(Array.from(recordRoster(duties[0],partitionStudents,{role:'teacher',classKey:VEDIC_CLASS_KEY}),s=>s.id),['v4','v']);
+ assert.deepEqual(Array.from(recordRoster(duties[0],partitionStudents,{role:'teacher',classKey:'10|Vedic'}),s=>s.id),['v']);
+});
+test('Vedic and regular reports scope student marks without changing academic data',()=>{
+ const calls=[]; const query={eq:(...a)=>{calls.push(['eq',...a]);return query;},ilike:(...a)=>{calls.push(['ilike',...a]);return query;},not:(...a)=>{calls.push(['not',...a]);return query;}};
+ scopeAttendanceQuery(query,VEDIC_CLASS_KEY);scopeAttendanceQuery(query,'10|*');
+ assert.deepEqual(calls,[['ilike','section','vedic'],['eq','grade',10],['not','section','ilike','vedic']]);
+});
+
+
+test('saved attendance is regrouped without rewriting marks, source IDs, authors or dates', () => {
+ const oldDuties=[
+  {id:'class4',day:'2026-10-03',checkpointId:'morning',start:375,group:'Class 4',classKey:'4|*',scope:'res'},
+  {id:'class10',day:'2026-10-03',checkpointId:'morning',start:375,group:'Class 10',classKey:'10|*',scope:'res'},
+ ];
+ const oldRecords={
+  class4:{statuses:{v4:'A',regular4:'S'},submittedBy:'t7',submittedAt:'2026-10-03T01:00:00Z'},
+  class10:{statuses:{v:'H',k:'A'},submittedBy:'t1',submittedAt:'2026-10-03T01:10:00Z'},
+ };
+ const before=JSON.stringify({oldDuties,oldRecords,partitionStudents});
+ const grouped=groupAttendanceRecords(oldDuties,oldRecords,partitionStudents);
+ assert.equal(grouped.error,undefined);
+ assert.deepEqual(Array.from(grouped.duties,d=>d.group),['Class 4','Class 10','Vedic']);
+ const vedic=grouped.duties[2], record=grouped.records[vedic.id];
+ assert.deepEqual(Array.from(recordRoster(vedic,partitionStudents,{role:'admin'}),s=>s.id),['v4','v']);
+ assert.equal(record.statuses.v4,'A');assert.equal(record.statuses.v,'H');
+ assert.equal(record.sources.v4.dutyId,'class4');assert.equal(record.sources.v4.submittedBy,'t7');
+ assert.equal(record.sources.v.submittedAt,oldRecords.class10.submittedAt);
+ assert.equal(record.submittedAt,null,'Several registers must not pretend to have one submission time');
+ assert.deepEqual(Array.from(record.submittedByIds),['t7','t1']);
+ assert.equal(recordAbsences(grouped.duties,grouped.records,partitionStudents,{role:'admin'}),2);
+ assert.equal(JSON.stringify({oldDuties,oldRecords,partitionStudents}),before);
+});
+
+test('historical Vedic category contains submitted students only, never inventing present marks', () => {
+ const duties=[{id:'class4',day:'2026-10-03',checkpointId:'morning',start:375,group:'Class 4',classKey:'4|*',scope:'res'},
+ {id:'class10',day:'2026-10-03',checkpointId:'morning',start:375,group:'Class 10',classKey:'10|*',scope:'res'}];
+ const grouped=groupAttendanceRecords(duties,{class4:{statuses:{},submittedBy:'t7'}},partitionStudents);
+ const duty=grouped.duties.find(d=>d.classKey===VEDIC_CLASS_KEY);
+ assert.deepEqual(Array.from(recordRoster(duty,partitionStudents,{role:'teacher',classKey:VEDIC_CLASS_KEY}),s=>s.id),['v4']);
+ assert.equal(grouped.records[duty.id].sources.v,undefined);
+});
+
+test('historical Vedic projection separates activities and rejects duplicate source marks visibly', () => {
+ const base={day:'2026-10-03',start:375,group:'Class 4',classKey:'4|*',scope:'res'};
+ const duties=[{...base,id:'morning',checkpointId:'morning'},{...base,id:'breakfast',checkpointId:'breakfast'}];
+ const records={morning:{statuses:{v4:'A'}},breakfast:{statuses:{v4:'H'}}};
+ const grouped=groupAttendanceRecords(duties,records,partitionStudents);
+ const vedic=grouped.duties.filter(d=>d.classKey===VEDIC_CLASS_KEY);
+ assert.equal(vedic.length,2);
+ assert.equal(grouped.records[vedic.find(d=>d.checkpointId==='breakfast').id].statuses.v4,'H');
+ assert.equal(grouped.records[vedic.find(d=>d.checkpointId==='morning').id].statuses.v4,'A');
+ const duplicate=groupAttendanceRecords([duties[0],{...duties[0],id:'duplicate'}],{...records,duplicate:records.morning},partitionStudents);
+ assert.match(duplicate.error,/Duplicate saved attendance/);
+ assert.equal(duplicate.duties.length,0);
 });

@@ -1,5 +1,9 @@
 # School pilot: Physical Activity
 
+The installed app still uses the setup below. The approved Vedic grouping is
+prepared in [vedic-attendance.md](vedic-attendance.md) and awaits database testing
+and a coordinated updated-APK rollout before activation.
+
 ## Agreed attendance setup
 
 - Trial dates: 3 October–2 November 2026 (one calendar month, 31 attendance days).
@@ -107,6 +111,18 @@ original setup history and verifies that existing duties and attendance were
 unchanged. The app reads `trial_end` from the database to allow the full date range.
 
 ## Developer testing and requested resets
+
+### Vedic rollout (approved 5 October)
+
+The live database is now configured for **11 Physical Activity duties from
+6 October 2026**: 10 normal class registers and one combined Vedic register,
+assigned to Supriya maam. All 613 saved marks and today's source registers were
+preserved. The midnight generation job remains active. The full local database
+backup, verification and APK handoff details are in [vedic-attendance.md](vedic-attendance.md).
+
+**Distribute the new pilot APK before 6 October at 06:15 IST.** Old APKs cannot
+resolve the new Vedic register or exclude Vedic students from normal duties.
+Use `npx eas-cli build --platform android --profile pilot`.
 
 2 October has 10 normal combined class registers for testing before the school trial.
 The app opens on today, with the same submission and ownership rules used at

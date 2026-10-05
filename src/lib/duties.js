@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { fromRow as studentFromRow } from "./students";
 import { todayISO } from "../utils/format";
-import { classIncludesStudent } from "../domain/classGroups";
+import { classIncludesStudent, isVedicStudent } from "../domain/classGroups";
 
 /**
  * Duties, and resolving each one to the students it covers.
@@ -32,6 +32,7 @@ export const fromRow = (r) => ({
   group: r.group_label,
   classKey: r.class_key || null,
   scope: r.scope || null,
+  excludeVedic: !!r.exclude_vedic,
   band: r.band || null,
   house: r.house || null,
   staffId: r.staff_id,
@@ -104,6 +105,8 @@ export function resolveGroup(duty, students) {
     // unmarked column and says the rows do not add up.
     if (duty.house) pool = pool.filter((s) => s.house === duty.house);
   }
+
+  if (duty.excludeVedic) pool = pool.filter(s => !isVedicStudent(s));
 
   if (duty.scope === "res") pool = pool.filter((s) => s.type !== "D");
 

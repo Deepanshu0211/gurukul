@@ -108,7 +108,7 @@ export async function fetchStatusBoard(day, checkpoint = "morning") {
  */
 export const ownRow = (rows, classKey) =>
   (classKey && (rows.find((r) => r.classKey === classKey) ||
-    rows.find((r) => r.classKey === `${classKey.split("|")[0]}|*`))) || null;
+    rows.find((r) => classCoversClass(r.classKey, classKey)))) || null;
 
 /** The day's checkpoint assignments, independent of the staff profile's primary class. */
 export const assignedStatusDuties = (duties, staffId, day, checkpoint = "morning") =>

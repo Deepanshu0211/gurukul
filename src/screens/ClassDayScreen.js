@@ -23,9 +23,8 @@ import { fmtTime, fmtDay, fmtDayCompact, fmtClock, plural, todayISO } from "../u
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDayAttendance } from "../lib/history";
-import { resolveGroup } from "../lib/duties";
 import { classCoversClass } from "../domain/classGroups";
-import { recordDuties, recordRoster, recordAbsences } from "../lib/classRecords";
+import { recordDuties, recordRoster, recordAbsences, groupAttendanceRecords } from "../lib/classRecords";
 import { useStudentHistory, RANGES } from "../lib/studentHistory";
 import PrintSheets from "../components/PrintSheets";
 import { STATUS_META } from "../data/mockData";
@@ -106,8 +105,12 @@ export default function ClassDayScreen() {
   const isPast = !!selectedDay && selectedDay !== liveDay;
   const past = useDayAttendance(isPast ? selectedDay : null);
 
-  const duties = isPast ? past.duties : liveDuties;
-  const records = isPast ? past.records : liveRecords;
+  const sourceDuties = isPast ? past.duties : liveDuties;
+  const sourceRecords = isPast ? past.records : liveRecords;
+  const { duties, records, error: groupingError } = useMemo(
+    () => groupAttendanceRecords(sourceDuties, sourceRecords, students),
+    [sourceDuties, sourceRecords, students]
+  );
   const day = selectedDay || liveDay;
 
   // Re-tallied whenever a checkpoint is submitted — the record count is what
@@ -251,11 +254,11 @@ export default function ClassDayScreen() {
     if (!infoFor) return [];
     return readable.map((d) => ({
       duty: d,
-      code: resolveGroup(d, students).some((s) => s.id === infoFor.id)
+      code: recordRoster(d, students, user).some((s) => s.id === infoFor.id)
         ? statusOf(infoFor.id, d)
         : null,
     }));
-  }, [infoFor, readable, students, statusOf]);
+  }, [infoFor, readable, students, statusOf, user]);
 
   const renderStudent = useCallback(
     ({ item }) => (
@@ -381,7 +384,7 @@ export default function ClassDayScreen() {
             {activeDuty.checkpoint} · {fmtTime(activeDuty.start)}
           </Text>
           <Text style={styles.contextMeta} numberOfLines={2}>
-            {`Marked by ${staffName(rec?.submittedBy) || "a colleague"}`}
+            {`Marked by ${(rec?.submittedByIds || [rec?.submittedBy]).map(staffName).filter(Boolean).join(" / ") || "a colleague"}`}
             {rec?.submittedAt ? ` · ${fmtClock(rec.submittedAt)}` : ""}
           </Text>
 
@@ -454,6 +457,7 @@ export default function ClassDayScreen() {
   // Null when there ARE rows to show. Built once and reused for both the
   // empty component and the decision to pass an empty list.
   const placeholder = (() => {
+    if (groupingError) return <ErrorState error={groupingError} title="Can't group this register" />;
     if (past.loading) {
       return (
         <View style={styles.centered}>

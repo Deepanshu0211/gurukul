@@ -15,3 +15,12 @@ if(process.env.PRINT_PREVIEW_PATH)fs.writeFileSync(process.env.PRINT_PREVIEW_PAT
 test('report text preserves UTF-8 separators',()=>{const html=exportsHtml.headcountReportHtml(data);assert.ok(!html.includes("\u00c2\u00b7"));assert.ok(html.includes("\u00b7"));});
 
 test('multiple activities retain an activity label on each summary row',()=>{const report={...data,checkpoints:[{...checkpoints[0],name:'Breakfast prasadam'},{...checkpoints[1],name:'Morning attendance'}]};const html=exportsHtml.headcountReportHtml(report);assert.ok(html.includes('>Activity</th>'));assert.ok(html.includes('>Breakfast prasadam</td>'));assert.ok(html.includes('>Morning attendance</td>'));assert.ok(html.includes('colspan="5"'));});
+
+
+test('regrouped Vedic report preserves all source teachers and submission times',()=>{
+ const grouped={...data,checkpoints:[{...checkpoints[0],group:'Vedic',takenBy:'Teacher one sir / Teacher two maam',submittedTimes:['2026-10-04T01:00:00Z','2026-10-04T01:10:00Z']}]};
+ const html=exportsHtml.headcountReportHtml(grouped);
+ assert.ok(html.includes('Teacher one sir / Teacher two maam'));
+ assert.ok(html.includes('6:30 am / 6:40 am'));
+ assert.ok(html.includes('>Vedic</td>'));
+});

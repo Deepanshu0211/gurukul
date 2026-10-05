@@ -300,23 +300,21 @@ export default function AccountScreen({ navigation }) {
 
         {myDuties.length > 0 && (
           <View style={styles.statsRow}>
-            <Stat value={myDuties.length} label="Duties today" />
+            <Stat value={myDuties.length} label="Duties today" inverted />
             <View style={styles.statDivider} />
-            <Stat value={submitted} label="Submitted" />
+            <Stat value={submitted} label="Submitted" inverted />
             <View style={styles.statDivider} />
-            <Stat value={myDuties.length - submitted} label="Remaining" />
+            <Stat value={myDuties.length - submitted} label="Remaining" inverted />
           </View>
         )}
 
         <SectionLabel>Your record</SectionLabel>
-        <View style={styles.group}>
-          <View style={styles.statsRow}>
-            <Stat value={totals.loading || totals.error ? "—" : totals.taken} label="Checkpoints taken" />
-            <View style={styles.statDivider} />
-            <Stat value={totals.loading || totals.error ? "—" : totals.marked} label="Students marked" />
-            <View style={styles.statDivider} />
-            <Stat value={totals.loading || totals.error ? "—" : totals.absent} label="Absences found" />
-          </View>
+        <View style={styles.statsRow}>
+          <Stat value={totals.loading || totals.error ? "—" : totals.taken} label="Checkpoints taken" inverted />
+          <View style={styles.statDivider} />
+          <Stat value={totals.loading || totals.error ? "—" : totals.marked} label="Students marked" inverted />
+          <View style={styles.statDivider} />
+          <Stat value={totals.loading || totals.error ? "—" : totals.absent} label="Absences found" inverted />
         </View>
 
         <SectionLabel>Your details</SectionLabel>
@@ -612,14 +610,14 @@ const styles = StyleSheet.create({
   },
 
   statsRow: {
-    ...surface.sunken,
+    ...surface.inverse,
     flexDirection: "row",
     alignItems: "center",
     borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.md + 2,
     marginTop: spacing.sm,
   },
-  statDivider: { width: 1, height: 28, backgroundColor: colors.divider },
+  statDivider: { width: StyleSheet.hairlineWidth * 2, height: 36, backgroundColor: "rgba(255, 255, 255, 0.2)" },
 
   group: {
     ...surface.card,

@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { combinedClassGrade, scopeAttendanceQuery, scopeDutyHistoryQuery } from "../domain/classGroups";
+import { isCombinedClass, scopeAttendanceQuery, isVedicStudent } from "../domain/classGroups";
 
 /**
  * Gathering what a printed report needs.
@@ -135,7 +135,7 @@ export async function fetchDayReport(day, classKey = null) {
         cover:
           !!r.submitted_by &&
           !!r.duty_class_key &&
-          (combinedClassGrade(r.duty_class_key) !== null
+          (isCombinedClass(r.duty_class_key)
             ? !!r.rostered_to && r.rostered_to !== r.submitted_by
             : teacherOfClass.has(r.duty_class_key) && teacherOfClass.get(r.duty_class_key) !== r.submitted_by),
       });
@@ -163,7 +163,8 @@ export async function fetchDayReport(day, classKey = null) {
     day,
     checkpoints,
     students: [...students.values()].sort(
-      (a, b) => a.grade - b.grade || (a.roll || 0) - (b.roll || 0) || a.name.localeCompare(b.name)
+      (a, b) => Number(isVedicStudent(a)) - Number(isVedicStudent(b)) ||
+        a.grade - b.grade || (a.roll || 0) - (b.roll || 0) || a.name.localeCompare(b.name)
     ),
   };
 }
@@ -184,14 +185,15 @@ export async function fetchRangeReport(from, to, classKey = null) {
     return q.order("day").order("start_min");
   });
 
-  // Every checkpoint in the range, marks or not — the exception list above
-  // only carries days where somebody was away, so on its own it cannot say
-  // who took a day on which everyone turned up.
+  // Credit the submissions that contain this category's actual saved marks.
+  // Old source duties can include several categories; their group key alone
+  // cannot identify who marked the Vedic portion of the register.
   const taken = await fetchAll(() => {
-    let q = supabase.from("duties").select("day, class_key, staff_id, submitted_by, state")
-      .gte("day", from).lte("day", to).eq("state", "submitted");
-    q = scopeDutyHistoryQuery(q, classKey);
-    return q.order("day");
+    let q = supabase.from("attendance_detail")
+      .select("day, duty_id, admission_no, duty_class_key, rostered_to, submitted_by")
+      .gte("day", from).lte("day", to).not("submitted_at", "is", null);
+    q = scopeAttendanceQuery(q, classKey);
+    return q.order("day").order("duty_id").order("admission_no");
   });
   const { byId, teacherOfClass } = await staffNames();
 
@@ -202,14 +204,12 @@ export async function fetchRangeReport(from, to, classKey = null) {
     if (!takenByDay.has(d.day)) takenByDay.set(d.day, new Map());
     takenByDay.get(d.day).set(d.submitted_by, {
       name: byId.get(d.submitted_by) || "—",
-      // Read straight off `duties`, so this is already the duty's own class
-      // and needs no 031 equivalent — null for the school-wide checkpoints,
-      // which therefore never count as covered.
+      // Source duty ownership, never the student's academic class.
       cover:
-        !!d.class_key &&
-        (combinedClassGrade(d.class_key) !== null
-          ? !!d.staff_id && d.staff_id !== d.submitted_by
-          : teacherOfClass.has(d.class_key) && teacherOfClass.get(d.class_key) !== d.submitted_by),
+        !!d.duty_class_key &&
+        (isCombinedClass(d.duty_class_key)
+          ? !!d.rostered_to && d.rostered_to !== d.submitted_by
+          : teacherOfClass.has(d.duty_class_key) && teacherOfClass.get(d.duty_class_key) !== d.submitted_by),
     });
   });
 
@@ -276,33 +276,26 @@ export async function fetchRangeReport(from, to, classKey = null) {
  * The coordinator's sheet: counts per checkpoint, and names only for the marks
  * that are not "present".
  *
- * Two requests regardless of range. The totals come from `attendance_headcount`
- * (migration 011), which groups server-side — a day is seven thousand marks and
+ * The totals come from `attendance_report_groups` (migration 035), which groups
+ * saved marks under the current categories without modifying their source —
+ * a day is seven thousand marks and
  * fetching them to add up in the client is eight round trips for eight numbers.
  * The exceptions are fetched in full because they are the only rows anyone
  * reads by name, and there are a few dozen of them in a week.
  */
 export async function fetchHeadcountReport(from, to) {
-  const { data, error } = await supabase.rpc("attendance_headcount", {
-    p_from: from,
-    p_to: to,
-  });
-  if (error) throw new Error(error.message);
-
-  // Read submission metadata without changing the attendance RPC or live schema.
-  const submissions = await fetchAll(() => supabase.from("duties")
-    .select("id, submitted_by, submitted_at").gte("day", from).lte("day", to));
-  const staff = await fetchAll(() => supabase.from("staff").select("id, name"));
-  const staffNames = new Map(staff.map(s => [s.id, s.name]));
-  const submissionByDuty = new Map(submissions.map(d => [d.id, d]));
+  const data = await fetchAll(() => supabase.from("attendance_report_groups")
+    .select("*").gte("day", from).lte("day", to)
+    .order("day").order("start_min").order("duty_id"));
 
   // PostgREST serialises bigint counts as JSON numbers, but a driver that ever
   // hands them back as strings would turn every total into concatenation.
   const checkpoints = (data || []).map((r) => ({
     day: r.day,
     dutyId: r.duty_id,
-    takenBy: staffNames.get(submissionByDuty.get(r.duty_id)?.submitted_by) || null,
-    submittedAt: submissionByDuty.get(r.duty_id)?.submitted_at || null,
+    takenBy: r.taken_by || null,
+    submittedAt: r.submitted_at || null,
+    submittedTimes: r.submitted_times || [],
     name: r.checkpoint,
     startMin: r.start_min,
     group: r.group_label,

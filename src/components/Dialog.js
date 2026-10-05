@@ -108,17 +108,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.hairlineTop,
-    padding: spacing.lg - 4,
+    padding: spacing.md,
     ...shadow.lg,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: spacing.md - 4,
+    marginBottom: spacing.sm,
   },
   iconWrapDanger: { backgroundColor: colors.dangerBg },
 
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   message: { ...typography.caption, fontSize: 13, lineHeight: 19, marginTop: spacing.xs + 2 },
 
   // Buttons share one height so the pair reads as a single control strip.
-  actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg - 4 },
+  actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   cancelBtn: {
     flex: 1,
     minHeight: layout.touch,

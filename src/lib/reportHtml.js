@@ -530,7 +530,7 @@ export function headcountReportHtml(
         ${multiDay ? `<td>${esc(fmtDay(c.day))}</td>` : `<td class="c"><b>${i + 1}</b></td>`}
         ${multiActivity ? `<td class="class-cell">${esc(c.name)}</td>` : ""}
         <td class="class-cell">${esc(c.takenBy || "Not submitted")}</td>
-        <td class="class-cell">${esc(c.submittedAt ? new Date(c.submittedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" }) : "—")}</td>
+        <td class="class-cell">${esc((c.submittedTimes?.length ? c.submittedTimes : c.submittedAt ? [c.submittedAt] : []).map(time => new Date(time).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" })).join(" / ") || "—")}</td>
         <td class="class-cell">${esc(c.group)}</td>
         <td class="num">${c.strength}</td>
         <td class="num">${c.present}</td>

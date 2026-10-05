@@ -28,7 +28,7 @@ import { haptics } from "../lib/haptics";
 import { fmtDay, fmtTime, plural, todayISO } from "../utils/format";
 import { useNow } from "../lib/clock";
 import { describeError } from "../lib/errors";
-import { combinedClassGrade } from "../domain/classGroups";
+import { attendanceStudentLabel } from "../domain/classGroups";
 
 /**
  * Marking one checkpoint.
@@ -229,9 +229,10 @@ export default function DutyMarkingScreen({ route, navigation }) {
     const q = query.trim().toLowerCase();
     if (!q) return students;
     return students.filter(
-      (s) => s.name.toLowerCase().includes(q) || String(s.roll || "").includes(q)
+      (s) => s.name.toLowerCase().includes(q) || String(s.roll || "").includes(q) ||
+        attendanceStudentLabel(s, duty).toLowerCase().includes(q)
     );
-  }, [students, query]);
+  }, [students, query, duty]);
 
   // Against `effective`, so the footer counts a signed-out child under
   // "Elsewhere" rather than silently under "Present" — which is exactly the
@@ -542,7 +543,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
         renderItem={({ item }) => (
           <StudentRow
             student={item}
-            showSection={combinedClassGrade(duty?.classKey) !== null}
+            classDescription={attendanceStudentLabel(item, duty)}
             code={effective[item.id]}
             readOnly={readOnly}
             leave={locked[item.id]}
@@ -633,7 +634,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
  * marking one child absent re-renders one row rather than the whole class.
  */
 const StudentRow = React.memo(function StudentRow({
-  showSection,
+  classDescription,
   student,
   code,
   readOnly,
@@ -682,7 +683,7 @@ const StudentRow = React.memo(function StudentRow({
         accessibilityLabel={
           gated
             ? `${student.name}, roll ${student.roll}, signed out at the gate, recorded as ${label}`
-            : `${student.name}, roll ${student.roll}, currently ${label}`
+            : `${student.name}, ${classDescription || `class ${student.label}`}, roll ${student.roll}, currently ${label}`
         }
         accessibilityHint={
           gated
@@ -698,7 +699,7 @@ const StudentRow = React.memo(function StudentRow({
         <Text style={typography.caption} numberOfLines={1}>
           {gated
             ? `Signed out ${fmtDay(leave.outDay)}${leave.reason ? ` · ${leave.reason}` : ""}`
-            : `Roll ${student.roll ?? "—"}${showSection ? ` · ${student.label.split(" ").slice(1).join(" ")}` : ""} · ${student.type === "D" ? "Day scholar" : "Residential"}`}
+            : `Roll ${student.roll ?? "—"}${classDescription ? ` · ${classDescription}` : ""} · ${student.type === "D" ? "Day scholar" : "Residential"}`}
         </Text>
       </Row>
 
