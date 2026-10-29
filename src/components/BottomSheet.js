@@ -57,7 +57,20 @@ export default function BottomSheet({
     : { style: { paddingBottom: bottomPad } };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    // Translucent bars: the app draws edge-to-edge on Android, but a Modal
+    // opens its own window, which by default stops at the navigation bar. The
+    // sheet then ended a bar's height above the screen edge, with the page
+    // showing through underneath it. Letting the window run under both bars
+    // puts the sheet's edge on the screen's edge; `bottomPad` above keeps the
+    // last row clear of the gesture handle.
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+      navigationBarTranslucent
+    >
       <View style={styles.root}>
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -65,8 +78,11 @@ export default function BottomSheet({
           accessibilityRole="button"
           accessibilityLabel="Close"
         />
+        {/* "padding" on Android too, now that the window is edge-to-edge and
+            no longer resized for the keyboard. It pads by the measured
+            overlap, so on a phone that still resizes it adds nothing. */}
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "web" ? undefined : "padding"}
           pointerEvents="box-none"
         >
           <View style={[styles.sheet, { maxHeight }]}>

@@ -106,6 +106,24 @@ export function isNotDeployed(e) {
   );
 }
 
+/**
+ * A refusal the database already put into words for a person.
+ *
+ * The roster, staff and password functions (migration 036) raise with a
+ * sentence meant for the coordinator — "Choose who takes over their pending
+ * duties", "A coordinator can add teachers only" — and a validation code.
+ * Replacing that with "Something went wrong" threw away the one line that
+ * says what to do next. Policy refusals (row-level security) are NOT this:
+ * their text is Postgres talking to a developer, so they stay generic.
+ */
+const EXPLAINED_CODES = ["22023", "23505", "P0002"];
+export function isExplained(e) {
+  if (!e?.message || !e?.code) return false;
+  if (EXPLAINED_CODES.includes(e.code)) return true;
+  const t = text(e);
+  return e.code === "42501" && !t.includes("row-level security") && !t.includes("permission denied");
+}
+
 export const OFFLINE_TITLE = "You're offline";
 export const OFFLINE_BODY =
   "This phone can't reach the school server. Check your wi-fi or mobile data, then try again.";
@@ -121,6 +139,9 @@ export const OFFLINE_BODY =
  *                 to start again, and a comforting lie is worse than silence.
  */
 export function describeError(e, fallback, keep) {
+  if (isExplained(e)) {
+    return { offline: false, title: fallback?.title || "Not saved", message: e.message };
+  }
   if (isOffline(e)) {
     return {
       offline: true,

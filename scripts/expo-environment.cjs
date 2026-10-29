@@ -7,7 +7,14 @@ const [target, ...args] = process.argv.slice(2);
 const refs = { mock: "ofuvjzxjbgsityacukva", pilot: "qpwfmdddvpmnqlwqrzke" };
 if (!refs[target]) throw new Error("Choose mock or pilot");
 const root = path.resolve(__dirname, "..");
-const file = path.resolve(root, "../_private-real-data", `.env.${target}.local`);
+// The private folder beside the repo is preferred; the gitignored copy in the
+// repo root is the fallback, so a machine set up either way can start a build.
+const candidates = [
+  path.resolve(root, "../_private-real-data", `.env.${target}.local`),
+  path.resolve(root, `.env.${target}.local`),
+];
+const file = candidates.find((f) => fs.existsSync(f));
+if (!file) throw new Error(`No .env.${target}.local found. Looked in: ${candidates.join(", ")}`);
 const values = Object.fromEntries(fs.readFileSync(file, "utf8").split(/\r?\n/)
   .filter((line) => line && !line.startsWith("#") && line.includes("="))
   .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
@@ -20,7 +27,8 @@ const env = { ...process.env, EXPO_NO_DOTENV: "1", EXPO_PUBLIC_SUPABASE_URL: url
 for (const name of Object.keys(env)) {
   if (name.startsWith("SUPABASE_")) delete env[name];
 }
-console.log(`Expo target: ${target} (${refs[target]})`);
+console.log(`Expo target: ${target} (${refs[target]}) · ${path.relative(root, file)}`);
+if (target === "pilot") console.log("PILOT — this build reads and writes the school's real data.");
 const command = args.length ? args : ["start"];
 if (["start", "export"].includes(command[0]) && !command.includes("--clear")) command.push("--clear");
 const child = spawn(process.execPath, [path.join(root, "node_modules/expo/bin/cli"), ...command], { cwd: root, env, stdio: "inherit" });

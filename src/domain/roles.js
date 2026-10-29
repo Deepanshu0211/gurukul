@@ -144,3 +144,44 @@ export const canWorkGate = (role) =>
 
 /** Whether the Duties list should default to "my duties only". */
 export const defaultsToOwnDuties = (role) => role === ROLES.TEACHER;
+
+/**
+ * Running the roster: adding and switching off checkpoints, building the
+ * recurring groups, choosing which students a group covers (migration 036).
+ *
+ * Coordinator and admin — the same people who reassign a duty, for the same
+ * reason. Management reads the board; it does not roster the school.
+ * Every RPC behind this checks `is_roster_desk()` itself.
+ */
+export const canManageRoster = (role) => role === ROLES.COORDINATOR || role === ROLES.ADMIN;
+
+/**
+ * Adding, deactivating and resetting the password of a staff member.
+ *
+ * A coordinator may act on teachers (and nurse/reception); accounts that carry
+ * authority — coordinator, management, admin — are the administrator's. The
+ * database applies the same rule in `set_staff_active` and
+ * `issue_password_reset`; this decides which buttons a row offers.
+ */
+export const canManageStaffMember = (actorRole, targetRole) => {
+  if (actorRole === ROLES.ADMIN) return true;
+  if (actorRole !== ROLES.COORDINATOR) return false;
+  return ![ROLES.COORDINATOR, ROLES.MANAGEMENT, ROLES.ADMIN].includes(targetRole);
+};
+
+/**
+ * Adding a student to the register (migration 037).
+ *
+ * Every role that takes a register — teacher included — because the person
+ * who first meets a new child is usually the teacher whose roll call they turn
+ * up in, and a child who is on nobody's list is one no safety alert can ever
+ * fire for. Each addition is logged under the person who made it. Nurse and
+ * reception are excluded: they keep records of their own, not class registers.
+ *
+ * Starting a NEW class stays with coordinator/admin; `add_student` enforces
+ * both rules itself.
+ */
+export const canAddStudent = (role) =>
+  [ROLES.TEACHER, ROLES.COORDINATOR, ROLES.MANAGEMENT, ROLES.ADMIN].includes(role);
+
+export const canStartClass = (role) => role === ROLES.COORDINATOR || role === ROLES.ADMIN;

@@ -19,6 +19,8 @@ import ClassDayScreen from "../screens/ClassDayScreen";
 import ActivityScreen from "../screens/ActivityScreen";
 import GateScreen from "../screens/GateScreen";
 import HolidaysScreen from "../screens/HolidaysScreen";
+import CheckpointsScreen from "../screens/CheckpointsScreen";
+import GroupEditorScreen from "../screens/GroupEditorScreen";
 
 const navTheme = {
   ...DefaultTheme,
@@ -71,6 +73,10 @@ function AccountStack() {
           that is already open. */}
       <Stack.Screen name="Holidays" component={HolidaysScreen} />
       <Stack.Screen name="Gate" component={GateScreen} />
+      {/* The roster desk (036). Same reasoning as Holidays: coordinator and
+          admin already have four tabs, and this is set up occasionally. */}
+      <Stack.Screen name="Checkpoints" component={CheckpointsScreen} />
+      <Stack.Screen name="GroupEditor" component={GroupEditorScreen} />
     </Stack.Navigator>
   );
 }
@@ -79,7 +85,7 @@ function AccountStack() {
  * Marking is a focused task with its own sticky footer, so the tab bar is
  * hidden there — it would otherwise sit on top of the Submit button.
  */
-const hideTabBarOn = ["DutyMarking"];
+const hideTabBarOn = ["DutyMarking", "GroupEditor"];
 
 function RoleTabs({ role }) {
   const tabsByRole = {

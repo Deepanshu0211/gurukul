@@ -40,7 +40,16 @@ export function DialogProvider({ children }) {
   return (
     <DialogContext.Provider value={api}>
       {children}
-      <Modal visible={!!config} transparent animationType="fade" onRequestClose={close}>
+      {/* Translucent bars for the same reason as BottomSheet: otherwise the
+          scrim stops short of the navigation bar on Android. */}
+      <Modal
+        visible={!!config}
+        transparent
+        animationType="fade"
+        onRequestClose={close}
+        statusBarTranslucent
+        navigationBarTranslucent
+      >
         <Pressable style={styles.backdrop} onPress={close}>
           {/* Stops a tap inside the card from closing the dialog. */}
           <Pressable onPress={() => {}} style={styles.cardWrap}>

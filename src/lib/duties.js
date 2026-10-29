@@ -42,7 +42,11 @@ export const fromRow = (r) => ({
   submittedAt: r.submitted_at || null,
   correctedBy: r.corrected_by || null,
   correctedAt: r.corrected_at || null,
-  mandatoryEscalation: !!r.mandatory_escalation,
+  mandatoryEscalation: !!(r.mandatory_escalation ?? r.checkpoints?.mandatory_escalation),
+  // Hand-picked groups and per-group exclusions (migration 036).
+  members: r.members || null,
+  excluded: r.excluded || null,
+  defaultId: r.default_id || null,
 });
 
 /**
@@ -91,7 +95,14 @@ export function resolveGroup(duty, students) {
 
   let pool = students;
 
-  if (duty.classKey) {
+  // A hand-picked list IS the group — the class/band/house cut does not
+  // apply. Mirrors `attendance_group_contains` in migration 036 exactly; if
+  // the two disagree, a child is on the screen but refused by the database,
+  // or worse, missing from the screen and never marked.
+  if (duty.members) {
+    const picked = new Set(duty.members);
+    pool = pool.filter((s) => picked.has(s.adm));
+  } else if (duty.classKey) {
     pool = pool.filter((s) => classIncludesStudent(duty.classKey, s));
   } else {
     if (duty.band && BANDS[duty.band]) {
@@ -106,7 +117,12 @@ export function resolveGroup(duty, students) {
     if (duty.house) pool = pool.filter((s) => s.house === duty.house);
   }
 
-  if (duty.excludeVedic) pool = pool.filter(s => !isVedicStudent(s));
+  if (duty.excludeVedic && !duty.members) pool = pool.filter(s => !isVedicStudent(s));
+
+  if (duty.excluded?.length) {
+    const out = new Set(duty.excluded);
+    pool = pool.filter((s) => !out.has(s.adm));
+  }
 
   if (duty.scope === "res") pool = pool.filter((s) => s.type !== "D");
 

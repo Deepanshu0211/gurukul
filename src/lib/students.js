@@ -115,3 +115,30 @@ export function useStudents() {
 
   return { students, loading, error, reload: load };
 }
+
+/** The register's own wording for each student type, for the add form. */
+export const STUDENT_TYPES = [
+  { value: "Residential", label: "Residential", hint: "Boards on campus" },
+  { value: "Day Scholar", label: "Day scholar", hint: "Goes home each evening" },
+  { value: "Day Boarding", label: "Day boarding", hint: "Here all day, sleeps at home" },
+  { value: "Vedic School", label: "Vedic school", hint: "Vedic programme" },
+];
+
+/**
+ * Add a student (migration 037). Any teacher may add into an existing class;
+ * only a coordinator or admin may start a new one. The roll number defaults
+ * to the next free one in the class. Returns the app-shaped student.
+ */
+export async function addStudent({ admissionNo, name, grade, section, stype, house, roll }) {
+  const { data, error } = await supabase.rpc("add_student", {
+    p_admission: admissionNo,
+    p_name: name,
+    p_grade: grade,
+    p_section: section,
+    p_stype: stype,
+    p_house: house || null,
+    p_roll: roll || null,
+  });
+  if (error) throw error;
+  return fromRow(Array.isArray(data) ? data[0] : data);
+}

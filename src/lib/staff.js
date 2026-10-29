@@ -72,3 +72,46 @@ export async function updateOwnPhone(staffId, phone) {
   if (error) throw error;
   return fromRow(data);
 }
+
+/**
+ * Former staff, for the Roster's "Former staff" list. The directory query
+ * above only returns active rows, and 012's read policy would hide the rest
+ * anyway — this RPC serves them to coordinator and admin only (036).
+ */
+export async function fetchInactiveStaff() {
+  const { data, error } = await supabase.rpc("list_inactive_staff");
+  if (error) throw error;
+  return (data || []).map(fromRow);
+}
+
+/**
+ * Add a staff member directly, without them requesting access first. They
+ * then sign up with this email and `link_staff_account` joins the two. A
+ * coordinator can only add teachers; the database refuses any other role.
+ */
+export async function addStaffMember({ name, email, phone, role = "teacher", classKey = null }) {
+  const { data, error } = await supabase.rpc("add_staff_member", {
+    p_name: name,
+    p_email: email,
+    p_phone: phone || null,
+    p_role: role,
+    p_class_key: classKey || null,
+  });
+  if (error) throw error;
+  return fromRow(Array.isArray(data) ? data[0] : data);
+}
+
+/**
+ * Deactivate (flag + leaving date — never delete) or reactivate. Pending
+ * duties and recurring groups move to `replacementId` in the same transaction;
+ * the database refuses a deactivation that would orphan a pending duty.
+ */
+export async function setStaffActive(staffId, active, replacementId = null) {
+  const { data, error } = await supabase.rpc("set_staff_active", {
+    p_staff: staffId,
+    p_active: active,
+    p_replacement: replacementId || null,
+  });
+  if (error) throw error;
+  return fromRow(Array.isArray(data) ? data[0] : data);
+}

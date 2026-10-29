@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Switch,
   Platform,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,7 +21,17 @@ import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import { SectionLabel, Divider, Stat, TextAction, PrimaryButton, Chevron } from "../components/ui";
 import { plural } from "../utils/format";
 import { useMarkingTotals } from "../lib/history";
-import { canDeclareHoliday, canWorkGate, roleLabel } from "../domain/roles";
+import {
+  canDeclareHoliday,
+  canWorkGate,
+  canManageRoster,
+  canAddStudent,
+  roleLabel,
+  ROLES,
+} from "../domain/roles";
+import AddStudentSheet from "../components/AddStudentSheet";
+import { changeOwnPassword, passwordProblem } from "../lib/passwords";
+import appConfig from "../../app.json";
 import { describeError } from "../lib/errors";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
@@ -55,13 +66,38 @@ const REMINDER_HINT = {
 };
 
 const ICON = 18;
+
+/** Which database this build talks to, from the project ref in its URL. */
+const SERVER = (() => {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
+  if (url.includes("ofuvjzxjbgsityacukva")) return "Mock (test data)";
+  if (url.includes("qpwfmdddvpmnqlwqrzke")) return "Pilot (school data)";
+  return url ? "Custom server" : "Not configured";
+})();
+const VERSION = appConfig?.expo?.version || "—";
+
+/** The short "how do I…" guide, per role. Kept to what the app actually does. */
+const GUIDE = {
+  marking: [
+    ["checkmark-done-outline", "Everyone starts Present", "Open a duty and tap only the children who are not there. Present is the default."],
+    ["swap-horizontal-outline", "Absent vs accounted", "Absent means nobody knows where the child is — it raises a safety alert. Home, Sick, Outing and Activity are accounted for."],
+    ["lock-closed-outline", "Submitting locks it", "After you submit, the register is read-only for you. A coordinator or the MOD can correct it."],
+    ["notifications-outline", "Reminders", "Turn on Duty reminders above to be nudged 10 minutes before each of your checkpoints closes."],
+  ],
+  desk: [
+    ["options-outline", "Checkpoints & groups", "Account → Checkpoints & groups. Add a checkpoint, then add the groups it covers: a class, a band, a house, or a hand-picked list."],
+    ["person-add-outline", "New staff", "Requests appear on the Dashboard. You can also add a teacher directly from Roster → Staff → + Add."],
+    ["key-outline", "Forgotten passwords", "Roster → Staff → tap the person → Reset password. Give them the code yourself; they choose the new password."],
+    ["person-remove-outline", "Someone leaves", "Roster → Staff → Deactivate. Pick who takes their duties; their history is kept."],
+  ],
+};
 // Row text starts after the padding, the icon and the gap. Dividers use the
 // same number so the hairline begins exactly under the label above it.
 const ROW_INSET = spacing.md + ICON + spacing.sm;
 
 export default function AccountScreen({ navigation }) {
   const { user, logout, updateUser } = useAuth();
-  const { duties, records } = useSchoolData();
+  const { duties, records, staff } = useSchoolData();
   const dialog = useDialog();
   const toast = useToast();
   const tabInset = useTabContentInset();
@@ -74,6 +110,55 @@ export default function AccountScreen({ navigation }) {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoSheet, setPhotoSheet] = useState(false);
   const [hapticsOn, setHapticsOn] = useState(isHapticsEnabled());
+  // Change password (signed in) and the Support sheets.
+  const [pwSheet, setPwSheet] = useState(false);
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState(null);
+  const [supportSheet, setSupportSheet] = useState(null); // "contact" | "guide" | "about"
+  // Teachers have no Roster tab, so this is their way to add a new child.
+  const [addingStudent, setAddingStudent] = useState(false);
+
+  const pwIssue = pw.current ? passwordProblem(pw.next, pw.confirm) : "Enter your current password";
+
+  const savePassword = async () => {
+    if (pwIssue || pwBusy) return;
+    setPwBusy(true);
+    setPwError(null);
+    try {
+      await changeOwnPassword(user.email, pw.current, pw.next);
+      haptics.success();
+      setPwSheet(false);
+      setPw({ current: "", next: "", confirm: "" });
+      toast.show("Password changed · use it next time you sign in");
+    } catch (e) {
+      const shown = describeError(e, { title: "Not changed", message: "Your password was not changed. Try again." });
+      setPwError(shown.message);
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
+  // Who to ask: coordinators first, then the administrator. From the live
+  // staff directory, so a new coordinator is listed without an app update.
+  const helpdesk = (staff || [])
+    .filter((m) => m.role === ROLES.COORDINATOR || m.role === ROLES.ADMIN)
+    .filter((m) => m.id !== user.id)
+    .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name) : a.role === ROLES.COORDINATOR ? -1 : 1));
+
+  const open = (url) =>
+    Linking.openURL(url).catch(() =>
+      dialog.alert({ icon: "alert-circle-outline", title: "Can't open that here", message: url.replace(/^(tel|mailto):/, "") })
+    );
+
+  const reportProblem = () => {
+    const to = helpdesk.find((m) => m.email)?.email || "";
+    const subject = encodeURIComponent("BG-SAAR · problem report");
+    const body = encodeURIComponent(
+      `What happened:\n\n\nWhat I expected:\n\n\n— \nApp ${VERSION} · ${Platform.OS} · ${SERVER}\n${user.name} (${roleLabel(user.role)})`
+    );
+    open(`mailto:${to}?subject=${subject}&body=${body}`);
+  };
 
   const toggleHaptics = (value) => {
     setHapticsOn(value);
@@ -387,10 +472,32 @@ export default function AccountScreen({ navigation }) {
             that need them already have four tabs with no room for a fifth.
             Reception is the exception — the gate IS their job, so they get it
             as a tab in RootNavigator. */}
-        {(canDeclareHoliday(user?.role) || canWorkGate(user?.role)) && (
+        {(canDeclareHoliday(user?.role) || canWorkGate(user?.role) || canAddStudent(user?.role)) && (
           <>
             <SectionLabel>School</SectionLabel>
             <View style={styles.group}>
+              {canAddStudent(user?.role) && (
+                <>
+                  <ActionRow
+                    icon="person-add-outline"
+                    label="Add a student"
+                    onPress={() => setAddingStudent(true)}
+                  />
+                  {(canManageRoster(user?.role) || canDeclareHoliday(user?.role) || canWorkGate(user?.role)) && (
+                    <Divider inset={ROW_INSET} />
+                  )}
+                </>
+              )}
+              {canManageRoster(user?.role) && (
+                <>
+                  <ActionRow
+                    icon="options-outline"
+                    label="Checkpoints & groups"
+                    onPress={() => navigation.navigate("Checkpoints")}
+                  />
+                  <Divider inset={ROW_INSET} />
+                </>
+              )}
               {canDeclareHoliday(user?.role) && (
                 <ActionRow
                   icon="calendar-outline"
@@ -423,40 +530,30 @@ export default function AccountScreen({ navigation }) {
           <ActionRow
             icon="key-outline"
             label="Change password"
-            onPress={() =>
-              dialog.alert({
-                icon: "key-outline",
-                title: "Change password",
-                message: "A reset link will be sent to your school email address.",
-              })
-            }
+            onPress={() => {
+              setPw({ current: "", next: "", confirm: "" });
+              setPwError(null);
+              setPwSheet(true);
+            }}
           />
         </View>
 
         <SectionLabel>Support</SectionLabel>
         <View style={styles.group}>
           <ActionRow
-            icon="help-circle-outline"
-            label="Help & contact office"
-            onPress={() =>
-              dialog.alert({
-                icon: "help-circle-outline",
-                title: "School office",
-                message: "Contact the office for help with your account or duties.",
-              })
-            }
+            icon="chatbubbles-outline"
+            label="Contact a coordinator"
+            onPress={() => setSupportSheet("contact")}
           />
           <Divider inset={ROW_INSET} />
+          <ActionRow icon="book-outline" label="Quick guide" onPress={() => setSupportSheet("guide")} />
+          <Divider inset={ROW_INSET} />
+          <ActionRow icon="bug-outline" label="Report a problem" onPress={reportProblem} />
+          <Divider inset={ROW_INSET} />
           <ActionRow
-            icon="document-text-outline"
+            icon="information-circle-outline"
             label="About this app"
-            onPress={() =>
-              dialog.alert({
-                title: "BG-SAAR",
-                message:
-                  "Attendance & Student Safety · Pilot build\n\nBhaktivedanta Gurukula & International School",
-              })
-            }
+            onPress={() => setSupportSheet("about")}
           />
         </View>
 
@@ -527,6 +624,130 @@ export default function AccountScreen({ navigation }) {
             onPress={confirmRemovePhoto}
           />
         )}
+      </BottomSheet>
+
+      <AddStudentSheet visible={addingStudent} onClose={() => setAddingStudent(false)} />
+
+      <BottomSheet
+        visible={pwSheet}
+        onClose={() => !pwBusy && setPwSheet(false)}
+        title="Change password"
+        subtitle="At least 8 characters. You stay signed in on this phone."
+        showClose
+      >
+        {[
+          ["current", "Current password", "password"],
+          ["next", "New password", "newPassword"],
+          ["confirm", "New password again", "newPassword"],
+        ].map(([key, label, content]) => (
+          <TextInput
+            key={key}
+            value={pw[key]}
+            onChangeText={(v) => setPw((p) => ({ ...p, [key]: v }))}
+            placeholder={label}
+            placeholderTextColor={colors.textMuted}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType={content}
+            style={[styles.sheetInput, { marginBottom: spacing.sm }]}
+            accessibilityLabel={label}
+          />
+        ))}
+        {!!(pwError || (pw.next && pwIssue)) && (
+          <Text style={styles.pwError}>{pwError || pwIssue}</Text>
+        )}
+        <PrimaryButton
+          title={pwBusy ? "Saving…" : "Change password"}
+          icon="key-outline"
+          onPress={savePassword}
+          disabled={!!pwIssue || pwBusy}
+          style={{ marginTop: spacing.sm }}
+        />
+        <Text style={styles.note}>
+          Forgotten it instead? Sign out, tap “Forgot password?” and ask a coordinator for a reset code.
+        </Text>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={supportSheet === "contact"}
+        onClose={() => setSupportSheet(null)}
+        title="Contact a coordinator"
+        subtitle="For your account, your duties, or a child you cannot find."
+        showClose
+      >
+        {helpdesk.length ? (
+          helpdesk.map((m) => (
+            <View key={m.id} style={styles.contactRow}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={typography.h3} numberOfLines={1}>
+                  {m.name}
+                </Text>
+                <Text style={typography.caption} numberOfLines={1}>
+                  {roleLabel(m.role)}
+                  {m.phone ? ` · ${m.phone}` : ""}
+                </Text>
+              </View>
+              {!!m.phone && (
+                <TouchableOpacity
+                  style={styles.contactBtn}
+                  onPress={() => open(`tel:${m.phone.replace(/\s/g, "")}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Call ${m.name}`}
+                >
+                  <Ionicons name="call" size={16} color={colors.onDark} />
+                </TouchableOpacity>
+              )}
+              {!!m.email && (
+                <TouchableOpacity
+                  style={[styles.contactBtn, styles.contactBtnSoft]}
+                  onPress={() => open(`mailto:${m.email}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Email ${m.name}`}
+                >
+                  <Ionicons name="mail" size={16} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          ))
+        ) : (
+          <Text style={typography.caption}>Contact the school office for help with your account.</Text>
+        )}
+        <Text style={styles.note}>
+          A child missing right now? Do not wait for the app — call the MOD or the coordinator on duty.
+        </Text>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={supportSheet === "guide"}
+        onClose={() => setSupportSheet(null)}
+        title="Quick guide"
+        subtitle={`For ${roleLabel(user.role).toLowerCase()}s`}
+        showClose
+      >
+        {[...GUIDE.marking, ...(canManageRoster(user.role) ? GUIDE.desk : [])].map(([icon, title, body]) => (
+          <View key={title} style={styles.guideRow}>
+            <View style={styles.guideIcon}>
+              <Ionicons name={icon} size={18} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text style={typography.h3}>{title}</Text>
+              <Text style={typography.caption}>{body}</Text>
+            </View>
+          </View>
+        ))}
+      </BottomSheet>
+
+      <BottomSheet
+        visible={supportSheet === "about"}
+        onClose={() => setSupportSheet(null)}
+        title="BG-SAAR"
+        subtitle="Attendance & Student Safety · Bhaktivedanta Gurukula & International School"
+        showClose
+      >
+        <SheetOption icon="pricetag-outline" label={`Version ${VERSION}`} hint={`${Platform.OS} build`} />
+        <SheetOption icon="server-outline" label={SERVER} hint="The database this build reads and writes" />
+        <SheetOption icon="person-outline" label={user.email} hint={roleLabel(user.role)} />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -637,6 +858,35 @@ const styles = StyleSheet.create({
   rowValue: { ...typography.body, fontFamily: fonts.medium },
   rowHint: { ...typography.caption, fontSize: 11, lineHeight: 15, marginTop: 2 },
   note: { ...typography.caption, fontSize: 11, lineHeight: 15, marginTop: spacing.sm },
+
+  pwError: { ...typography.caption, color: colors.danger, marginTop: spacing.xs },
+  contactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: layout.touch + 8,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth * 2,
+    borderBottomColor: colors.divider,
+  },
+  contactBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  contactBtnSoft: { backgroundColor: colors.primarySoft },
+  guideRow: { flexDirection: "row", gap: spacing.sm, paddingVertical: spacing.sm },
+  guideIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   logoutBtn: {
     flexDirection: "row",

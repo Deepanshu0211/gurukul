@@ -45,16 +45,9 @@ yarn-error.*
 src/imgs/
 src/vdos/
 
-# graphify — the graph itself is committed so a new session can query it
-# instead of re-reading the tree, but these three are machine-local: absolute
-# interpreter/scan paths and the per-file extraction cache.
-graphify-out/.graphify_python
-graphify-out/.graphify_root
-graphify-out/cache/
-# ...and the dated snapshots `graphify update` leaves behind before it rewrites
-# the graph. Same reason: a local safety copy, not a fact about the repo.
-graphify-out/20*/
-graphify-out/*.sig
+# graphify — the knowledge graph, its Obsidian vault, cache and backups are all
+# generated and machine-local. Rebuild with /graphify; nothing in it is committed.
+graphify-out/
 
 # Supabase CLI scratch
 supabase/.temp/
@@ -62,8 +55,6 @@ supabase/.temp/
 # SQL Editor. Disposable — a second copy of the migrations in the repo is exactly
 # the kind of thing that drifts from the originals.
 supabase/pending-migrations.sql
-
-graphify-out*
 
 # Private live school login credentials
 /docs/dev-test-credentials-pilot.local.md

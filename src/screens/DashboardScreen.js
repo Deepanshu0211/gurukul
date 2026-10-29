@@ -47,7 +47,8 @@ import { useAuth } from "../context/AuthContext";
 import { useResolutions, resolveAlert } from "../lib/alerts";
 import { describeError } from "../lib/errors";
 import { REPORT_FORMAT } from "../lib/report";
-import { canCloseAlerts, canPrintReports } from "../domain/roles";
+import { canCloseAlerts, canPrintReports, canApproveStaff } from "../domain/roles";
+import { usePendingRequests } from "../lib/access";
 import { useToast } from "../components/Toast";
 import { useDialog } from "../components/Dialog";
 import { haptics } from "../lib/haptics";
@@ -64,7 +65,7 @@ const FEED_TONE = {
   [DUTY_STATUS.UPCOMING]: "pending",
 };
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ navigation }) {
   const { students, duties, records, studentsForDuty, refresh, loading, error, day: selectedDay, isToday, trialSettings } = useSchoolData();
   const { user } = useAuth();
   const toast = useToast();
@@ -82,6 +83,11 @@ export default function DashboardScreen() {
   // them and can look at any past day. `class_status_board` (020) counts
   // under the caller's own RLS, so this is not a permission decision.
   const [statusOpen, setStatusOpen] = useState(false);
+  // New staff waiting to be let in. The queue lives on the Roster's Staff tab;
+  // the coordinator's first screen of the day is this one, so the count has to
+  // be here or a new teacher waits until somebody happens to open Roster.
+  const mayApprove = canApproveStaff(user?.role);
+  const { requests, reload: reloadRequests } = usePendingRequests(mayApprove);
   // The day the board is showing, which is not always today: `fetchDuties`
   // falls back to the most recent day that has duties, and printing today's
   // date then produces an empty sheet for a screen full of checkpoints.
@@ -103,7 +109,8 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       refresh();
-    }, [refresh])
+      if (mayApprove) reloadRequests();
+    }, [refresh, mayApprove, reloadRequests])
   );
 
   const onRefresh = async () => {
@@ -297,6 +304,38 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </Card>
 
+        {/* The coordinator's desk: who is waiting to be let in, and the
+            roster itself. Nobody else is offered either — 013 and 036 refuse
+            them in the database too. */}
+        {mayApprove && requests.length > 0 && (
+          <Card style={[styles.statusCard, styles.requestCard]}>
+            <TouchableOpacity
+              style={styles.statusRow}
+              onPress={() => navigation?.navigate("Roster", { tab: "staff" })}
+              accessibilityRole="button"
+              accessibilityLabel={`${plural(requests.length, "staff account request")} waiting. Review`}
+            >
+              <IconCircle bg={colors.warningBg} size={40}>
+                <Ionicons name="person-add-outline" size={18} color={colors.warning} />
+              </IconCircle>
+              <View style={styles.statusText}>
+                <Text style={styles.statusTitle}>
+                  {plural(requests.length, "staff account request")}
+                </Text>
+                <Text style={styles.statusSub} numberOfLines={1}>
+                  {requests
+                    .slice(0, 2)
+                    .map((r) => r.name)
+                    .join(", ")}
+                  {requests.length > 2 ? ` +${requests.length - 2}` : ""}
+                </Text>
+              </View>
+              <View style={styles.requestBadge}>
+                <Text style={styles.requestBadgeText}>Review</Text>
+              </View>
+            </TouchableOpacity>
+          </Card>
+        )}
         {open.length > 0 && (
           <>
             <SectionLabel count={open.length} tone="overdue">
@@ -470,6 +509,15 @@ function AlertCard({ alert, onResolve }) {
 
 const styles = StyleSheet.create({
   statusCard: { marginTop: spacing.md, paddingVertical: spacing.xs },
+  requestCard: { borderColor: colors.warning, borderWidth: 1 },
+  requestBadge: {
+    paddingHorizontal: spacing.md - 4,
+    minHeight: 32,
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    backgroundColor: colors.warning,
+  },
+  requestBadgeText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colors.onDark },
   statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm },
   statusText: { flex: 1 },
   statusTitle: { ...typography.bodyStrong, color: colors.text },

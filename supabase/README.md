@@ -28,6 +28,9 @@ staging copy, or recovery if the current one is lost.
 | `migrations/019_duty_house.sql` | `duties.house`, so a Saturday duty can cover one house |
 | `migrations/020_class_status_board.sql` | `class_status_board()` — the weekday morning report's counts, one row per class |
 | `migrations/021_fix_approved_signup_trigger.sql` | An approved teacher can create their account — the auth.users trigger moves BEFORE→AFTER |
+| `migrations/036_coordinator_management.sql` | Coordinator-run roster: `duty_defaults`, checkpoint add/switch-off, hand-picked & excluded students, add/deactivate staff, one-time password reset codes. Inactive staff lose access. Adds the SRS Sports / Remedial / Evening study / Dinner checkpoints with NO groups (so the pilot gets no new duties until a coordinator adds them) |
+| `migrations/037_staff_add_students.sql` | `add_student()` — any teacher, coordinator, management or admin adds a student into an existing class; only coordinator/admin can start a new class. Every addition is in the activity log |
+| `seed-checkpoints-mock.sql` | MOCK only: default groups for the four new checkpoints |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
 | `seed-mock-school.sql` | The school as its own register draws it: 18 classes, 411 students, 18 class teachers, today's duties |
 | `seed-auth-users.sql` | A working login for every staff row, in one statement. Run after `seed-mock-school.sql` |
@@ -70,6 +73,20 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 ```
 Use the **anon** key. The `service_role` key bypasses every policy in `002`
 and must never be in the app or the repo.
+
+## Rolling 036 out to the pilot
+
+Applied and verified on the mock project only. Before the pilot:
+
+1. Install the new APK first — the old app ignores `members`/`excluded`, so a
+   hand-picked group would show the wrong children on an old phone.
+2. Run `036_coordinator_management.sql`, then `037_staff_add_students.sql`, in the pilot SQL editor. It is
+   re-runnable, wraps whatever `generate_duties` the pilot has rather than
+   replacing it, and creates no duties by itself.
+3. Do NOT run `seed-checkpoints-mock.sql` there — the school decides who
+   marks Sports, Remedial, Evening study and Dinner.
+4. `node --test tests/coordinator-rls.test.cjs` is mock-only by design; repeat
+   its checks by hand with a pilot teacher and coordinator login.
 
 ## Verify before trusting it
 

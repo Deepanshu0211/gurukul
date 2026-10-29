@@ -31,3 +31,21 @@ export const scopeAttendanceQuery = (query, key) => {
 export const attendanceStudentLabel = (student, duty) => isVedicClass(duty?.classKey)
   ? `Class ${student.grade} Vedic`
   : combinedClassGrade(duty?.classKey) !== null ? student.label.split(" ").slice(1).join(" ") : "";
+
+/**
+ * Every class that has students in it, in register order (grade, then section),
+ * with its size. Built from the register rather than a fixed list so a class
+ * the school adds appears in every picker without a code change.
+ */
+export const listClasses = (students) => {
+  const byKey = new Map();
+  for (const s of students || []) {
+    if (!byKey.has(s.key)) byKey.set(s.key, { key: s.key, label: s.label, grade: s.grade, students: 0 });
+    byKey.get(s.key).students += 1;
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const [ga, sa] = a.key.split("|");
+    const [gb, sb] = b.key.split("|");
+    return Number(ga) - Number(gb) || sa.localeCompare(sb);
+  });
+};

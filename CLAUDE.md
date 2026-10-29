@@ -103,6 +103,10 @@ duplicate them under a different name.
 | Get a duty's student list | `studentsForDuty(duty)` from `useSchoolData()` | resolves the group against the real register (`resolveGroup` in lib/duties.js) |
 | A day with no register | Supabase `holidays`, mapped by `lib/holidays.js` | one row per DAY (a week off is seven rows). `hostelCheckpoints` true = classes off, boarders still marked; false = campus closed, nothing marked. Declared by coordinator/admin only |
 | A student signed out at the gate | Supabase `student_leave`, mapped by `lib/leave.js` | open while `in_at` is null. Written only through `sign_student_out` / `sign_student_in` — there is no INSERT or UPDATE policy on the table |
+| Recurring roster (checkpoint + group + marker + weekdays) | Supabase `duty_defaults`, mapped by `lib/roster.js` | written ONLY through `save_duty_default` / `remove_duty_default` (036). `members` = hand-picked list, `excluded` = left out of a class/band/house group. The nightly `generate_duties` runs the old generator (`generate_builtin_duties`) then `apply_duty_defaults` |
+| Checkpoints a coordinator manages | `checkpoints.active`, `mandatory_escalation` + `save_checkpoint` / `set_checkpoint_active` / `remove_checkpoint` | Account → Checkpoints & groups (`CheckpointsScreen`, `GroupEditorScreen`). Remove = delete if never used, else switch off |
+| Adding / deactivating staff | `add_staff_member`, `set_staff_active`, `list_inactive_staff` in `lib/staff.js` | deactivate = `active=false` + `left_on`, pending duties move to a replacement. `my_role()` etc. ignore inactive rows, so access ends at once |
+| Password reset by a coordinator | `issue_password_reset` → one-time code; `redeem_password_reset` on the sign-in screen (`lib/passwords.js`) | coordinator never sees the new password; code hashed, 30 min, 5 tries |
 | Is this student away right now? | `leaveFor(admissionNo)` from `useSchoolData()` | null when they are on campus. The marking screen locks the row and pre-fills the status when it is not |
 
 ## 4. Roles and navigation (already wired — don't restructure without reason)

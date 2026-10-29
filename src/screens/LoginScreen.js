@@ -21,6 +21,8 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { describeError } from "../lib/errors";
 import { useDialog } from "../components/Dialog";
+import BottomSheet from "../components/BottomSheet";
+import { redeemResetCode, passwordProblem } from "../lib/passwords";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -199,6 +201,38 @@ export default function LoginScreen({ navigation }) {
   const [focusedField, setFocusedField] = useState(null);
   const [notification, setNotification] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  // "Forgot password?" — redeeming a code a coordinator issued (036).
+  const [resetOpen, setResetOpen] = useState(false);
+  const [reset, setReset] = useState({ email: "", code: "", next: "", confirm: "" });
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState(null);
+
+  const resetIssue = !reset.email.trim()
+    ? "Enter your school email"
+    : reset.code.replace(/[^A-Za-z0-9]/g, "").length !== 8
+      ? "The code is 8 letters and numbers"
+      : passwordProblem(reset.next, reset.confirm);
+
+  const submitReset = async () => {
+    if (resetIssue || resetBusy) return;
+    setResetBusy(true);
+    setResetError(null);
+    try {
+      await redeemResetCode(reset.email, reset.code, reset.next);
+      setResetOpen(false);
+      setEmail(reset.email.trim());
+      setPassword("");
+      dialog.alert({
+        icon: "checkmark-circle-outline",
+        title: "Password changed",
+        message: "Sign in with your new password. You have been signed out on every other device.",
+      });
+    } catch (e) {
+      setResetError(describeError(e, { message: "The password was not changed. Try again." }).message);
+    } finally {
+      setResetBusy(false);
+    }
+  };
 
   const triggerNotification = (msg) => {
     setNotification(msg);
@@ -380,22 +414,17 @@ export default function LoginScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* This had no `onPress` at all — a link that looked live and did
-                nothing, on the screen where somebody who cannot get in is
-                most likely to tap it. Self-service reset needs a redirect URL
-                and a deep link, which this build does not have, so it says
-                who can actually reset it rather than pretending. */}
+            {/* Self-service email reset needs a redirect URL and a deep link,
+                which this build does not have. Instead a coordinator issues a
+                one-time code (Roster → Staff → Reset password) and it is
+                redeemed here, without signing in. */}
             <TouchableOpacity
               style={styles.forgotBtn}
-              onPress={() =>
-                dialog.alert({
-                  icon: "key-outline",
-                  title: "Forgot password",
-                  message:
-                    "Password resets are done by the school office. Ask a coordinator or the " +
-                    "administrator to set a new password for your account.",
-                })
-              }
+              onPress={() => {
+                setReset({ email: email.trim(), code: "", next: "", confirm: "" });
+                setResetError(null);
+                setResetOpen(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Forgot password"
             >
@@ -432,6 +461,43 @@ export default function LoginScreen({ navigation }) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <BottomSheet
+        visible={resetOpen}
+        onClose={() => !resetBusy && setResetOpen(false)}
+        title="Reset your password"
+        subtitle="Ask a coordinator for a one-time code. They never see your new password."
+        showClose
+      >
+        {[
+          ["email", "School email", { keyboardType: "email-address", autoCapitalize: "none", textContentType: "username" }],
+          ["code", "8-character code, e.g. ABCD-EFGH", { autoCapitalize: "characters", maxLength: 9 }],
+          ["next", "New password (8+ characters)", { secureTextEntry: true, textContentType: "newPassword", autoCapitalize: "none" }],
+          ["confirm", "New password again", { secureTextEntry: true, textContentType: "newPassword", autoCapitalize: "none" }],
+        ].map(([key, label, props]) => (
+          <View key={key} style={[styles.inputRow, styles.resetField]}>
+            <TextInput
+              value={reset[key]}
+              onChangeText={(v) => setReset((r) => ({ ...r, [key]: v }))}
+              placeholder={label}
+              placeholderTextColor={colors.textMuted}
+              autoCorrect={false}
+              style={styles.input}
+              accessibilityLabel={label}
+              {...props}
+            />
+          </View>
+        ))}
+        {!!(resetError || (reset.next && resetIssue)) && (
+          <Text style={styles.resetError}>{resetError || resetIssue}</Text>
+        )}
+        <PrimaryButton
+          title={resetBusy ? "Saving…" : "Set new password"}
+          onPress={submitReset}
+          disabled={!!resetIssue || resetBusy}
+          style={styles.signInBtn}
+          textStyle={{ fontFamily: loginFonts.bold }}
+        />
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -517,6 +583,8 @@ const styles = StyleSheet.create({
 
   signInBtn: { marginTop: spacing.md },
 
+  resetField: { marginBottom: spacing.sm },
+  resetError: { fontSize: 13, lineHeight: 18, color: colors.danger, fontFamily: loginFonts.medium },
   forgotBtn: { alignSelf: "flex-end", minHeight: layout.touch, justifyContent: "center" },
   forgotLink: { fontSize: 13, lineHeight: 18, color: colors.primary, fontFamily: loginFonts.semibold },
 

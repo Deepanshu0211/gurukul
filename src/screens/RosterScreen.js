@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -7,6 +7,7 @@ import {
   SectionList,
   TouchableOpacity,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -40,7 +41,19 @@ import {
 import { useNow } from "../lib/clock";
 import { usePendingRequests, approveRequest, rejectRequest } from "../lib/access";
 import { describeError } from "../lib/errors";
-import { roleLabel, canReassign, canApproveStaff } from "../domain/roles";
+import {
+  roleLabel,
+  canReassign,
+  canApproveStaff,
+  canManageRoster,
+  canManageStaffMember,
+  canAddStudent,
+} from "../domain/roles";
+import AddStudentSheet from "../components/AddStudentSheet";
+import { listClasses } from "../domain/classGroups";
+import { HOUSE_TONES, NO_HOUSE, houseRank, housesIn } from "../domain/houses";
+import { addStaffMember, setStaffActive, fetchInactiveStaff } from "../lib/staff";
+import { issueResetCode, formatCode } from "../lib/passwords";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime, plural, initial, weekdayName, fmtDay } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
@@ -55,7 +68,7 @@ const TABS = [
   { key: "students", label: "Students", placeholder: "Search name, admission no. or class" },
 ];
 
-export default function RosterScreen() {
+export default function RosterScreen({ navigation, route }) {
   const {
     duties: DUTIES,
     staff: STAFF,
@@ -72,7 +85,15 @@ export default function RosterScreen() {
   const dialog = useDialog();
   const toast = useToast();
   const now = useNow();
-  const [tab, setTab] = useState("duties");
+  const [tab, setTab] = useState(route?.params?.tab || "duties");
+
+  // The Dashboard's "access requests" card sends coordinators straight here.
+  useEffect(() => {
+    if (route?.params?.tab) {
+      setTab(route.params.tab);
+      navigation?.setParams?.({ tab: undefined });
+    }
+  }, [route?.params?.tab, navigation]);
   const [query, setQuery] = useState("");
   const [reassigning, setReassigning] = useState(null);
   const tabInset = useTabContentInset();
@@ -158,6 +179,11 @@ export default function RosterScreen() {
           staffName={staffName}
           studentsForDuty={studentsForDuty}
           onReassign={mayReassign ? setReassigning : null}
+          onManage={
+            canManageRoster(user?.role)
+              ? () => navigation.navigate("Account", { screen: "Checkpoints", initial: false })
+              : null
+          }
           bottomInset={tabInset}
           query={query}
           onScroll={onScroll}
@@ -169,6 +195,8 @@ export default function RosterScreen() {
           duties={DUTIES}
           students={STUDENTS}
           mayApprove={canApproveStaff(user?.role)}
+          actorRole={user?.role}
+          actorId={user?.id}
           onStaffChanged={refresh}
           bottomInset={tabInset}
           query={query}
@@ -176,7 +204,12 @@ export default function RosterScreen() {
         />
       )}
       {tab === "students" && (
-        <StudentsTab bottomInset={tabInset} query={query} onScroll={onScroll} />
+        <StudentsTab
+          bottomInset={tabInset}
+          query={query}
+          onScroll={onScroll}
+          mayAdd={canAddStudent(user?.role)}
+        />
       )}
 
       <EdgeFade top={headerH} visible={scrolled} />
@@ -209,6 +242,7 @@ function DutiesTab({
   staffName,
   studentsForDuty,
   onReassign,
+  onManage,
   bottomInset,
   query,
   onScroll,
@@ -243,6 +277,24 @@ function DutiesTab({
       keyboardDismissMode="on-drag"
       onScroll={onScroll}
       scrollEventThrottle={16}
+      ListHeaderComponent={
+        onManage ? (
+          <Row
+            style={styles.manageRow}
+            onPress={onManage}
+            accessibilityRole="button"
+            accessibilityLabel="Manage checkpoints and groups"
+          >
+            <View style={[styles.personAvatar, styles.requestAvatar]}>
+              <Ionicons name="options-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.personMain}>
+              <Text style={styles.personName}>Checkpoints & groups</Text>
+            </View>
+            <Chevron />
+          </Row>
+        ) : null
+      }
       ListEmptyComponent={
         q ? (
           <EmptyState icon="search-outline" title="No match" body={`No duty matches “${query}”.`} compact />
@@ -334,6 +386,8 @@ function StaffTab({
   duties,
   students,
   mayApprove,
+  actorRole,
+  actorId,
   onStaffChanged,
   bottomInset,
   query,
@@ -342,6 +396,138 @@ function StaffTab({
   const dialog = useDialog();
   const toast = useToast();
   const dutiesFor = (id) => duties.filter((d) => d.staffId === id).length;
+
+  // ── Add / deactivate / reset (036) ─────────────────────────────────────
+  const [selected, setSelected] = useState(null); // staff row whose sheet is open
+  const [adding, setAdding] = useState(null); // add-staff draft
+  const [handover, setHandover] = useState(null); // staff being deactivated
+  const [resetCode, setResetCode] = useState(null); // { name, email, code, expiresAt }
+  const [busy, setBusy] = useState(false);
+  const [former, setFormer] = useState([]);
+  const [showFormer, setShowFormer] = useState(false);
+
+  const loadFormer = useCallback(async () => {
+    if (!mayApprove) return;
+    try {
+      setFormer(await fetchInactiveStaff());
+    } catch {
+      // A database without 036: the section simply does not appear.
+      setFormer([]);
+    }
+  }, [mayApprove]);
+  useEffect(() => {
+    loadFormer();
+  }, [loadFormer]);
+
+  const failed = (e, title) => {
+    const shown = describeError(e, { title, message: "Nothing was changed. Try again." });
+    dialog.alert({
+      icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+      title: shown.title,
+      message: shown.message,
+      destructive: !shown.offline,
+    });
+  };
+
+  const addProblem = !adding
+    ? null
+    : adding.name.trim().length < 2
+      ? "Enter their full name"
+      : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adding.email.trim())
+        ? "Enter a valid email address"
+        : STAFF.some((m) => (m.email || "").toLowerCase() === adding.email.trim().toLowerCase())
+          ? "Someone on the staff already uses that email"
+          : null;
+
+  const submitAdd = async () => {
+    if (addProblem || busy) return;
+    setBusy(true);
+    try {
+      const made = await addStaffMember({
+        name: adding.name.trim(),
+        email: adding.email.trim(),
+        phone: adding.phone.trim(),
+        classKey: adding.classKey,
+      });
+      setAdding(null);
+      toast.show(`${made.name} added · they sign up with ${made.email} to get in`);
+      onStaffChanged?.();
+      reloadRequests();
+    } catch (e) {
+      failed(e, "Staff member not added");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const issueReset = (member) => {
+    setSelected(null);
+    dialog.confirm({
+      icon: "key-outline",
+      title: `Reset ${member.name}'s password?`,
+      message:
+        "You get a one-time code to give them in person or by phone. They enter it on the sign-in screen " +
+        "under “Forgot password?” and choose a new password themselves — you never see it. " +
+        "The code works once and expires in 30 minutes. They are signed out everywhere when it is used.",
+      confirmLabel: "Get code",
+      onConfirm: async () => {
+        try {
+          const { code, expiresAt } = await issueResetCode(member.id);
+          setResetCode({ name: member.name, email: member.email, code, expiresAt });
+        } catch (e) {
+          failed(e, "No code issued");
+        }
+      },
+    });
+  };
+
+  const deactivate = async (member, replacementId) => {
+    setBusy(true);
+    try {
+      await setStaffActive(member.id, false, replacementId);
+      setHandover(null);
+      toast.show(
+        replacementId
+          ? `${member.name} deactivated · duties moved to ${STAFF.find((m) => m.id === replacementId)?.name || "cover"}`
+          : `${member.name} deactivated`
+      );
+      onStaffChanged?.();
+      loadFormer();
+    } catch (e) {
+      failed(e, "Not deactivated");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startDeactivate = (member) => {
+    setSelected(null);
+    if (dutiesFor(member.id) > 0 || member.classKey) {
+      setHandover(member);
+      return;
+    }
+    dialog.confirm({
+      icon: "person-remove-outline",
+      title: `Deactivate ${member.name}?`,
+      message:
+        "They are signed out and can no longer open the app. Their past registers stay in the record " +
+        "under their name. You can reactivate them later from Former staff.",
+      confirmLabel: "Deactivate",
+      destructive: true,
+      onConfirm: () => deactivate(member, null),
+    });
+  };
+
+  const reactivate = async (member) => {
+    try {
+      await setStaffActive(member.id, true);
+      toast.show(`${member.name} is active again`);
+      onStaffChanged?.();
+      loadFormer();
+    } catch (e) {
+      failed(e, "Not reactivated");
+    }
+  };
 
   // Only fetched for the roles that can act on it: to everyone else the queue
   // is not "empty", it does not exist, and 013's read policy agrees.
@@ -405,21 +591,14 @@ ${req.phone}` : "") +
    * (a class teacher and an assistant), so the coordinator needs to see it
    * rather than be stopped by it.
    */
-  const classes = useMemo(() => {
-    const byKey = new Map();
-    for (const st of students || []) {
-      if (!byKey.has(st.key)) byKey.set(st.key, { key: st.key, label: st.label, students: 0 });
-      byKey.get(st.key).students += 1;
-    }
-    for (const c of byKey.values()) {
-      c.teacher = (STAFF || []).find((m) => m.classKey === c.key)?.name || null;
-    }
-    return [...byKey.values()].sort((a, b) => {
-      const [ga, sa] = a.key.split("|");
-      const [gb, sb] = b.key.split("|");
-      return Number(ga) - Number(gb) || sa.localeCompare(sb);
-    });
-  }, [students, STAFF]);
+  const classes = useMemo(
+    () =>
+      listClasses(students).map((c) => ({
+        ...c,
+        teacher: (STAFF || []).find((m) => m.classKey === c.key)?.name || null,
+      })),
+    [students, STAFF]
+  );
 
   /**
    * Approving is a sheet, not a dialog, because a class has to be chosen and
@@ -464,6 +643,9 @@ They keep their sign-in but see nothing, and can ask again.`,
       ? [{ key: "requests", kind: "requests", data: requests }]
       : []),
     { key: "staff", kind: "staff", data: filtered },
+    ...(mayApprove && former.length
+      ? [{ key: "former", kind: "former", data: showFormer ? former : [] }]
+      : []),
   ];
 
   const chosen = classes.find((c) => c.key === classKey) || null;
@@ -488,7 +670,21 @@ They keep their sign-in but see nothing, and can ask again.`,
         ) : null
       }
       renderSectionHeader={({ section }) =>
-        section.kind === "requests" ? (
+        section.kind === "former" ? (
+          <SectionLabel
+            style={styles.countHead}
+            count={former.length}
+            action={
+              <TextAction
+                label={showFormer ? "Hide" : "Show"}
+                onPress={() => setShowFormer((v) => !v)}
+                accessibilityLabel={showFormer ? "Hide former staff" : "Show former staff"}
+              />
+            }
+          >
+            Former staff
+          </SectionLabel>
+        ) : section.kind === "requests" ? (
           <SectionLabel style={styles.countHead} count={requests.length} tone="due">
             Access requests
           </SectionLabel>
@@ -500,11 +696,13 @@ They keep their sign-in but see nothing, and can ask again.`,
               label="+ Add"
               accessibilityLabel="Add staff member"
               onPress={() =>
-                dialog.alert({
-                  icon: "person-add-outline",
-                  title: "Add staff",
-                  message: "Adding a staff member is an administrator action.",
-                })
+                mayApprove
+                  ? setAdding({ name: "", email: "", phone: "", classKey: null, pickingClass: false })
+                  : dialog.alert({
+                      icon: "person-add-outline",
+                      title: "Add staff",
+                      message: "Adding a staff member is done by a coordinator or the administrator.",
+                    })
               }
             />
           }
@@ -514,6 +712,30 @@ They keep their sign-in but see nothing, and can ask again.`,
         )
       }
       renderItem={({ item, section }) => {
+        if (section.kind === "former") {
+          return (
+            <View style={[styles.personRow, styles.formerRow]}>
+              <View style={styles.personAvatar}>
+                <Text style={styles.personAvatarText}>{initial(item.name)}</Text>
+              </View>
+              <View style={styles.personMain}>
+                <Text style={styles.personName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={typography.caption} numberOfLines={1}>
+                  {roleLabel(item.role)} · {item.email}
+                </Text>
+              </View>
+              {canManageStaffMember(actorRole, item.role) && (
+                <TextAction
+                  label="Reactivate"
+                  onPress={() => reactivate(item)}
+                  accessibilityLabel={`Reactivate ${item.name}`}
+                />
+              )}
+            </View>
+          );
+        }
         if (section.kind === "requests") {
           return (
             <RequestRow
@@ -530,25 +752,10 @@ They keep their sign-in but see nothing, and can ask again.`,
             style={styles.personRow}
             accessibilityRole="button"
             accessibilityLabel={`${item.name}, ${roleLabel(item.role)}`}
-            // An `alert`, not a `confirm`. This was a confirm offering a
-            // destructive "Deactivate" button with no `onConfirm` behind it:
-            // tapping it dismissed the dialog and did nothing at all, so a
-            // coordinator who had just "removed" a staff member would keep
-            // seeing them on the roster and assume the app was stale rather
-            // than that the action had never happened. Deactivation is not
-            // built — not in the app and not in the database (see the note in
-            // migrations/012) — so the screen says so instead of miming it.
-            onPress={() =>
-              dialog.alert({
-                icon: "person-outline",
-                title: item.name,
-                message:
-                  `${roleLabel(item.role)} · ${item.email}` +
-                  (n > 0 ? `\n${plural(n, "duty", "duties")} today` : "") +
-                  "\n\nDeactivating a staff member is not available yet. Ask the administrator to " +
-                  "mark them inactive on the school server.",
-              })
-            }
+            // A sheet of what can actually be done to this person — and only
+            // that. It used to be a dialog saying deactivation was "not
+            // available yet"; 036 built it, so the row now does it.
+            onPress={() => setSelected(item)}
           >
             <View style={styles.personAvatar}>
               <Text style={styles.personAvatarText}>{initial(item.name)}</Text>
@@ -654,9 +861,199 @@ They keep their sign-in but see nothing, and can ask again.`,
         />
       ))}
     </BottomSheet>
+
+    {/* One staff member: details, and what this coordinator may do to them. */}
+    <BottomSheet
+      visible={!!selected}
+      onClose={() => setSelected(null)}
+      title={selected?.name}
+      subtitle={selected ? `${roleLabel(selected.role)}${selected.classLabel ? ` · ${selected.classLabel}` : ""}` : ""}
+      showClose
+    >
+      {!!selected && (
+        <>
+          <SheetOption icon="mail-outline" label={selected.email || "No email"} hint="Sign-in address" />
+          {!!selected.phone && <SheetOption icon="call-outline" label={selected.phone} hint="Phone" />}
+          <SheetOption
+            icon="calendar-outline"
+            label={plural(dutiesFor(selected.id), "duty", "duties")}
+            hint="On the roster today"
+          />
+          {mayApprove && selected.id !== actorId && canManageStaffMember(actorRole, selected.role) ? (
+            <>
+              <SheetOption
+                icon="key-outline"
+                label="Reset password"
+                hint="Get a one-time code to give them"
+                onPress={() => issueReset(selected)}
+              />
+              <SheetOption
+                icon="person-remove-outline"
+                label="Deactivate"
+                hint="Signs them out; keeps their history"
+                danger
+                onPress={() => startDeactivate(selected)}
+              />
+            </>
+          ) : (
+            <Text style={[typography.caption, styles.approveWarn]}>
+              {selected.id === actorId
+                ? "This is you. Change your own password from the Account tab."
+                : mayApprove
+                  ? "Only the administrator can change this account."
+                  : "A coordinator manages staff accounts."}
+            </Text>
+          )}
+        </>
+      )}
+    </BottomSheet>
+
+    {/* Add a staff member directly. */}
+    <BottomSheet
+      visible={!!adding && !adding.pickingClass}
+      onClose={() => !busy && setAdding(null)}
+      title="Add staff member"
+      subtitle="Added as a teacher. They sign up with this email and are let straight in — no request to approve."
+      showClose
+    >
+      {!!adding && (
+        <>
+          <Text style={styles.fieldLabel}>Full name</Text>
+          <TextInput
+            value={adding.name}
+            onChangeText={(name) => setAdding((a) => ({ ...a, name }))}
+            placeholder="Radha Priya Mataji"
+            placeholderTextColor={colors.icon}
+            style={styles.input}
+            autoFocus
+            maxLength={80}
+            accessibilityLabel="Full name"
+          />
+          <Text style={styles.fieldLabel}>School email</Text>
+          <TextInput
+            value={adding.email}
+            onChangeText={(email) => setAdding((a) => ({ ...a, email }))}
+            placeholder="name@gurukula.org"
+            placeholderTextColor={colors.icon}
+            style={styles.input}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            accessibilityLabel="Email"
+          />
+          <Text style={styles.fieldLabel}>Phone (optional)</Text>
+          <TextInput
+            value={adding.phone}
+            onChangeText={(phone) => setAdding((a) => ({ ...a, phone }))}
+            placeholder="+91 …"
+            placeholderTextColor={colors.icon}
+            style={styles.input}
+            keyboardType="phone-pad"
+            accessibilityLabel="Phone"
+          />
+          <SheetOption
+            icon="school-outline"
+            label={adding.classKey ? `Class ${classes.find((c) => c.key === adding.classKey)?.label || ""}` : "No class"}
+            hint={adding.classKey ? "Class teacher" : "Duty staff, or choose their class"}
+            onPress={() => setAdding((a) => ({ ...a, pickingClass: true }))}
+            trailing={<Ionicons name="chevron-forward" size={16} color={colors.icon} />}
+          />
+          {!!addProblem && (adding.name || adding.email) ? (
+            <Text style={styles.fieldProblem}>{addProblem}</Text>
+          ) : null}
+          <PrimaryButton
+            title={busy ? "Adding…" : "Add staff member"}
+            icon="person-add-outline"
+            onPress={submitAdd}
+            disabled={!!addProblem || busy}
+            style={{ marginTop: spacing.md }}
+          />
+        </>
+      )}
+    </BottomSheet>
+
+    <BottomSheet
+      visible={!!adding?.pickingClass}
+      onClose={() => setAdding((a) => ({ ...a, pickingClass: false }))}
+      title="Class teacher for"
+      subtitle="Optional"
+      showClose
+    >
+      <SheetOption
+        icon="remove-circle-outline"
+        label="No class"
+        active={!adding?.classKey}
+        onPress={() => setAdding((a) => ({ ...a, classKey: null, pickingClass: false }))}
+      />
+      {classes.map((c) => (
+        <SheetOption
+          key={c.key}
+          icon="school-outline"
+          label={c.label}
+          hint={c.teacher ? `Currently ${c.teacher} — they would lose it` : plural(c.students, "student")}
+          active={adding?.classKey === c.key}
+          onPress={() => setAdding((a) => ({ ...a, classKey: c.key, pickingClass: false }))}
+        />
+      ))}
+    </BottomSheet>
+
+    {/* Deactivating someone who still has duties: who takes them over. */}
+    <BottomSheet
+      visible={!!handover}
+      onClose={() => !busy && setHandover(null)}
+      title={`Who covers for ${handover?.name || ""}?`}
+      subtitle={
+        handover
+          ? `${plural(dutiesFor(handover.id), "pending duty", "pending duties")} today` +
+            `${handover.classLabel ? ` and ${handover.classLabel}` : ""}` +
+            " move to the person you pick. Their past registers stay under their name."
+          : ""
+      }
+      showClose
+    >
+      {busy ? (
+        <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+      ) : (
+        STAFF.filter((m) => m.id !== handover?.id && !["nurse", "reception"].includes(m.role)).map((m) => (
+          <SheetOption
+            key={m.id}
+            label={m.name}
+            hint={roleLabel(m.role) + (m.classLabel ? ` · ${m.classLabel}` : "")}
+            onPress={() => deactivate(handover, m.id)}
+          />
+        ))
+      )}
+    </BottomSheet>
+
+    {/* The code, shown once. */}
+    <BottomSheet
+      visible={!!resetCode}
+      onClose={() => setResetCode(null)}
+      title="One-time reset code"
+      subtitle={resetCode ? `For ${resetCode.name}. Give it to them yourself — do not post it in a group.` : ""}
+      showClose
+    >
+      {!!resetCode && (
+        <>
+          <View style={styles.codeBox}>
+            <Text style={styles.codeText} selectable accessibilityLabel={`Code ${resetCode.code.split("").join(" ")}`}>
+              {formatCode(resetCode.code)}
+            </Text>
+          </View>
+          <Text style={[typography.caption, styles.approveWarn]}>
+            On the sign-in screen they tap “Forgot password?”, enter {resetCode.email}, this code and a new
+            password. It expires at{" "}
+            {new Date(resetCode.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} and
+            works once. Closing this sheet does not cancel it.
+          </Text>
+          <PrimaryButton title="Done" onPress={() => setResetCode(null)} style={{ marginTop: spacing.md }} />
+        </>
+      )}
+    </BottomSheet>
     </>
   );
 }
+
 
 /**
  * One person asking to be let in.
@@ -722,14 +1119,35 @@ const TYPE_LABEL = {
   B: "Day boarding",
 };
 
-function StudentsTab({ bottomInset, query, onScroll }) {
+function StudentsTab({ bottomInset, query, onScroll, mayAdd }) {
   const dialog = useDialog();
   const { students, loading, error, reload } = useStudents();
+  const [adding, setAdding] = useState(false);
 
   // Which way the register is cut. Not persisted: it is a way of looking,
   // not a setting, and a list that comes back grouped differently from how
   // you left the screen is more confusing than one that always starts by class.
   const [groupBy, setGroupBy] = useState("class");
+  // Which of the four houses is open. Null shows all four, one after another.
+  const [house, setHouse] = useState(null);
+
+  // The four houses as their own categories, with what a house master asks
+  // first: how many, and how many of them board.
+  const houseCards = useMemo(() => {
+    const names = housesIn(students);
+    const cards = names.map((name) => {
+      const inHouse = students.filter((s) => s.house === name);
+      return {
+        name,
+        total: inHouse.length,
+        residential: inHouse.filter((s) => s.type !== "D").length,
+        classes: new Set(inHouse.map((s) => s.key)).size,
+      };
+    });
+    const none = students.filter((s) => !s.house).length;
+    if (none) cards.push({ name: NO_HOUSE, total: none, residential: null, classes: null });
+    return cards;
+  }, [students]);
 
   // Stable identity, so the memoised rows below aren't invalidated on every
   // keystroke in the search field.
@@ -750,27 +1168,31 @@ function StudentsTab({ bottomInset, query, onScroll }) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter(
+    const pool =
+      groupBy === "house" && house
+        ? students.filter((s) => (house === NO_HOUSE ? !s.house : s.house === house))
+        : students;
+    if (!q) return pool;
+    return pool.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
         s.adm.toLowerCase().includes(q) ||
         s.label.toLowerCase().includes(q) ||
         (s.house || "").toLowerCase().includes(q)
     );
-  }, [students, query]);
+  }, [students, query, groupBy, house]);
 
   // Two ways to cut the same register. Class is how the register is kept and
   // how attendance is taken; house is how the Saturday assembly is arranged
   // and how sports and competitions are run, so the school asks both
   // questions and neither is a filter on the other.
   const sections = useMemo(() => {
-    const key =
-      groupBy === "house"
-        // Null is a real answer here, not a gap to hide: a child with no
-        // house yet has to be findable, or nobody ever assigns them one.
-        ? (s) => s.house || "No house yet"
-        : (s) => s.label;
+    const byHouse = groupBy === "house" && !house;
+    const key = byHouse
+      // Null is a real answer here, not a gap to hide: a child with no
+      // house yet has to be findable, or nobody ever assigns them one.
+      ? (s) => s.house || NO_HOUSE
+      : (s) => s.label;
 
     const groups = filtered.reduce((acc, s) => {
       const k = key(s);
@@ -779,18 +1201,18 @@ function StudentsTab({ bottomInset, query, onScroll }) {
     }, {});
 
     return Object.entries(groups)
-      .sort((a, b) => {
-        // Unassigned sits last however it happens to sort alphabetically.
-        if (a[0] === "No house yet") return 1;
-        if (b[0] === "No house yet") return -1;
-        return a[0].localeCompare(b[0], undefined, { numeric: true });
-      })
+      .sort((a, b) =>
+        byHouse
+          // The printed sheet's order; unassigned last.
+          ? houseRank(a[0]) - houseRank(b[0]) || a[0].localeCompare(b[0])
+          : a[0].localeCompare(b[0], undefined, { numeric: true })
+      )
       .map(([label, data]) => ({
         title: label,
         // Within a house the classes are jumbled, so roll number alone is
         // meaningless — order by class first, then roll, as the register does.
         data:
-          groupBy === "house"
+          byHouse
             ? [...data].sort(
                 (x, y) =>
                   String(x.label).localeCompare(String(y.label), undefined, { numeric: true }) ||
@@ -798,7 +1220,7 @@ function StudentsTab({ bottomInset, query, onScroll }) {
               )
             : data,
       }));
-  }, [filtered, groupBy]);
+  }, [filtered, groupBy, house]);
 
   if (loading) {
     return (
@@ -820,6 +1242,7 @@ function StudentsTab({ bottomInset, query, onScroll }) {
   }
 
   return (
+    <>
     <SectionList
       sections={sections}
       keyExtractor={(s) => s.id}
@@ -841,11 +1264,13 @@ function StudentsTab({ bottomInset, query, onScroll }) {
               label="+ Add"
               accessibilityLabel="Add student"
               onPress={() =>
-                dialog.alert({
-                  icon: "person-add-outline",
-                  title: "Add student",
-                  message: "Add individually, or bulk-import the Excel register.",
-                })
+                mayAdd
+                  ? setAdding(true)
+                  : dialog.alert({
+                      icon: "person-add-outline",
+                      title: "Add student",
+                      message: "Students are added by teachers and coordinators.",
+                    })
               }
             />
           }
@@ -860,7 +1285,10 @@ function StudentsTab({ bottomInset, query, onScroll }) {
             <TouchableOpacity
               key={key}
               style={[styles.groupTab, groupBy === key && styles.groupTabOn]}
-              onPress={() => setGroupBy(key)}
+              onPress={() => {
+                setGroupBy(key);
+                setHouse(null);
+              }}
               accessibilityRole="button"
               accessibilityState={{ selected: groupBy === key }}
               accessibilityLabel={`Group students ${label.toLowerCase()}`}
@@ -871,6 +1299,38 @@ function StudentsTab({ bottomInset, query, onScroll }) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {groupBy === "house" && (
+          <View style={styles.houseGrid}>
+            {houseCards.map((h) => {
+              const on = house === h.name;
+              const tone = HOUSE_TONES[h.name];
+              return (
+                <TouchableOpacity
+                  key={h.name}
+                  onPress={() => setHouse(on ? null : h.name)}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.houseCard,
+                    tone && { borderLeftColor: colors[tone] },
+                    on && styles.houseCardOn,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={`${h.name}, ${plural(h.total, "student")}${on ? ", showing" : ""}`}
+                >
+                  <Text style={[styles.houseName, on && { color: colors.onDark }]} numberOfLines={1}>
+                    {h.name}
+                  </Text>
+                  <Text style={[styles.houseCount, on && { color: colors.onDark }]}>{h.total}</Text>
+                  <Text style={[typography.caption, on && { color: colors.onDarkMuted }]} numberOfLines={1}>
+                    {h.residential == null ? "Needs a house" : `${h.residential} residential`}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
         </>
       }
       ListEmptyComponent={
@@ -883,12 +1343,14 @@ function StudentsTab({ bottomInset, query, onScroll }) {
       }
       renderSectionHeader={({ section }) => (
         <Text style={styles.classHeader}>
-          {groupBy === "house" ? section.title : `Class ${section.title}`} ·{" "}
+          {groupBy === "house" && !house ? section.title : `Class ${section.title}`} ·{" "}
           {section.data.length}
         </Text>
       )}
       renderItem={({ item }) => <StudentRow student={item} onOpen={showStudent} />}
     />
+    <AddStudentSheet visible={adding} onClose={() => setAdding(false)} onAdded={reload} />
+    </>
   );
 }
 
@@ -923,6 +1385,26 @@ const StudentRow = React.memo(function StudentRow({ student, onOpen }) {
 const LEAD = 38;
 
 const styles = StyleSheet.create({
+  houseGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  houseCard: {
+    ...surface.card,
+    flexBasis: "47%",
+    flexGrow: 1,
+    borderRadius: radius.md,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.border,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md - 4,
+    gap: 1,
+  },
+  houseCardOn: { backgroundColor: colors.primary },
+  houseName: { ...typography.h3 },
+  houseCount: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 28, color: colors.text, ...numeric },
   groupBar: {
     flexDirection: "row",
     gap: spacing.xs,
@@ -938,6 +1420,45 @@ const styles = StyleSheet.create({
   groupTabText: { ...typography.caption, color: colors.textMuted },
   groupTabTextOn: { color: colors.white, fontWeight: "600" },
   requestAvatar: { backgroundColor: colors.cardAlt },
+  manageRow: {
+    ...surface.card,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md - 4,
+    borderRadius: radius.md,
+    minHeight: layout.row - 8,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md - 4,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  formerRow: { opacity: 0.8 },
+  fieldLabel: { ...typography.label, marginBottom: spacing.xs + 2 },
+  input: {
+    ...surface.sunken,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md - 2,
+    minHeight: layout.touch,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  fieldProblem: { ...typography.caption, color: colors.danger, marginTop: spacing.xs },
+  codeBox: {
+    ...surface.sunken,
+    borderRadius: radius.md,
+    paddingVertical: spacing.lg,
+    alignItems: "center",
+  },
+  codeText: {
+    fontFamily: fonts.bold,
+    fontSize: 32,
+    lineHeight: 40,
+    letterSpacing: 4,
+    color: colors.primary,
+    ...numeric,
+  },
   requestActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   requestBtn: {
     width: 34,
