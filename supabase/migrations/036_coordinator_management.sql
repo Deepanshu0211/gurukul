@@ -183,7 +183,23 @@ declare
   partitioned boolean := exists (select 1 from duties where day = p_day and class_key = '*|VEDIC');
   fallback   text := (select id from staff where active and role = 'coordinator' order by id limit 1);
   n          int;
+  outside    boolean := false;
 begin
+  -- The pilot only takes registers inside its trial window (`app_env`), and
+  -- its builtin generator returns early outside it. The groups follow the
+  -- same rule; a database without `app_env` (mock) has no window.
+  if to_regclass('public.app_env') is not null then
+    execute $q$
+      select coalesce(
+        $1 < (select value::date from app_env where key = 'trial_start')
+        or $1 > (select value::date from app_env where key = 'trial_end'), false)
+    $q$ into outside using p_day;
+    if outside then
+      classes := false;
+      hostel  := false;
+    end if;
+  end if;
+
   -- Withdraw what no longer applies: a group switched off, moved off this
   -- weekday, or whose checkpoint was switched off. Pending and unmarked only —
   -- nothing in this file ever deletes a register somebody has filled in.
