@@ -45,6 +45,17 @@ export const givenName = (fullName) => {
   return name.split(/\s+/)[0];
 };
 
+/**
+ * The register stores names in ALL CAPS, which runs off narrow cards.
+ * "KEERTIVARDHAN SINGH" → "Keertivardhan Singh". Names already in mixed case
+ * are left alone so a deliberate "McDonald" or "D'Souza" is not flattened.
+ */
+export const displayName = (name) => {
+  const n = (name || "").trim();
+  if (n !== n.toUpperCase()) return n;
+  return n.toLowerCase().replace(/(^|[\s'.-])(\p{L})/gu, (_, sep, ch) => sep + ch.toUpperCase());
+};
+
 /** Single uppercase initial for avatars, safe on empty/odd names. */
 export const initial = (name) => (name || "?").trim().charAt(0).toUpperCase() || "?";
 

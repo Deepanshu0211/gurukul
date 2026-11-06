@@ -41,7 +41,7 @@ import {
 import { useNow } from "../lib/clock";
 import { dutyStatus, DUTY_STATUS, summarise } from "../domain/duties";
 import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domain/alerts";
-import { fmtTime, fmtClock, plural, weekdayName, todayISO, fmtDay } from "../utils/format";
+import { fmtTime, fmtClock, plural, weekdayName, todayISO, fmtDay, displayName } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useAuth } from "../context/AuthContext";
 import { useResolutions, resolveAlert } from "../lib/alerts";
@@ -479,7 +479,7 @@ function AlertCard({ alert, onResolve }) {
     <View style={[styles.alertCard, urgent && styles.alertCardUrgent]}>
       <View style={styles.alertTop}>
         <Text style={styles.alertName} numberOfLines={1}>
-          {alert.student.name}
+          {displayName(alert.student.name)}
         </Text>
         {urgent && (
           <View style={styles.urgentTag}>
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
   },
   alertCardUrgent: { borderColor: colors.danger, borderWidth: 1.5, backgroundColor: colors.dangerBg },
   alertTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: 2 },
-  alertName: { ...typography.h1, fontSize: 18, lineHeight: 24, flexShrink: 1 },
+  alertName: { ...typography.h1, fontSize: 16, lineHeight: 21, flexShrink: 1 },
   urgentTag: {
     backgroundColor: colors.danger,
     borderRadius: radius.pill,
