@@ -24,3 +24,15 @@ test('regrouped Vedic report preserves all source teachers and submission times'
  assert.ok(html.includes('6:30 am / 6:40 am'));
  assert.ok(html.includes('>Vedic</td>'));
 });
+
+test('unsubmitted classes print in order as yet to submit with dashes',()=>{
+ const pending={day:'2026-10-04',group:'Class 7',name:'Physical Activity',startMin:375,pending:true,takenBy:null,submittedAt:null,submittedTimes:[],strength:null,present:null,absent:null,elsewhere:null};
+ const report={...data,checkpoints:[...checkpoints.filter(c=>c.group!=='Class 7'),pending]};
+ const html=exportsHtml.headcountReportHtml(report);
+ const labels=[...html.matchAll(/<td[^>]*>Class (\d+)<\/td>/g)].map(m=>Number(m[1]));
+ assert.deepEqual(labels,[3,4,5,6,7,8,9,10,11,12]);
+ const row=html.split('<tr>').find(r=>r.includes('>Class 7<'));
+ assert.ok(row.includes('Yet to submit'));
+ assert.equal((row.match(/>—</g)||[]).length,5);
+ assert.ok(!row.includes('null'));
+});

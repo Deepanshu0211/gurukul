@@ -305,6 +305,32 @@ export async function fetchHeadcountReport(from, to) {
     elsewhere: Number(r.elsewhere),
   }));
 
+  // The view is built from saved marks, so a class nobody submitted has no
+  // rows in it at all. The office asked for every class on the sheet either
+  // way, so the still-pending duties are added as "yet to submit" rows with no
+  // numbers — a blank there is the point, not a zero.
+  const pending = await fetchAll(() => supabase.from("duties")
+    .select("id, day, group_label, checkpoints(name, start_min)")
+    .gte("day", from).lte("day", to).eq("state", "pending")
+    .order("day").order("id"));
+  for (const d of pending || []) {
+    checkpoints.push({
+      day: d.day,
+      dutyId: d.id,
+      pending: true,
+      takenBy: null,
+      submittedAt: null,
+      submittedTimes: [],
+      name: d.checkpoints?.name || "",
+      startMin: d.checkpoints?.start_min ?? 0,
+      group: d.group_label,
+      strength: null,
+      present: null,
+      absent: null,
+      elsewhere: null,
+    });
+  }
+
   const exceptions = await fetchAll(() =>
     detail()
       .gte("day", from)
@@ -315,7 +341,7 @@ export async function fetchHeadcountReport(from, to) {
       .order("roll_no")
   );
 
-  const totals = checkpoints.reduce(
+  const totals = checkpoints.filter((c) => !c.pending).reduce(
     (t, c) => ({
       strength: t.strength + c.strength,
       present: t.present + c.present,

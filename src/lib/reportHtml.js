@@ -526,7 +526,17 @@ export function headcountReportHtml(
       (a.startMin - b.startMin) ||
       String(a.group || "").localeCompare(String(b.group || ""), undefined, { numeric: true }))
     .map(
-      (c, i) => `<tr>
+      (c, i) => c.pending ? `<tr>
+        ${multiDay ? `<td>${esc(fmtDay(c.day))}</td>` : `<td class="c"><b>${i + 1}</b></td>`}
+        ${multiActivity ? `<td class="class-cell">${esc(c.name)}</td>` : ""}
+        <td class="class-cell"><i>Yet to submit</i></td>
+        <td class="class-cell">—</td>
+        <td class="class-cell">${esc(c.group)}</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+      </tr>` : `<tr>
         ${multiDay ? `<td>${esc(fmtDay(c.day))}</td>` : `<td class="c"><b>${i + 1}</b></td>`}
         ${multiActivity ? `<td class="class-cell">${esc(c.name)}</td>` : ""}
         <td class="class-cell">${esc(c.takenBy || "Not submitted")}</td>
