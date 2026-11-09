@@ -38,6 +38,7 @@ export const fromRow = (r) => ({
   staffId: r.staff_id,
   pilotWindow: !!r.pilot_window,
   state: r.state,
+  remark: r.remark || null,
   submittedBy: r.submitted_by || null,
   submittedAt: r.submitted_at || null,
   correctedBy: r.corrected_by || null,
@@ -166,6 +167,15 @@ export async function fetchAttendance(dutyId) {
  * @returns { marked, changed, absent } â€” `changed` is 0 when a correction
  *          altered nothing, which the marking screen uses to skip the write.
  */
+/**
+ * The optional note a teacher writes at the final submit step (042). Saved
+ * after the register itself, so a failed note never costs the marks.
+ */
+export async function saveDutyRemark(dutyId, remark) {
+  const { error } = await supabase.rpc("set_duty_remark", { p_duty_id: dutyId, p_remark: remark });
+  if (error) throw new Error(error.message);
+}
+
 export async function submitDuty({ dutyId, students, statuses }) {
   const marks = students.map((s) => ({
     admission_no: s.adm,

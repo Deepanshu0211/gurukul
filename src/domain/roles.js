@@ -132,15 +132,18 @@ export const canDeclareHoliday = (role) =>
  *
  * Reception's whole job. Coordinator and admin are included because the desk
  * is not staffed at 10pm and somebody senior has to be able to sign a child
- * back in — not because this is an oversight function. Management is excluded
- * on purpose: this records a child physically leaving the campus, and the
- * person who writes it should be the person who watched them go.
+ * back in — not because this is an oversight function. Teachers were added at
+ * the school's request (migration 039): a teacher is often the one handing a
+ * child to family. Management is excluded on purpose: this records a child
+ * physically leaving the campus, and the person who writes it should be the
+ * person who watched them go.
  *
- * `sign_student_out` and `sign_student_in` in migration 034 check the same
- * three roles; this decides who is offered the screen.
+ * `sign_student_out` and `sign_student_in` (034, widened in 039) check the
+ * same four roles; this decides who is offered the screen.
  */
 export const canWorkGate = (role) =>
-  role === ROLES.RECEPTION || role === ROLES.COORDINATOR || role === ROLES.ADMIN;
+  role === ROLES.RECEPTION || role === ROLES.TEACHER ||
+  role === ROLES.COORDINATOR || role === ROLES.ADMIN;
 
 /** Whether the Duties list should default to "my duties only". */
 export const defaultsToOwnDuties = (role) => role === ROLES.TEACHER;

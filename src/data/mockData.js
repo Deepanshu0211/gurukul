@@ -57,6 +57,9 @@ export const STATUS_META = {
   O: { label: "Outing", color: "#3E4F4D" },
   G: { label: "Gita Nagari", color: "#3E4F4D" },
   Y: { label: "Self study", color: "#3E4F4D" },
+  // Your day in Vrindavan — the school's day programme in Vrindavan. Counted
+  // like Activity on every sheet (039), and marked per checkpoint, not carried.
+  D: { label: "YDIV", color: "#3E4F4D" },
 };
 export const SPANNING = ["H", "S", "O", "G"];
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -25,8 +25,7 @@ import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import { haptics } from "../lib/haptics";
-import { fmtDay, fmtTime, plural, todayISO } from "../utils/format";
-import { useNow } from "../lib/clock";
+import { fmtDay, plural, todayISO } from "../utils/format";
 import { describeError } from "../lib/errors";
 import { attendanceStudentLabel } from "../domain/classGroups";
 
@@ -74,6 +73,7 @@ const STATUS_HINT = {
   O: "On an approved outing",
   G: "At Gita Nagari",
   Y: "In supervised self study",
+  D: "Your day in Vrindavan",
 };
 
 export default function DutyMarkingScreen({ route, navigation }) {
@@ -97,9 +97,9 @@ export default function DutyMarkingScreen({ route, navigation }) {
   // stripped-down form that hides the rest of the group.
   const submitted = duty?.state === "submitted";
   const isOverride = submitted && canOverride(user?.role);
-  const now = useNow();
-  const outsideWindow = !!duty?.pilotWindow && !isOverride &&
-    (duty.day !== todayISO() || now < duty.start || now >= duty.end);
+  // The school asked that teachers can mark early or late, so the clock no
+  // longer locks a register (041). Only a future day stays closed.
+  const outsideWindow = !!duty?.pilotWindow && !isOverride && duty.day > todayISO();
   const readOnly = (submitted && !isOverride) || outsideWindow;
 
   const [statuses, setStatuses] = useState(existing ? existing.statuses : {});
@@ -120,6 +120,11 @@ export default function DutyMarkingScreen({ route, navigation }) {
   const [query, setQuery] = useState("");
   // Which student's status sheet is open — null when closed.
   const [sheetFor, setSheetFor] = useState(null);
+  // The "mark everyone" sheet.
+  const [bulkOpen, setBulkOpen] = useState(false);
+  // The final submit step, and the optional note written there (042).
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [remark, setRemark] = useState("");
   // Measured rather than hardcoded: the footer is two rows tall when the
   // Submit button is showing and one when the duty is locked, and a fixed
   // padding left the last student either buried or floating.
@@ -222,6 +227,48 @@ export default function DutyMarkingScreen({ route, navigation }) {
       });
     },
     [locked, dialog]
+  );
+
+  /**
+   * One status for the whole group — a class away at YDIV, or everyone at an
+   * activity. Children signed out at the gate are skipped: their mark belongs
+   * to the gate register. Marks the teacher already made are only replaced
+   * after she says so.
+   */
+  const bulkTargets = useMemo(() => students.filter((s) => !locked[s.id]), [students, locked]);
+  const applyAll = useCallback(
+    (code) => {
+      setBulkOpen(false);
+      const label = code === "P" ? "Present" : STATUS_META[code]?.label || code;
+      const run = () => {
+        setStatuses((prev) => {
+          const next = { ...prev };
+          bulkTargets.forEach((s) => {
+            if (code === "P") delete next[s.id];
+            else next[s.id] = code;
+          });
+          return next;
+        });
+        if (code === "A") haptics.warn();
+        else haptics.select();
+        toast.show(`${plural(bulkTargets.length, "student")} marked ${label}`);
+      };
+      const replacing = bulkTargets.filter((s) => {
+        const cur = statusesRef.current[s.id];
+        return cur && cur !== code;
+      }).length;
+      if (!replacing) return run();
+      dialog.confirm({
+        icon: "people-outline",
+        title: `Mark everyone ${label}?`,
+        message: `This replaces ${plural(replacing, "mark")} you have already made.`,
+        cancelLabel: "Keep my marks",
+        confirmLabel: `Mark all ${label}`,
+        destructive: code === "A",
+        onConfirm: run,
+      });
+    },
+    [bulkTargets, dialog, toast]
   );
 
   const searchable = students.length > SEARCH_THRESHOLD;
@@ -340,7 +387,8 @@ export default function DutyMarkingScreen({ route, navigation }) {
       // `effective`, not `statuses` — the gate register's marks go up with the
       // teacher's own. The database would coerce them anyway (034); sending
       // them means what is stored matches what she was looking at.
-      await submitDuty(dutyId, effective, user.id);
+      const { remarkSaved = true } = (await submitDuty(dutyId, effective, user.id, remark)) || {};
+      setSubmitOpen(false);
       haptics.success();
       // A toast, not a dialog. Submitting is the last step of a round and the
       // teacher is already walking to the next checkpoint — a modal they have
@@ -348,7 +396,8 @@ export default function DutyMarkingScreen({ route, navigation }) {
       toast.show(
         `${duty.checkpoint} submitted${coveringFor ? ` for ${coveringFor}` : ""} · ${present}/${
           students.length
-        } present${absent > 0 ? `, ${absent} absent` : ""}`
+        } present${absent > 0 ? `, ${absent} absent` : ""}${remarkSaved ? "" : " · remark not saved"}`,
+        remarkSaved ? undefined : { tone: "danger" }
       );
       navigation.goBack();
     } catch (e) {
@@ -370,38 +419,12 @@ export default function DutyMarkingScreen({ route, navigation }) {
     }
   };
 
+  // Every submit goes through one sheet: the count, any warning that used to
+  // be its own dialog, and a box for an optional remark. One deliberate stop
+  // instead of a stack of them.
   const confirmSubmit = () => {
-    // Submitting someone else's checkpoint is worth one deliberate stop, even
-    // with nobody absent: it is the one case where a teacher could be looking
-    // at a class list that is not the one in front of them.
-    if (coveringFor && absent === 0) {
-      dialog.confirm({
-        icon: "people-outline",
-        title: `Submit ${duty.checkpoint} for ${coveringFor}?`,
-        message: `${students.length} students, all present. This closes the checkpoint and is recorded as submitted by you.`,
-        cancelLabel: "Review",
-        confirmLabel: "Submit",
-        onConfirm: handleSubmit,
-      });
-      return;
-    }
-    if (absent > 0) {
-      // This dialog exists because someone may be about to submit a mis-tap;
-      // a physical interruption reinforces "stop and read".
-      haptics.warn();
-      dialog.confirm({
-        icon: "warning-outline",
-        title: `${absent} student${absent === 1 ? "" : "s"} marked absent`,
-        message:
-          "Absent means the child is unaccounted for, and this will raise a safety alert to the Principal. Submit anyway?",
-        cancelLabel: "Review",
-        confirmLabel: "Submit",
-        destructive: true,
-        onConfirm: handleSubmit,
-      });
-    } else {
-      handleSubmit();
-    }
+    if (absent > 0) haptics.warn();
+    setSubmitOpen(true);
   };
 
   return (
@@ -441,7 +464,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
         {/* One line that answers "where am I up to?" without doing arithmetic
             against the footer tallies. */}
         <View style={styles.summary}>
-          <Text style={styles.summaryText}>
+          <Text style={[styles.summaryText, styles.summaryGrow]}>
             <Text style={styles.summaryStrong}>{students.length}</Text> students
             {anyLocked > 0 ? (
               <Text>
@@ -464,17 +487,26 @@ export default function DutyMarkingScreen({ route, navigation }) {
               ` · ${anyLocked ? "everyone else" : "everyone"} present unless you say otherwise`
             )}
           </Text>
+          {!readOnly && bulkTargets.length > 1 && (
+            <TouchableOpacity
+              onPress={() => setBulkOpen(true)}
+              style={styles.bulkBtn}
+              hitSlop={layout.hitSlop}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Mark everyone in this group"
+            >
+              <Ionicons name="checkmark-done" size={14} color={colors.text} />
+              <Text style={styles.bulkText}>Mark all</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {outsideWindow && (
           <View style={styles.overrideBanner}>
             <Ionicons name="time-outline" size={16} color={colors.warning} />
             <Text style={styles.overrideText}>
-              {duty.day === todayISO()
-                ? `Marking opens at ${fmtTime(duty.start)} and closes at midnight.`
-                : duty.day > todayISO()
-                  ? `Marking opens ${fmtDay(duty.day)} at ${fmtTime(duty.start)}.`
-                  : "This day's marking window has closed. Its attendance is preserved in Records."}
+              {`Marking opens on ${fmtDay(duty.day)}.`}
             </Text>
           </View>
         )}
@@ -486,6 +518,15 @@ export default function DutyMarkingScreen({ route, navigation }) {
               This checkpoint has already been submitted{markedBy ? " by " : ""}
               {markedBy ? <Text style={styles.overrideName}>{markedBy}</Text> : null}. Any change
               you make will be recorded in the audit log and attributed to you.
+            </Text>
+          </View>
+        )}
+
+        {submitted && !!duty.remark && (
+          <View style={[styles.sheetNote, styles.remarkShown]}>
+            <Ionicons name="chatbox-ellipses-outline" size={16} color={colors.text} />
+            <Text style={styles.sheetNoteText} numberOfLines={3}>
+              {duty.remark}
             </Text>
           </View>
         )}
@@ -622,6 +663,73 @@ export default function DutyMarkingScreen({ route, navigation }) {
               hint={STATUS_HINT[k] || "Accounted for"}
               active={sheetFor && statuses[sheetFor.id] === k}
               onPress={() => setStatus(sheetFor.id, k)}
+            />
+          ))}
+      </BottomSheet>
+
+      <BottomSheet
+        visible={submitOpen}
+        onClose={() => !saving && setSubmitOpen(false)}
+        title={`Submit ${duty.checkpoint}`}
+        subtitle={`${present}/${students.length} present${elsewhere ? ` · ${elsewhere} elsewhere` : ""}${absent ? ` · ${absent} absent` : ""}`}
+      >
+        {absent > 0 && (
+          <View style={[styles.sheetNote, styles.sheetNoteDanger]}>
+            <Ionicons name="warning-outline" size={16} color={colors.danger} />
+            <Text style={[styles.sheetNoteText, { color: colors.danger }]}>
+              {plural(absent, "student")} marked absent — unaccounted for. This raises a safety alert to the Principal.
+            </Text>
+          </View>
+        )}
+        {!!coveringFor && (
+          <View style={styles.sheetNote}>
+            <Ionicons name="people-outline" size={16} color={colors.text} />
+            <Text style={styles.sheetNoteText}>
+              Submitting for {coveringFor}. The record will show you submitted it.
+            </Text>
+          </View>
+        )}
+        <Text style={styles.remarkLabel}>Remark (optional)</Text>
+        <TextInput
+          value={remark}
+          onChangeText={setRemark}
+          placeholder="Anything the office should know"
+          placeholderTextColor={colors.icon}
+          style={styles.remarkInput}
+          multiline
+          maxLength={500}
+          textAlignVertical="top"
+          accessibilityLabel="Remark for this register"
+        />
+        <PrimaryButton
+          title={saving ? "Submitting…" : "Submit"}
+          onPress={handleSubmit}
+          disabled={saving}
+          style={styles.sheetSubmit}
+        />
+      </BottomSheet>
+
+      <BottomSheet
+        visible={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        title="Mark everyone"
+        subtitle={`${plural(bulkTargets.length, "student")}${anyLocked ? " · gate sign-outs stay as they are" : ""}`}
+      >
+        <SheetOption label="Present" hint="Clear every mark" onPress={() => applyAll("P")} />
+        <SheetOption
+          label="Absent"
+          hint="Whole group unaccounted — raises safety alerts on submit"
+          danger
+          onPress={() => applyAll("A")}
+        />
+        {Object.entries(STATUS_META)
+          .filter(([k]) => k !== "A")
+          .map(([k, v]) => (
+            <SheetOption
+              key={k}
+              label={v.label}
+              hint={STATUS_HINT[k] || "Accounted for"}
+              onPress={() => applyAll(k)}
             />
           ))}
       </BottomSheet>
@@ -825,7 +933,55 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
   },
 
-  summary: { paddingHorizontal: layout.gutter, paddingBottom: spacing.sm + 2 },
+  summary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: layout.gutter,
+    paddingBottom: spacing.sm + 2,
+  },
+  summaryGrow: { flex: 1, minWidth: 0 },
+  // Quiet on purpose: a bulk action that looks like the main control would
+  // get tapped by habit. Same outline language as the status chips.
+  bulkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md - 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    flexShrink: 0,
+  },
+  sheetNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.sm + 2,
+    borderRadius: radius.sm,
+    backgroundColor: colors.cardAlt,
+    marginBottom: spacing.sm,
+  },
+  sheetNoteDanger: { backgroundColor: colors.dangerBg },
+  sheetNoteText: { flex: 1, fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.text },
+  remarkLabel: { ...typography.label, marginTop: spacing.sm, marginBottom: spacing.xs + 2 },
+  remarkInput: {
+    ...surface.card,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md - 2,
+    paddingTop: spacing.sm + 2,
+    paddingBottom: spacing.sm + 2,
+    minHeight: 88,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors.text,
+  },
+  sheetSubmit: { marginTop: spacing.md },
+  remarkShown: { marginHorizontal: layout.gutter, marginBottom: spacing.sm + 2 },
+  bulkText: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, color: colors.text },
   summaryText: { ...typography.caption, fontSize: 13, lineHeight: 18 },
   summaryStrong: { fontFamily: fonts.bold, color: colors.text },
 
