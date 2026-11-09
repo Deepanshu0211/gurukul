@@ -28,6 +28,7 @@ import { ToastProvider } from "./src/components/Toast";
 import ErrorBoundary from "./src/components/ErrorBoundary";
 import ConfigError from "./src/components/ConfigError";
 import DutyReminders from "./src/components/DutyReminders";
+import { NotificationsProvider } from "./src/context/NotificationsContext";
 import RootNavigator from "./src/navigation/RootNavigator";
 
 // Hold the native splash until the fonts are ready, so text never flashes
@@ -124,7 +125,12 @@ export default function App() {
                         both providers to see who is signed in and what they
                         are down to mark. */}
                     <DutyReminders />
-                    <RootNavigator />
+                    {/* Gate sign-out/in notices for coordinator, MOD and
+                        admin — live toast + phone notification, and the
+                        inbox behind Account → Notifications. */}
+                    <NotificationsProvider>
+                      <RootNavigator />
+                    </NotificationsProvider>
                   </ToastProvider>
                 </DialogProvider>
               </SchoolDataProvider>

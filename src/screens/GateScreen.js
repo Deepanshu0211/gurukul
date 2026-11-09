@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -63,7 +63,7 @@ const plusDays = (n) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-export default function GateScreen() {
+export default function GateScreen({ route, navigation }) {
   const { user } = useAuth();
   const { students, openLeaves, signStudentOut, signStudentIn, staffName, loading, error, refresh } =
     useSchoolData();
@@ -84,6 +84,13 @@ export default function GateScreen() {
   const [busy, setBusy] = useState(false);
 
   const allowed = canWorkGate(user?.role);
+  // Pushed from the marking screen's "Sign out at the gate" with a student
+  // already chosen: open their sign-out sheet straight away.
+  const presetAdm = route?.params?.signOutAdm || null;
+  const canGoBack = !!navigation?.canGoBack?.();
+  // Remembered past the param being cleared, so finishing the sign-out goes
+  // back to the half-marked register it came from.
+  const cameFromMarking = useRef(false);
 
   const away = useMemo(() => {
     const rows = Object.values(openLeaves);
@@ -125,6 +132,18 @@ export default function GateScreen() {
     setBack("none");
   }, []);
 
+  useEffect(() => {
+    if (!presetAdm || !allowed) return;
+    const s = students.find((x) => x.adm === presetAdm);
+    if (s && !openLeaves[presetAdm]) {
+      cameFromMarking.current = true;
+      openSignOut(s);
+    }
+    // Once only — clear it so returning to this screen does not reopen it.
+    navigation?.setParams?.({ signOutAdm: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetAdm, students.length]);
+
   const closeSignOut = () => {
     if (busy) return;
     setSigningOut(null);
@@ -145,6 +164,10 @@ export default function GateScreen() {
       haptics.success();
       setSigningOut(null);
       setQuery("");
+      if (cameFromMarking.current) {
+        cameFromMarking.current = false;
+        navigation?.goBack?.();
+      }
       toast.show(
         `${student.name} signed out · ${STATUS_META[status]?.label || status} at every checkpoint until they are back`
       );
@@ -221,7 +244,7 @@ export default function GateScreen() {
           <EmptyState
             icon="lock-closed-outline"
             title="Not your desk"
-            body="Signing students in and out of the campus is done by reception, a coordinator or an administrator."
+            body="Signing students in and out of the campus is done by reception, a teacher, a coordinator or an administrator."
           />
         </View>
       </SafeAreaView>
@@ -231,6 +254,18 @@ export default function GateScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["left", "right"]}>
       <View style={[styles.head, { paddingTop: topInset }]}>
+        {canGoBack && (
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={layout.hitSlop}
+            activeOpacity={0.7}
+            style={styles.back}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="arrow-back" size={20} color={colors.text} />
+          </TouchableOpacity>
+        )}
         <ScreenHeader
           title="Gate"
           subtitle={
@@ -462,6 +497,17 @@ export default function GateScreen() {
 }
 
 const styles = StyleSheet.create({
+  back: {
+    width: layout.touch,
+    height: layout.touch,
+    borderRadius: radius.pill,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.sm,
+  },
   screen: { flex: 1, backgroundColor: colors.bg },
   head: { paddingHorizontal: layout.gutter, paddingBottom: spacing.sm },
   searchWrap: { paddingHorizontal: layout.gutter, paddingBottom: spacing.sm },

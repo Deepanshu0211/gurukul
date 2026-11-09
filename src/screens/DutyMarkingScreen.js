@@ -20,7 +20,7 @@ import SearchField from "../components/SearchField";
 import { useScreenTopInset } from "../navigation/tabBarInset";
 import { STATUS_META } from "../data/mockData";
 import { useAuth } from "../context/AuthContext";
-import { canOverride } from "../domain/roles";
+import { canOverride, canWorkGate } from "../domain/roles";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
@@ -654,6 +654,22 @@ export default function DutyMarkingScreen({ route, navigation }) {
           active={sheetFor && statuses[sheetFor.id] === "A"}
           onPress={() => setStatus(sheetFor.id, "A")}
         />
+        {/* Going home is a gate event, not a mark: signing out carries Home
+            to every later checkpoint and tells the coordinator, MOD and
+            Principal (047). Offered only where the gate is the reader's. */}
+        {sheetFor && canWorkGate(user?.role) && !leaveFor(sheetFor.id) && (
+          <SheetOption
+            icon="exit-outline"
+            label="Sign out at the gate"
+            hint="Going home or leaving campus — carries to every later checkpoint, coordinators are notified"
+            trailing={<Ionicons name="chevron-forward" size={18} color={colors.icon} />}
+            onPress={() => {
+              const adm = sheetFor.id;
+              setSheetFor(null);
+              navigation.navigate("Gate", { signOutAdm: adm });
+            }}
+          />
+        )}
         {Object.entries(STATUS_META)
           .filter(([k]) => k !== "A")
           .map(([k, v]) => (

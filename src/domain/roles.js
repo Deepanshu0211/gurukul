@@ -145,6 +145,16 @@ export const canWorkGate = (role) =>
   role === ROLES.RECEPTION || role === ROLES.TEACHER ||
   role === ROLES.COORDINATOR || role === ROLES.ADMIN;
 
+/**
+ * Told about every gate sign-out and sign-in (migration 047), and given the
+ * Notifications inbox to read back any they missed.
+ *
+ * Coordinator, MOD/management and admin — the people a missing child
+ * escalates to. The `notifications_read` policy enforces the same three.
+ */
+export const receivesGateNotices = (role) =>
+  role === ROLES.COORDINATOR || role === ROLES.MANAGEMENT || role === ROLES.ADMIN;
+
 /** Whether the Duties list should default to "my duties only". */
 export const defaultsToOwnDuties = (role) => role === ROLES.TEACHER;
 

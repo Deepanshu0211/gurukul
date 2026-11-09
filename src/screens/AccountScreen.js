@@ -35,6 +35,7 @@ import appConfig from "../../app.json";
 import { describeError } from "../lib/errors";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
+import { useNotifications } from "../context/NotificationsContext";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
 import Avatar from "../components/Avatar";
@@ -97,6 +98,7 @@ const ROW_INSET = spacing.md + ICON + spacing.sm;
 
 export default function AccountScreen({ navigation }) {
   const { user, logout, updateUser } = useAuth();
+  const notices = useNotifications();
   const { duties, records, staff } = useSchoolData();
   const dialog = useDialog();
   const toast = useToast();
@@ -518,6 +520,17 @@ export default function AccountScreen({ navigation }) {
 
         <SectionLabel>Records</SectionLabel>
         <View style={styles.group}>
+          {notices.enabled && (
+            <>
+              <ActionRow
+                icon="notifications-outline"
+                label="Notifications — gate sign-outs & sign-ins"
+                badge={notices.unread}
+                onPress={() => navigation.navigate("Notifications")}
+              />
+              <Divider inset={ROW_INSET} />
+            </>
+          )}
           <ActionRow
             icon="receipt-outline"
             label="Activity log"
@@ -777,19 +790,24 @@ function DetailRow({ icon, label, value, locked, onEdit }) {
   );
 }
 
-function ActionRow({ icon, label, onPress }) {
+function ActionRow({ icon, label, onPress, badge }) {
   return (
     <TouchableOpacity
       style={styles.row}
       onPress={onPress}
       activeOpacity={0.6}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
     >
       <Ionicons name={icon} size={ICON} color={colors.textMuted} />
       <View style={styles.rowMain}>
         <Text style={styles.rowValue}>{label}</Text>
       </View>
+      {!!badge && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{badge > 99 ? "99+" : badge}</Text>
+        </View>
+      )}
       <Chevron />
     </TouchableOpacity>
   );
@@ -797,6 +815,17 @@ function ActionRow({ icon, label, onPress }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  badge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    backgroundColor: colors.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: spacing.xs,
+  },
+  badgeText: { fontFamily: fonts.bold, fontSize: 11, lineHeight: 14, color: colors.white },
   content: { paddingHorizontal: layout.gutter },
 
   profileCard: { alignItems: "center", paddingVertical: spacing.md, gap: spacing.xs + 2 },

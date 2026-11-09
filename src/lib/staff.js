@@ -16,6 +16,9 @@ export const fromRow = (r) =>
     classKey: r.class_key || null,
     classLabel: r.class_label || null,
     active: r.active !== false,
+    // Set when a coordinator gave them a temporary password (048). The app
+    // stops at the "choose your own password" screen until it is cleared.
+    mustChangePassword: !!r.must_change_password,
   };
 
 /**
@@ -115,3 +118,72 @@ export async function setStaffActive(staffId, active, replacementId = null) {
   if (error) throw error;
   return fromRow(Array.isArray(data) ? data[0] : data);
 }
+
+/**
+ * Add a staff member AND create their login with a temporary password
+ * (migration 048): the school default `Initial@123`, or a random one.
+ * Returns `{ staffId, password }` so the coordinator can hand it over.
+ */
+export async function addStaffMemberWithLogin({
+  name, email, phone, role = "teacher", classKey = null, random = false,
+}) {
+  const { data, error } = await supabase.rpc("add_staff_member_with_login", {
+    p_name: name,
+    p_email: email,
+    p_phone: phone || null,
+    p_role: role,
+    p_class_key: classKey || null,
+    p_random: !!random,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return { staffId: row.staff_id, password: row.temp_password };
+}
+
+/** Create or reset a login with a temporary password. Returns the password. */
+export async function setTemporaryPassword(staffId, random = false) {
+  const { data, error } = await supabase.rpc("set_temporary_password", {
+    p_staff: staffId,
+    p_random: !!random,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Login state for every staff member this coordinator manages, as
+ * `{ [staffId]: { hasLogin, mustChange, tempPassword, kind, issuedAt } }`.
+ * `tempPassword` is null once the person has chosen their own — nobody can
+ * read that one. Empty for a server without 048.
+ */
+export async function fetchStaffLogins() {
+  const { data, error } = await supabase.rpc("list_staff_logins");
+  if (error) return {};
+  const out = {};
+  (data || []).forEach((r) => {
+    out[r.staff_id] = {
+      hasLogin: !!r.has_login,
+      mustChange: !!r.must_change,
+      tempPassword: r.temp_password || null,
+      kind: r.kind || null,
+      issuedAt: r.issued_at || null,
+    };
+  });
+  return out;
+}
+
+/** The signed-in person replaces the temporary password they were given. */
+export async function changeMyTemporaryPassword(password) {
+  const { error } = await supabase.rpc("change_my_temporary_password", { p_password: password });
+  if (error) throw error;
+}
+
+/** The text a coordinator hands over — one block, easy to paste into a chat. */
+export const loginDetailsText = ({ name, email, password }) =>
+  `BG-SAAR login for ${name}
+` +
+  `ID: ${email}
+` +
+  `Password: ${password}
+` +
+  `You will be asked to set your own password the first time you sign in.`;

@@ -165,6 +165,38 @@ async function ensureChannel() {
 }
 
 /**
+ * Show a notification on the phone right now — used for gate sign-out/in
+ * notices that arrive while the app is open or in the background. Silent
+ * no-op where notifications are unavailable (web, Expo Go) or not permitted;
+ * the in-app inbox still holds every notice.
+ */
+const GATE_CHANNEL_ID = "gate-notices";
+
+export async function showNoticeNow({ title, body }) {
+  const N = notifications();
+  if (!N) return;
+  try {
+    if (Platform.OS === "android") {
+      await N.setNotificationChannelAsync(GATE_CHANNEL_ID, {
+        name: "Gate sign-outs and sign-ins",
+        description: "A student signed out of, or back onto, the campus.",
+        importance: N.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: colors.primary,
+      });
+    }
+    const perm = await N.getPermissionsAsync();
+    if (!perm.granted) return;
+    await N.scheduleNotificationAsync({
+      content: { title, body },
+      trigger: Platform.OS === "android" ? { channelId: GATE_CHANNEL_ID } : null,
+    });
+  } catch (e) {
+    console.warn("Could not show gate notice:", e?.message);
+  }
+}
+
+/**
  * Ask outright — the path behind the Account screen's toggle, where the user
  * has just said what they want and a dialog is expected.
  *

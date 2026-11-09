@@ -1,0 +1,361 @@
+CHANGES MADE ON 2026-11-10 (Expo app) — TO REPEAT IN THE WEB DASHBOARD
+=====================================================================
+
+Two features:
+  A. Gate notifications: every student sign-out / sign-in at the gate goes to
+     Coordinator, MOD (management) and Admin, with an inbox to catch up on
+     anything missed. Teachers can sign a student out from the marking screen.
+  B. Staff logins with a temporary password: a coordinator adds staff WITH a
+     working login (Initial@123 or random), can see/copy the ID + temporary
+     password, and the staff member must choose their own password on first
+     sign-in.
+
+---------------------------------------------------------------------
+0. WHAT THE WEB DASHBOARD DOES *NOT* NEED TO REDO
+---------------------------------------------------------------------
+Both features live mostly in the DATABASE (Supabase). The web dashboard uses
+the same Supabase project, so once the two migrations are run there, the web
+only needs the UI + client calls described below. Do NOT run the SQL twice
+per app — run it once per Supabase project (mock, then pilot).
+
+  supabase/migrations/047_gate_notifications.sql
+  supabase/migrations/048_staff_temporary_passwords.sql
+
+Status today:
+  - MOCK project (ofuvjzxjbgsityacukva): 033, 034, 039, 047, 048 applied
+    (033/034/039 were missing on mock and were needed for the gate).
+  - PILOT project (qpwfmdddvpmnqlwqrzke): NOT applied yet. Run 047, then 048,
+    in the SQL Editor. Both files are safe to re-run.
+
+Tests (run against mock with real logins):
+  node --test tests/gate-notifications.test.cjs
+  node --test tests/staff-temp-passwords.test.cjs
+
+
+=====================================================================
+A. GATE NOTIFICATIONS  (migration 047)
+=====================================================================
+
+A1. DATABASE (already done by 047)
+---------------------------------
+Table `notifications`
+  id            bigserial PK
+  kind          text  'student_out' | 'student_in'
+  admission_no  text  -> students
+  leave_id      bigint -> student_leave
+  status        text  (H / O / S / G — the leave status)
+  reason        text  (note typed at sign-out)
+  expected_back date
+  actor         text  -> staff.id   (who signed them out/in)
+  actor_role    text  (role of that person: teacher, reception, ...)
+  created_at    timestamptz
+
+Table `notification_reads`  (per person — one coordinator reading a notice
+does NOT hide it from the Principal)
+  notification_id, staff_id, read_at     PK (notification_id, staff_id)
+
+Rows are written ONLY by a trigger on `student_leave`:
+  - INSERT on student_leave            -> 'student_out'
+  - UPDATE where in_at goes null->set  -> 'student_in'
+  The person who did it gets an automatic read-mark (they aren't told about
+  their own action).
+
+Who can read: coordinator, management, admin (function
+`receives_notifications()`). Teachers / nurse / reception get ZERO rows, not
+an error. Nobody can insert/update/delete notifications from a client.
+
+RPC:
+  mark_notifications_read(p_ids bigint[] default null)
+     -> marks those ids read for the caller; NULL = mark ALL read.
+
+Realtime: `notifications` is added to the `supabase_realtime` publication.
+Realtime respects the read policy, so only the 3 roles receive events.
+
+Gate permissions (unchanged, from 039): sign_student_out / sign_student_in
+are allowed for reception, teacher, coordinator, admin.
+
+A2. CLIENT DATA LAYER  (Expo file: src/lib/notifications.js)
+-----------------------------------------------------------
+Fetch (newest first, with the caller's read flag):
+  supabase.from("notifications")
+    .select("*, notification_reads(staff_id)")
+    .order("created_at", { ascending: false })
+    .limit(200)
+  read = row.notification_reads.some(r => r.staff_id === myStaffId)
+  (notification_reads is filtered by RLS to your own rows anyway)
+
+Mark read:
+  supabase.rpc("mark_notifications_read", { p_ids: [id, ...] })   // some
+  supabase.rpc("mark_notifications_read", { p_ids: null })        // all
+
+Live:
+  supabase.channel("gate-notices-<random>")
+    .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications" },
+        payload => onInsert(payload.new))
+    .subscribe()
+  // unsubscribe: supabase.removeChannel(channel)
+
+If the table doesn't exist yet (server without 047), treat as empty list.
+
+A3. CLIENT STATE  (Expo: src/context/NotificationsContext.js)
+------------------------------------------------------------
+Only active when user.role is coordinator / management / admin
+(Expo: receivesGateNotices(role) in src/domain/roles.js).
+
+Provides: { enabled, items, unread, loading, error, refresh, markRead(ids),
+            markAllRead(), describe(n) }
+
+On start: fetch list, subscribe to realtime, and refetch when the app/tab
+regains focus (web: `visibilitychange` / window focus).
+
+When a realtime INSERT arrives:
+  - prepend it to the list (skip duplicates by id)
+  - if actor === me -> mark it read locally, no alert
+  - otherwise: show a toast, and (phone only) a system notification
+    (web: optionally the browser Notification API, if you want)
+  - refresh the open-leaves list so the Gate page / marking locks update
+    (Expo added `refreshLeaves()` to SchoolDataContext: refetch only
+    student_leave where in_at is null — NOT a full reload)
+
+Text of a notice — describe(n):
+  student name + class label come from the students register by admission_no
+  "by" = "you" if actor is me, else "<staff name> · <role label>"
+  student_out:
+     title: "<Name> (<Class>) signed out · <Status label e.g. Home>"
+     body:  "Signed out by <by> — <reason>"   (reason part only if present)
+  student_in:
+     title: "<Name> (<Class>) is back on campus"
+     body:  "Signed in by <by>"
+  extra line: time, and for sign-outs "expected back <date>" if set.
+
+A4. UI TO ADD
+-------------
+1) NOTIFICATIONS PAGE (Expo: src/screens/NotificationsScreen.js)
+   - Only for coordinator / management / admin; others see
+     "Gate notifications go to coordinators, the MOD and administrators."
+   - Header: "Notifications" + subtitle "<N> unread notices · every sign-out
+     and sign-in at the gate" or "You are all caught up."
+   - Filter chips: Unread (with count) | All | Signed out | Signed in.
+     Default = Unread if there are unread ones, else All.
+   - "Mark all read" link when unread > 0.
+   - List grouped by day (day heading), each row: icon (exit = out,
+     warning colour; enter = in, success colour), title (bold if unread),
+     body, time; unread rows have a dot and a highlighted background.
+   - Click a row -> mark that one read.
+   - Pull/refresh button re-fetches. Nothing is ever deleted.
+
+2) ENTRY POINTS
+   - Account/Settings: row "Notifications — gate sign-outs & sign-ins" with a
+     red unread-count badge (99+ cap).
+   - Dashboard: when unread > 0, a card "<N> unread gate notification(s)",
+     sub-line = title of the newest unread one, button "Open" -> the page.
+
+3) TEACHER SIGN-OUT FROM THE MARKING SCREEN
+   (Expo: src/screens/DutyMarkingScreen.js + GateScreen.js)
+   - In the per-student "Where is this student?" options, directly under
+     "Absent", add:
+        "Sign out at the gate"
+        hint: "Going home or leaving campus — carries to every later
+               checkpoint, coordinators are notified"
+     Shown only if the user may work the gate (reception/teacher/
+     coordinator/admin) AND the student is not already signed out.
+   - It opens the Gate page with that student pre-selected and the sign-out
+     form already open (Expo passes route param signOutAdm=<admission no>).
+   - After a successful sign-out, go BACK to the half-marked register (the
+     unsaved marks must survive). The student then shows locked as Home.
+   - Gate page got a Back button when opened this way.
+   - Fixed copy on the Gate "not allowed" message to include teachers:
+     "...done by reception, a teacher, a coordinator or an administrator."
+
+A5. LIMIT
+---------
+No alert reaches a device while the app is fully closed (no push service).
+The inbox is the catch-up path.
+
+
+=====================================================================
+B. STAFF LOGINS WITH A TEMPORARY PASSWORD  (migration 048)
+=====================================================================
+
+B1. RULES
+---------
+- Coordinator or admin only. A coordinator may act on teacher / nurse /
+  reception; coordinator / management / admin accounts are the admin's.
+  Nobody acts on their own account (use normal Change password).
+- Temporary password = "Initial@123" (school default) or random:
+  5 letters + "@" + 3 digits, no look-alike characters (no 0/O/1/l/I),
+  e.g. "AtEGD@672".
+- The coordinator can see a staff member's password ONLY while it is still
+  the temporary one. Once the person chooses their own it is deleted —
+  nobody can read it (Supabase stores a bcrypt hash only). Forgot it ->
+  coordinator gives a new temporary password.
+- Setting/resetting a temp password signs the person out everywhere.
+- First sign-in with a temp password: the app shows ONLY a
+  "Choose your password" screen until they set their own.
+
+B2. DATABASE (already done by 048)
+---------------------------------
+  staff.must_change_password  boolean default false
+  table staff_temp_passwords(staff_id PK, password text, kind 'default'|'random',
+                             issued_by, issued_at)  — no client access at all
+
+RPCs (call these; never write the tables):
+  add_staff_member_with_login(p_name, p_email, p_phone, p_role,
+                              p_class_key, p_random boolean)
+     -> [{ staff_id, temp_password }]
+     Same validation as add_staff_member (036): name >= 2 chars, valid
+     email, email not already on staff, class must exist, coordinator may
+     only add role 'teacher'. Creates the Supabase Auth user (email already
+     confirmed — no confirmation email), links it, flags must_change.
+
+  set_temporary_password(p_staff text, p_random boolean) -> text (the password)
+     Creates a login if they have none, else resets it. Flags must_change.
+
+  list_staff_logins() -> rows { staff_id, has_login, must_change,
+                                temp_password, kind, issued_at }
+     Only for staff the caller may manage. temp_password is null once they
+     have chosen their own.
+
+  change_my_temporary_password(p_password text) -> void
+     For the signed-in person. Refuses < 8 chars, refuses the same temp
+     password and "Initial@123". Clears must_change and deletes the temp copy.
+
+A trigger also clears must_change + the temp copy if the password changes
+any other way (reset code, normal Change password).
+
+The old one-time reset code (issue_password_reset / redeem_password_reset)
+still exists and is still offered as a third option.
+
+B3. CLIENT DATA LAYER  (Expo: src/lib/staff.js)
+----------------------------------------------
+  staff row mapping: add  mustChangePassword: !!row.must_change_password
+
+  addStaffMemberWithLogin({name,email,phone,role,classKey,random})
+     -> rpc add_staff_member_with_login -> { staffId, password }
+  setTemporaryPassword(staffId, random) -> rpc set_temporary_password -> password
+  fetchStaffLogins() -> rpc list_staff_logins -> map by staff_id
+     { hasLogin, mustChange, tempPassword, kind, issuedAt }
+     (on error return {} so an old server doesn't break the page)
+  changeMyTemporaryPassword(pw) -> rpc change_my_temporary_password
+
+  loginDetailsText({name,email,password}) =
+     "BG-SAAR login for <name>\n" +
+     "ID: <email>\n" +
+     "Password: <password>\n" +
+     "You will be asked to set your own password the first time you sign in."
+
+B4. UI TO ADD
+-------------
+1) ADD STAFF FORM (Roster -> Staff -> + Add)
+   - Subtitle: "Added as a teacher with a login ready to use. You get their
+     ID and temporary password to hand over."
+   - New section "Temporary password" with two options (radio):
+        Initial@123  — "The school default"   (selected by default)
+        Random password — "A one-off password made for them"
+   - Submit -> add_staff_member_with_login -> open the LOGIN DETAILS panel
+     titled "<Name> added". Email is lowercased + trimmed before sending.
+
+2) LOGIN DETAILS PANEL (Expo: src/components/LoginDetailsSheet.js)
+   - Subtitle: "Give these to <Name>. They choose their own password on first
+     sign-in."
+   - Box: "ID (email)" <email>; "Temporary password" <password> (large,
+     selectable text)
+   - Note: "This password works until they replace it. After that nobody —
+     you included — can see their password; you can only give them a new
+     temporary one."
+   - Button "Copy login details" -> copies loginDetailsText(...).
+       Web: navigator.clipboard.writeText(text); if that throws (some
+       browsers/embedded views block it), fall back to a hidden <textarea>
+       + select() + document.execCommand("copy"). Toast "Login details
+       copied", or "Could not copy — select the text above instead".
+       (Phone: uses the share sheet.)
+   - Button "Done".
+
+3) STAFF MEMBER DETAIL (click a staff row)
+   Under email / phone, a login line (only for coordinator/admin, only if
+   list_staff_logins returned that person):
+     - no login     -> "No login yet" — "Create one below"
+     - temp in use  -> "Password: <temp>" — "Temporary — they have not
+                       changed it yet. Click to copy login details"
+                       (click opens the LOGIN DETAILS panel)
+     - own password -> "Has set their own password" — "Private to them —
+                       reset it below if they forget it"
+   Actions (if the caller may manage this person):
+     - "Reset password to Initial@123"   (or "Create login · Initial@123")
+     - "Reset to a random password"      (or "Create login · random password")
+     - "Send a reset code instead" (only when they already have a login)
+     - "Deactivate" (unchanged)
+   Before resetting, confirm:
+     has login: "Reset <Name>'s password?" — "Their password becomes <X> and
+       they are signed out everywhere. They will be asked to choose their own
+       the next time they sign in."  [Reset]
+     no login:  "Create a login for <Name>?" — "They sign in with <email>
+       and <X>, and choose their own password the first time."  [Create login]
+   On success open the LOGIN DETAILS panel and re-fetch list_staff_logins.
+
+4) STAFF LIST
+   After role / duties, append " · no login yet" or " · temporary password".
+
+5) FORCED "CHOOSE YOUR PASSWORD" PAGE (Expo: src/screens/SetPasswordScreen.js)
+   - In the root router: if user.mustChangePassword -> show ONLY this page
+     (before role tabs). Browser tab title "Choose your password".
+   - Copy: "Choose your password" / "Welcome, <Name>. You signed in with a
+     temporary password from your coordinator. Choose your own now — after
+     this, only you will know it."
+   - Fields: NEW PASSWORD, TYPE IT AGAIN (show/hide eye). Validation: at least
+     8 characters, both match.
+   - "Save and continue" -> change_my_temporary_password(pw); on success set
+     user.mustChangePassword = false locally (no re-login needed — the
+     session stays valid) -> normal app.
+   - Show the server's error text (e.g. "Choose a password that is different
+     from the one you were given").
+   - "Sign out" link.
+
+
+=====================================================================
+FILES CHANGED IN THE EXPO APP (for reference)
+=====================================================================
+New:
+  supabase/migrations/047_gate_notifications.sql
+  supabase/migrations/048_staff_temporary_passwords.sql
+  tests/gate-notifications.test.cjs
+  tests/staff-temp-passwords.test.cjs
+  src/lib/notifications.js
+  src/context/NotificationsContext.js
+  src/screens/NotificationsScreen.js
+  src/screens/SetPasswordScreen.js
+  src/components/LoginDetailsSheet.js
+Changed:
+  App.js                       wrap navigator in <NotificationsProvider>
+  src/navigation/RootNavigator.js
+                               Notifications route (Account stack), Gate route
+                               in Duties stack, forced SetPassword gate
+  src/domain/roles.js          receivesGateNotices(role)
+  src/lib/reminders.js         showNoticeNow() — immediate phone notification
+  src/lib/staff.js             mustChangePassword + 4 new functions + text
+  src/context/SchoolDataContext.js  refreshLeaves()
+  src/screens/AccountScreen.js Notifications row with unread badge
+  src/screens/DashboardScreen.js    unread gate notifications card
+  src/screens/DutyMarkingScreen.js  "Sign out at the gate" option
+  src/screens/GateScreen.js    pre-selected student, back button, return to
+                               register after sign-out, copy fix
+  src/screens/RosterScreen.js  add-with-login, login line, reset options
+  supabase/README.md           rows for 047 and 048
+
+=====================================================================
+CHECKLIST FOR THE WEB DASHBOARD
+=====================================================================
+[ ] 047 and 048 applied on the Supabase project the web uses
+[ ] staff mapping includes must_change_password
+[ ] root router shows "Choose your password" when must_change_password
+[ ] Roster/Staff: add form with password choice -> login details panel
+[ ] Copy login details (clipboard + execCommand fallback)
+[ ] Staff detail: login line + reset to Initial@123 / random / code
+[ ] Staff list: "no login yet" / "temporary password"
+[ ] Notifications page (filters, mark read, mark all read, day groups)
+[ ] Realtime subscription + toast for new gate notices
+[ ] Unread badge in settings/account + Dashboard card
+[ ] Marking page: "Sign out at the gate" -> gate sign-out -> back to register
+[ ] Log in as teacher / coordinator / MOD and check each sees only what
+    they should (teacher: no notifications, no passwords)

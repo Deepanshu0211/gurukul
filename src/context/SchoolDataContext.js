@@ -316,6 +316,16 @@ export function SchoolDataProvider({ children }) {
     return leave;
   }, []);
 
+  /** Re-read only the gate register — after a sign-out/in made on another
+   *  phone. Cheap, and unlike `refresh` it does not flash every screen. */
+  const refreshLeaves = useCallback(async () => {
+    try {
+      setOpenLeaves(await fetchOpenLeaves());
+    } catch {
+      // The next full load will try again.
+    }
+  }, []);
+
   /** The open leave for one student, or null. Used per row while marking. */
   const leaveFor = useCallback((adm) => openLeaves[adm] || null, [openLeaves]);
 
@@ -364,6 +374,7 @@ export function SchoolDataProvider({ children }) {
       cancelHoliday,
       signStudentOut,
       signStudentIn,
+      refreshLeaves,
     }),
     [
       students,
@@ -389,6 +400,7 @@ export function SchoolDataProvider({ children }) {
       cancelHoliday,
       signStudentOut,
       signStudentIn,
+      refreshLeaves,
     ]
   );
 

@@ -52,7 +52,14 @@ import {
 import AddStudentSheet from "../components/AddStudentSheet";
 import { listClasses } from "../domain/classGroups";
 import { HOUSE_TONES, NO_HOUSE, houseRank, housesIn } from "../domain/houses";
-import { addStaffMember, setStaffActive, fetchInactiveStaff } from "../lib/staff";
+import {
+  addStaffMemberWithLogin,
+  setStaffActive,
+  fetchInactiveStaff,
+  fetchStaffLogins,
+  setTemporaryPassword,
+} from "../lib/staff";
+import LoginDetailsSheet from "../components/LoginDetailsSheet";
 import { issueResetCode, formatCode } from "../lib/passwords";
 import { dutyStatus, DUTY_STATUS } from "../domain/duties";
 import { fmtTime, plural, initial, weekdayName, fmtDay } from "../utils/format";
@@ -405,6 +412,17 @@ function StaffTab({
   const [busy, setBusy] = useState(false);
   const [former, setFormer] = useState([]);
   const [showFormer, setShowFormer] = useState(false);
+  // Login state per staff member (048): temporary password while it is still
+  // the one in use. `loginDetails` is the hand-over sheet when it is open.
+  const [logins, setLogins] = useState({});
+  const [loginDetails, setLoginDetails] = useState(null);
+  const loadLogins = useCallback(async () => {
+    if (!mayApprove) return;
+    setLogins(await fetchStaffLogins());
+  }, [mayApprove]);
+  useEffect(() => {
+    loadLogins();
+  }, [loadLogins]);
 
   const loadFormer = useCallback(async () => {
     if (!mayApprove) return;
@@ -443,21 +461,50 @@ function StaffTab({
     if (addProblem || busy) return;
     setBusy(true);
     try {
-      const made = await addStaffMember({
-        name: adding.name.trim(),
-        email: adding.email.trim(),
+      const name = adding.name.trim();
+      const email = adding.email.trim().toLowerCase();
+      const made = await addStaffMemberWithLogin({
+        name,
+        email,
         phone: adding.phone.trim(),
         classKey: adding.classKey,
+        random: adding.random,
       });
       setAdding(null);
-      toast.show(`${made.name} added · they sign up with ${made.email} to get in`);
+      setLoginDetails({ name, email, password: made.password, title: `${name} added` });
       onStaffChanged?.();
+      loadLogins();
       reloadRequests();
     } catch (e) {
       failed(e, "Staff member not added");
     } finally {
       setBusy(false);
     }
+  };
+
+  /** Create a login, or reset one, with Initial@123 or a random password. */
+  const giveTemporaryPassword = (member, random) => {
+    const login = logins[member.id];
+    setSelected(null);
+    const what = random ? "a random password" : "Initial@123";
+    dialog.confirm({
+      icon: "key-outline",
+      title: login?.hasLogin ? `Reset ${member.name}'s password?` : `Create a login for ${member.name}?`,
+      message: login?.hasLogin
+        ? `Their password becomes ${what} and they are signed out everywhere. ` +
+          "They will be asked to choose their own the next time they sign in."
+        : `They sign in with ${member.email} and ${what}, and choose their own password the first time.`,
+      confirmLabel: login?.hasLogin ? "Reset" : "Create login",
+      onConfirm: async () => {
+        try {
+          const password = await setTemporaryPassword(member.id, random);
+          setLoginDetails({ name: member.name, email: member.email, password });
+          loadLogins();
+        } catch (e) {
+          failed(e, "Password not changed");
+        }
+      },
+    });
   };
 
   const issueReset = (member) => {
@@ -697,7 +744,7 @@ They keep their sign-in but see nothing, and can ask again.`,
               accessibilityLabel="Add staff member"
               onPress={() =>
                 mayApprove
-                  ? setAdding({ name: "", email: "", phone: "", classKey: null, pickingClass: false })
+                  ? setAdding({ name: "", email: "", phone: "", classKey: null, pickingClass: false, random: false })
                   : dialog.alert({
                       icon: "person-add-outline",
                       title: "Add staff",
@@ -767,6 +814,11 @@ They keep their sign-in but see nothing, and can ask again.`,
               <Text style={typography.caption} numberOfLines={1}>
                 {roleLabel(item.role)}
                 {n > 0 ? ` · ${n} dut${n === 1 ? "y" : "ies"} today` : ""}
+                {logins[item.id] && !logins[item.id].hasLogin
+                  ? " · no login yet"
+                  : logins[item.id]?.mustChange
+                    ? " · temporary password"
+                    : ""}
               </Text>
             </View>
             <Chevron />
@@ -869,11 +921,42 @@ They keep their sign-in but see nothing, and can ask again.`,
       title={selected?.name}
       subtitle={selected ? `${roleLabel(selected.role)}${selected.classLabel ? ` · ${selected.classLabel}` : ""}` : ""}
       showClose
+      scroll
     >
       {!!selected && (
         <>
           <SheetOption icon="mail-outline" label={selected.email || "No email"} hint="Sign-in address" />
           {!!selected.phone && <SheetOption icon="call-outline" label={selected.phone} hint="Phone" />}
+          {/* Login (048). The temporary password is shown only until they
+              replace it — a password they chose is never readable. */}
+          {mayApprove && logins[selected.id] && (() => {
+            const login = logins[selected.id];
+            if (!login.hasLogin) {
+              return <SheetOption icon="lock-open-outline" label="No login yet" hint="Create one below" />;
+            }
+            if (login.tempPassword) {
+              return (
+                <SheetOption
+                  icon="key-outline"
+                  label={`Password: ${login.tempPassword}`}
+                  hint="Temporary — they have not changed it yet. Tap to copy login details"
+                  onPress={() => {
+                    const s = selected;
+                    setSelected(null);
+                    setLoginDetails({ name: s.name, email: s.email, password: login.tempPassword });
+                  }}
+                  trailing={<Ionicons name="copy-outline" size={18} color={colors.icon} />}
+                />
+              );
+            }
+            return (
+              <SheetOption
+                icon="shield-checkmark-outline"
+                label="Has set their own password"
+                hint="Private to them — reset it below if they forget it"
+              />
+            );
+          })()}
           <SheetOption
             icon="calendar-outline"
             label={plural(dutiesFor(selected.id), "duty", "duties")}
@@ -883,10 +966,24 @@ They keep their sign-in but see nothing, and can ask again.`,
             <>
               <SheetOption
                 icon="key-outline"
-                label="Reset password"
-                hint="Get a one-time code to give them"
-                onPress={() => issueReset(selected)}
+                label={logins[selected.id] && !logins[selected.id].hasLogin ? "Create login · Initial@123" : "Reset password to Initial@123"}
+                hint="The school's default temporary password"
+                onPress={() => giveTemporaryPassword(selected, false)}
               />
+              <SheetOption
+                icon="shuffle-outline"
+                label={logins[selected.id] && !logins[selected.id].hasLogin ? "Create login · random password" : "Reset to a random password"}
+                hint="A new one-off password, e.g. Kmvqe@428"
+                onPress={() => giveTemporaryPassword(selected, true)}
+              />
+              {logins[selected.id]?.hasLogin !== false && (
+                <SheetOption
+                  icon="keypad-outline"
+                  label="Send a reset code instead"
+                  hint="They choose a new password on the sign-in screen; you never see it"
+                  onPress={() => issueReset(selected)}
+                />
+              )}
               <SheetOption
                 icon="person-remove-outline"
                 label="Deactivate"
@@ -913,8 +1010,9 @@ They keep their sign-in but see nothing, and can ask again.`,
       visible={!!adding && !adding.pickingClass}
       onClose={() => !busy && setAdding(null)}
       title="Add staff member"
-      subtitle="Added as a teacher. They sign up with this email and are let straight in — no request to approve."
+      subtitle="Added as a teacher with a login ready to use. You get their ID and temporary password to hand over."
       showClose
+      scroll
     >
       {!!adding && (
         <>
@@ -957,6 +1055,21 @@ They keep their sign-in but see nothing, and can ask again.`,
             hint={adding.classKey ? "Class teacher" : "Duty staff, or choose their class"}
             onPress={() => setAdding((a) => ({ ...a, pickingClass: true }))}
             trailing={<Ionicons name="chevron-forward" size={16} color={colors.icon} />}
+          />
+          <Text style={[styles.fieldLabel, { marginTop: spacing.sm }]}>Temporary password</Text>
+          <SheetOption
+            icon="key-outline"
+            label="Initial@123"
+            hint="The school default"
+            active={!adding.random}
+            onPress={() => setAdding((a) => ({ ...a, random: false }))}
+          />
+          <SheetOption
+            icon="shuffle-outline"
+            label="Random password"
+            hint="A one-off password made for them"
+            active={!!adding.random}
+            onPress={() => setAdding((a) => ({ ...a, random: true }))}
           />
           {!!addProblem && (adding.name || adding.email) ? (
             <Text style={styles.fieldProblem}>{addProblem}</Text>
@@ -1024,6 +1137,12 @@ They keep their sign-in but see nothing, and can ask again.`,
         ))
       )}
     </BottomSheet>
+
+    <LoginDetailsSheet
+      details={loginDetails}
+      title={loginDetails?.title || "Login details"}
+      onClose={() => setLoginDetails(null)}
+    />
 
     {/* The code, shown once. */}
     <BottomSheet

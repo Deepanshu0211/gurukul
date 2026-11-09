@@ -30,6 +30,8 @@ staging copy, or recovery if the current one is lost.
 | `migrations/021_fix_approved_signup_trigger.sql` | An approved teacher can create their account — the auth.users trigger moves BEFORE→AFTER |
 | `migrations/036_coordinator_management.sql` | Coordinator-run roster: `duty_defaults`, checkpoint add/switch-off, hand-picked & excluded students, add/deactivate staff, one-time password reset codes. Inactive staff lose access. Adds the SRS Sports / Remedial / Evening study / Dinner checkpoints with NO groups (so the pilot gets no new duties until a coordinator adds them) |
 | `migrations/037_staff_add_students.sql` | `add_student()` — any teacher, coordinator, management or admin adds a student into an existing class; only coordinator/admin can start a new class. Every addition is in the activity log |
+| `migrations/047_gate_notifications.sql` | Every gate sign-out/sign-in writes a `notifications` row (trigger on `student_leave`) for coordinator, MOD and admin; per-person read marks; realtime. Verified by `tests/gate-notifications.test.cjs` |
+| `migrations/048_staff_temporary_passwords.sql` | Coordinator adds staff WITH a login: temporary password `Initial@123` or random, readable by the coordinator only until the person replaces it on first sign-in (`staff.must_change_password`). Verified by `tests/staff-temp-passwords.test.cjs` |
 | `seed-checkpoints-mock.sql` | MOCK only: default groups for the four new checkpoints |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
 | `seed-mock-school.sql` | The school as its own register draws it: 18 classes, 411 students, 18 class teachers, today's duties |

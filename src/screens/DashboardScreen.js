@@ -44,6 +44,7 @@ import { deriveAlerts, describeAlert, ALERT_KIND, QUICK_REASONS } from "../domai
 import { fmtTime, fmtClock, plural, weekdayName, todayISO, fmtDay, displayName } from "../utils/format";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationsContext";
 import { useResolutions, resolveAlert } from "../lib/alerts";
 import { describeError } from "../lib/errors";
 import { REPORT_FORMAT } from "../lib/report";
@@ -68,6 +69,7 @@ const FEED_TONE = {
 export default function DashboardScreen({ navigation }) {
   const { students, duties, records, studentsForDuty, refresh, loading, error, day: selectedDay, isToday, trialSettings } = useSchoolData();
   const { user } = useAuth();
+  const notices = useNotifications();
   const toast = useToast();
   const dialog = useDialog();
   // Closing an alert is a written, attributable act (SRS F4) — the nurse can
@@ -303,6 +305,33 @@ export default function DashboardScreen({ navigation }) {
             <Chevron />
           </TouchableOpacity>
         </Card>
+
+        {/* Gate sign-outs and sign-ins nobody here has read yet (047). */}
+        {notices.enabled && notices.unread > 0 && (
+          <Card style={[styles.statusCard, styles.requestCard]}>
+            <TouchableOpacity
+              style={styles.statusRow}
+              onPress={() => navigation?.navigate("Account", { screen: "Notifications", initial: false })}
+              accessibilityRole="button"
+              accessibilityLabel={`${plural(notices.unread, "unread gate notification")}. Open`}
+            >
+              <IconCircle bg={colors.warningBg} size={40}>
+                <Ionicons name="notifications-outline" size={18} color={colors.warning} />
+              </IconCircle>
+              <View style={styles.statusText}>
+                <Text style={styles.statusTitle}>
+                  {plural(notices.unread, "unread gate notification")}
+                </Text>
+                <Text style={styles.statusSub} numberOfLines={1}>
+                  {notices.describe(notices.items.find((n) => !n.read) || {}).title}
+                </Text>
+              </View>
+              <View style={styles.requestBadge}>
+                <Text style={styles.requestBadgeText}>Open</Text>
+              </View>
+            </TouchableOpacity>
+          </Card>
+        )}
 
         {/* The coordinator's desk: who is waiting to be let in, and the
             roster itself. Nobody else is offered either — 013 and 036 refuse

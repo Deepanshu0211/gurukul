@@ -18,6 +18,8 @@ import AccountScreen from "../screens/AccountScreen";
 import ClassDayScreen from "../screens/ClassDayScreen";
 import ActivityScreen from "../screens/ActivityScreen";
 import GateScreen from "../screens/GateScreen";
+import NotificationsScreen from "../screens/NotificationsScreen";
+import SetPasswordScreen from "../screens/SetPasswordScreen";
 import HolidaysScreen from "../screens/HolidaysScreen";
 import CheckpointsScreen from "../screens/CheckpointsScreen";
 import GroupEditorScreen from "../screens/GroupEditorScreen";
@@ -46,6 +48,9 @@ function DutiesStack() {
     >
       <Stack.Screen name="DutiesList" component={DutiesScreen} />
       <Stack.Screen name="DutyMarking" component={DutyMarkingScreen} />
+      {/* So a teacher marking a register can sign a child out to family
+          without leaving it — back returns to the half-marked list. */}
+      <Stack.Screen name="Gate" component={GateScreen} />
     </Stack.Navigator>
   );
 }
@@ -73,6 +78,7 @@ function AccountStack() {
           that is already open. */}
       <Stack.Screen name="Holidays" component={HolidaysScreen} />
       <Stack.Screen name="Gate" component={GateScreen} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
       {/* The roster desk (036). Same reasoning as Holidays: coordinator and
           admin already have four tabs, and this is set up occasionally. */}
       <Stack.Screen name="Checkpoints" component={CheckpointsScreen} />
@@ -194,7 +200,13 @@ export default function RootNavigator() {
           nobody yet — someone who signed up and is waiting on a coordinator.
           It gets one screen, and what actually stops it reading anything is
           migration 012, not this branch. */}
-      {user ? (
+      {/* A temporary password from a coordinator (048) stops here until
+          the person chooses their own. */}
+      {user?.mustChangePassword ? (
+        <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}>
+          <Stack.Screen name="SetPassword" component={SetPasswordScreen} options={{ title: "Choose your password" }} />
+        </Stack.Navigator>
+      ) : user ? (
         <RoleTabs role={user.role} />
       ) : pending ? (
         <PendingScreen />
