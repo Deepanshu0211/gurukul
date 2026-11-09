@@ -22,7 +22,7 @@ import { useScreenTopInset } from "../navigation/tabBarInset";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { canManageRoster, roleLabel } from "../domain/roles";
-import { listClasses } from "../domain/classGroups";
+import { listClasses, classKeyList } from "../domain/classGroups";
 import { housesIn } from "../domain/houses";
 import { resolveGroup } from "../lib/duties";
 import {
@@ -109,7 +109,22 @@ export default function GroupEditorScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
 
   const checkpoint = checkpoints.find((c) => c.id === f.checkpointId) || null;
-  const cls = classes.find((c) => c.key === f.classKey) || null;
+  // One class or several (046): the group's class is a comma-separated list.
+  const picked = classKeyList(f.classKey);
+  const pickedClasses = classes.filter((c) => picked.includes(c.key));
+  const cls = pickedClasses.length
+    ? {
+        label: pickedClasses.map((c) => c.label).join(" + "),
+        students: pickedClasses.reduce((n, c) => n + c.students, 0),
+      }
+    : null;
+  const toggleClass = (key) => {
+    haptics.select();
+    const next = picked.includes(key) ? picked.filter((k) => k !== key) : [...picked, key];
+    // Kept in register order so the same set always reads the same way.
+    const ordered = classes.map((c) => c.key).filter((k) => next.includes(k));
+    set({ classKey: ordered.length ? ordered.join(",") : null, excluded: [] });
+  };
 
   /** What the group would be as a duty, so `resolveGroup` can answer for it. */
   const asDuty = {
@@ -134,7 +149,12 @@ export default function GroupEditorScreen({ navigation, route }) {
 
   const suggestedLabel = () => {
     const res = f.residential ? " · residential" : "";
-    if (f.coverage === COVERAGE.CLASS) return cls ? `Class ${cls.label}` : "";
+    if (f.coverage === COVERAGE.CLASS) {
+      if (!cls) return "";
+      const full = `Class ${cls.label}`;
+      // Group names stop at 60 characters; a long set falls back to a count.
+      return full.length <= 60 ? full : `${pickedClasses.length} classes${res}`;
+    }
     if (f.coverage === COVERAGE.BAND) return f.band ? `${f.band}${res}` : "";
     if (f.coverage === COVERAGE.HOUSE) return f.house ? `${f.house} house${res}` : "";
     if (f.coverage === COVERAGE.SCHOOL) return f.residential ? "All residential students" : "Whole school";
@@ -301,7 +321,7 @@ export default function GroupEditorScreen({ navigation, route }) {
           {f.coverage === COVERAGE.CLASS && (
             <Picker
               icon="school-outline"
-              label={cls ? `Class ${cls.label}` : "Choose class"}
+              label={cls ? `Class ${cls.label}` : "Choose classes"}
               hint={cls ? plural(cls.students, "student") : null}
               onPress={() => setSheet("class")}
               missing={!cls}
@@ -440,20 +460,31 @@ export default function GroupEditorScreen({ navigation, route }) {
         ))}
       </BottomSheet>
 
-      <BottomSheet visible={sheet === "class"} onClose={() => setSheet(null)} title="Class" showClose>
-        {classes.map((c) => (
-          <SheetOption
-            key={c.key}
-            icon="school-outline"
-            label={`Class ${c.label}`}
-            hint={plural(c.students, "student")}
-            active={c.key === f.classKey}
-            onPress={() => {
-              set({ classKey: c.key, excluded: [] });
-              setSheet(null);
-            }}
-          />
-        ))}
+      <BottomSheet
+        visible={sheet === "class"}
+        onClose={() => setSheet(null)}
+        title="Classes"
+        subtitle={picked.length ? `${plural(picked.length, "class", "classes")} · ${plural(cls.students, "student")}` : "Tick one or more"}
+        showClose
+      >
+        {classes.map((c) => {
+          const on = picked.includes(c.key);
+          return (
+            <SheetOption
+              key={c.key}
+              icon={on ? "checkbox" : "square-outline"}
+              label={`Class ${c.label}`}
+              hint={plural(c.students, "student")}
+              active={on}
+              onPress={() => toggleClass(c.key)}
+            />
+          );
+        })}
+        <PrimaryButton
+          title={picked.length ? "Done" : "Close"}
+          onPress={() => setSheet(null)}
+          style={{ marginTop: spacing.md }}
+        />
       </BottomSheet>
 
       <BottomSheet visible={sheet === "staff"} onClose={() => setSheet(null)} title="Marked by" showClose>

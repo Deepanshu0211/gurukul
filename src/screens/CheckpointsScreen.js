@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius, typography, fonts, layout, surface, numeric } from "../theme/theme";
 import ScreenHeader from "../components/ScreenHeader";
 import Segmented from "../components/Segmented";
+import TimeField from "../components/TimeField";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
 import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import {
@@ -81,7 +82,7 @@ export default function CheckpointsScreen({ navigation }) {
   // underneath it, cut off mid-row.
   const bottomInset = useTabContentInset();
   const { scrolled, onScroll } = useScrolled();
-  const { checkpoints, groups, loading, error, reload } = useRoster();
+  const { checkpoints, groups, loading, error, reload, applyCheckpoint } = useRoster();
 
   const allowed = canManageRoster(user?.role);
   const [view, setView] = useState("checkpoint");
@@ -169,7 +170,10 @@ export default function CheckpointsScreen({ navigation }) {
   const afterChange = async (message) => {
     haptics.success();
     toast.show(message);
-    await Promise.all([reload(), refresh()]);
+    // The roster is what this screen shows; the whole-school refresh can
+    // finish in the background instead of holding the list on stale times.
+    await reload();
+    refresh();
   };
 
   // ── Checkpoint add / edit ────────────────────────────────────────────────
@@ -209,6 +213,7 @@ export default function CheckpointsScreen({ navigation }) {
         mandatoryEscalation: draft.mandatoryEscalation,
       });
       setDraft(null);
+      applyCheckpoint(saved);
       await afterChange(
         draft.id ? `${saved.name} updated` : `${saved.name} added · now add the groups it covers`
       );
@@ -418,28 +423,19 @@ export default function CheckpointsScreen({ navigation }) {
               autoFocus={!draft.id}
               accessibilityLabel="Checkpoint name"
             />
-            <Text style={styles.fieldLabel}>Window (24-hour)</Text>
+            <Text style={styles.fieldLabel}>Window</Text>
             <View style={styles.timeRow}>
-              <TextInput
+              <TimeField
                 value={draft.start}
-                onChangeText={(start) => setDraft((d) => ({ ...d, start }))}
-                placeholder="16:30"
-                placeholderTextColor={colors.icon}
-                style={[styles.input, styles.timeInput]}
-                keyboardType="numbers-and-punctuation"
-                maxLength={5}
-                accessibilityLabel="Opens at"
+                onChange={(start) => setDraft((d) => ({ ...d, start }))}
+                label="Opens at"
               />
               <Ionicons name="arrow-forward" size={16} color={colors.icon} />
-              <TextInput
+              <TimeField
                 value={draft.end}
-                onChangeText={(end) => setDraft((d) => ({ ...d, end }))}
-                placeholder="17:10"
-                placeholderTextColor={colors.icon}
-                style={[styles.input, styles.timeInput]}
-                keyboardType="numbers-and-punctuation"
-                maxLength={5}
-                accessibilityLabel="Closes at"
+                onChange={(end) => setDraft((d) => ({ ...d, end }))}
+                label="Closes at"
+                allowMidnight
               />
             </View>
             <View style={styles.switchRow}>

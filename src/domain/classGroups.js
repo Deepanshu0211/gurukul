@@ -7,13 +7,18 @@ export const combinedClassGrade = key => {
   return match ? Number(match[1]) : null;
 };
 export const isCombinedClass = key => isVedicClass(key) || combinedClassGrade(key) !== null;
+/** A register can name several classes, comma-separated: "1|A,2|A,5|A" (046). */
+export const classKeyList = (key) => String(key || "").split(",").map((k) => k.trim()).filter(Boolean);
+export const isClassList = (key) => classKeyList(key).length > 1;
 export const classIncludesStudent = (key, student) => {
+  if (isClassList(key)) return classKeyList(key).some((k) => classIncludesStudent(k, student));
   if (isVedicClass(key)) return isVedicStudent(student);
   const grade = combinedClassGrade(key);
   if (grade === null) return student.key === key;
   return Number(student.grade) === grade;
 };
 export const classCoversClass = (registerKey, studentClassKey) => {
+  if (isClassList(registerKey)) return classKeyList(registerKey).some((k) => classCoversClass(k, studentClassKey));
   if (registerKey === studentClassKey) return true;
   if (isVedicClass(registerKey)) return isVedicStudent({key:studentClassKey});
   const grade = combinedClassGrade(registerKey);

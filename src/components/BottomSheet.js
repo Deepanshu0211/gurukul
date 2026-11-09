@@ -50,6 +50,10 @@ export default function BottomSheet({
   const Body = scroll ? ScrollView : View;
   const bodyProps = scroll
     ? {
+        // Without flexShrink the list takes its full content height, spills
+        // past the sheet's maxHeight and never scrolls — the last option (YDIV)
+        // ended up below the screen edge, unreachable.
+        style: { flexShrink: 1 },
         showsVerticalScrollIndicator: false,
         keyboardShouldPersistTaps: "handled",
         contentContainerStyle: { paddingBottom: bottomPad },

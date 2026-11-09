@@ -159,5 +159,14 @@ export function useRoster() {
     reload();
   }, [reload]);
 
-  return { ...state, loading, error, reload };
+  /** Show a just-saved checkpoint at once, before the reload comes back. */
+  const applyCheckpoint = useCallback((cp) => {
+    if (!cp) return;
+    setState((s) => {
+      const rest = s.checkpoints.filter((c) => c.id !== cp.id);
+      return { ...s, checkpoints: [...rest, cp].sort((a, b) => a.start - b.start) };
+    });
+  }, []);
+
+  return { ...state, loading, error, reload, applyCheckpoint };
 }
