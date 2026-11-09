@@ -51,16 +51,19 @@ jobs:
           # but kept in a secret so it is rotated in one place. Never the
           # service_role key: that bypasses every policy in 002.
           ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # The project to keep awake, e.g. https://xxxx.supabase.co — a
+          # secret so the mock and the pilot are never confused again.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         run: |
           set -euo pipefail
 
-          if [ -z "${ANON_KEY}" ]; then
-            echo "SUPABASE_ANON_KEY is not set."
+          if [ -z "${ANON_KEY}" ] || [ -z "${SUPABASE_URL}" ]; then
+            echo "SUPABASE_URL or SUPABASE_ANON_KEY is not set."
             echo "Settings -> Secrets and variables -> Actions -> New repository secret"
             exit 1
           fi
 
-          BASE="https://ofuvjzxjbgsityacukva.supabase.co/rest/v1"
+          BASE="${SUPABASE_URL%/}/rest/v1"
 
           # duty_health() (migration 025) returns counts only — no names, no
           # marks — which is why the public anon key may call it. The request
@@ -83,10 +86,10 @@ jobs:
           day=$(echo "${body}"     | jq -r '.[0].day // "?"')
           duties=$(echo "${body}"  | jq -r '.[0].duties // 0')
           classes=$(echo "${body}" | jq -r '.[0].classes // 0')
-          morning=$(echo "${body}" | jq -r '.[0].morning_duties // 0')
+          made=$(echo "${body}"    | jq -r '.[0].morning_duties // 0')
 
           if [ "${healthy}" != "true" ]; then
-            echo "::error::No usable duties for ${day} — ${morning} morning duties for ${classes} classes, ${duties} in total."
+            echo "::error::Registers missing for ${day} — ${made} of ${classes} expected, ${duties} in total."
             echo ""
             echo "The nightly job (generate-duties-nightly, migration 024) did not"
             echo "produce a workable day. Teachers will open the app to an empty"
@@ -101,4 +104,4 @@ jobs:
             exit 1
           fi
 
-          echo "${day}: ${morning} morning duties for ${classes} classes, ${duties} in total. Healthy."
+          echo "${day}: ${made} of ${classes} expected registers, ${duties} in total. Healthy."
