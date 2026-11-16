@@ -262,7 +262,7 @@ export default function CheckpointsScreen({ navigation }) {
         try {
           const outcome = await removeCheckpoint(cp.id);
           await afterChange(
-            outcome === "deleted" ? `${cp.name} removed` : `${cp.name} has history — switched off instead`
+            outcome === "deleted" ? `${cp.name} removed` : `${cp.name} has history, so it was switched off instead`
           );
         } catch (e) {
           fail(e, "Not removed");
@@ -333,7 +333,7 @@ export default function CheckpointsScreen({ navigation }) {
               <EmptyState
                 icon="time-outline"
                 title="No checkpoints yet"
-                body="Add the first one — a name and a time window."
+                body="Add the first one: a name and a time window."
                 compact
               />
             )
@@ -406,7 +406,7 @@ export default function CheckpointsScreen({ navigation }) {
         subtitle={
           draft?.id
             ? "Changing the window moves reminders and escalation with it."
-            : "Then add the groups it covers — a class, a band, a house or a hand-picked list."
+            : "Then add the groups it covers: a class, a band, a house or a hand-picked list."
         }
         showClose
       >

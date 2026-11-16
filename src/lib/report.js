@@ -1,5 +1,7 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { Directory, File, Paths } from "expo-file-system";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import {
   fetchDayReport,
@@ -167,8 +169,152 @@ export async function printReport(html) {
   await Print.printAsync({ html });
 }
 
+// ── SAVING STRAIGHT TO A FOLDER ─────────────────────────────────────────────
+// The print dialog's "Save as PDF" is four taps through a screen that looks
+// like it is about to use paper. On Android the app asks for a folder ONCE
+// (Downloads, say); Android keeps that permission, and every later PDF is
+// written straight into it.
+
+const FOLDER_KEY = "report.saveFolderUri";
+
+/** Thrown when the person backs out of the folder picker. Not a failure. */
+export class SaveCancelled extends Error {
+  constructor() {
+    super("Save cancelled");
+    this.cancelled = true;
+  }
+}
+
+const readFolder = async () => {
+  try {
+    const uri = await AsyncStorage.getItem(FOLDER_KEY);
+    return uri ? new Directory(uri) : null;
+  } catch {
+    return null;
+  }
+};
+
+const pickFolder = async () => {
+  let dir;
+  try {
+    dir = await Directory.pickDirectoryAsync();
+  } catch (e) {
+    // Backing out is a choice; anything else is a real failure and must not
+    // be swallowed as one.
+    if (/cancel/i.test(e?.message || "")) throw new SaveCancelled();
+    throw e;
+  }
+  if (!dir?.uri) throw new SaveCancelled();
+  try {
+    await AsyncStorage.setItem(FOLDER_KEY, dir.uri);
+  } catch {
+    // Not remembered — the next save asks again. Still saves this one.
+  }
+  return dir;
+};
+
+/** A readable folder name from a SAF uri: ".../tree/primary%3ADownload" -> "Download". */
+const folderLabel = (dir) => {
+  try {
+    const tail = decodeURIComponent(dir.uri.split("/tree/").pop() || "");
+    return tail.split(/[:/]/).filter(Boolean).pop() || "the chosen folder";
+  } catch {
+    return "the chosen folder";
+  }
+};
+
+/** Forget the remembered folder, so the next save asks where to put it. */
+export async function forgetSaveFolder() {
+  try {
+    await AsyncStorage.removeItem(FOLDER_KEY);
+  } catch {
+    // nothing to forget
+  }
+}
+
+/**
+ * Write the report as a PDF without the print dialog.
+ *
+ * Android: into the remembered folder (asking for one the first time, or
+ * again if the permission was lost). iOS has no shared Downloads folder, so it
+ * opens the share sheet, where "Save to Files" is. Web: the browser's own
+ * print/save dialog is the only way to hand over a file.
+ *
+ * @returns {{ where: string | null }} the folder it went into, when known
+ */
+export async function savePdf(html, name) {
+  if (Platform.OS === "web") {
+    await Print.printAsync({ html });
+    return { where: null };
+  }
+
+  const { file, base64 } = await makePdf(html, name);
+  const uri = file.uri;
+
+  if (Platform.OS !== "android") {
+    await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: name });
+    return { where: null };
+  }
+
+  try {
+    return await saveIntoFolder(base64, name);
+  } catch (e) {
+    if (e?.cancelled) throw e;
+    // The direct save failed — an older app build without the folder API, a
+    // storage provider that refuses the write. The PDF is already made, so
+    // hand it to the share sheet ("Save to Files", Drive) rather than lose it.
+    console.warn("Direct PDF save failed, falling back to share:", e?.message || e);
+    await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: name });
+    return { where: null };
+  }
+}
+
+async function saveIntoFolder(base64, name) {
+  const writeInto = (dir) => {
+    // No extension: the provider adds ".pdf" from the mime type, and a name
+    // that is already taken gets " (1)" rather than overwriting a report.
+    const out = dir.createFile(name, "application/pdf");
+    out.write(base64, { encoding: "base64" });
+  };
+
+  let dir = await readFolder();
+  if (dir) {
+    try {
+      writeInto(dir);
+      return { where: folderLabel(dir) };
+    } catch {
+      // The folder was deleted or the permission revoked. Ask again below.
+      await forgetSaveFolder();
+    }
+  }
+
+  dir = await pickFolder();
+  writeInto(dir);
+  return { where: folderLabel(dir) };
+}
+
+/**
+ * The PDF as a file this app can read back.
+ *
+ * `printToFileAsync` writes into a cache folder that, on some builds (Expo Go
+ * among them), is outside what the file and sharing modules are allowed to
+ * read — "Not allowed to read file under given URL". So the PDF comes back as
+ * base64 and is written into the app's OWN cache folder instead.
+ */
+async function makePdf(html, name) {
+  const { base64 } = await Print.printToFileAsync({ html, base64: true });
+  if (!base64) throw new Error("The PDF came back empty.");
+  const safe = (name || "report").replace(/[^a-zA-Z0-9._-]+/g, "-");
+  const file = new File(Paths.cache, `${safe}.pdf`);
+  if (file.exists) file.delete();
+  file.create();
+  file.write(base64, { encoding: "base64" });
+  return { file, base64 };
+}
+
 export async function shareReport(html, name) {
-  const { uri } = await Print.printToFileAsync({ html, base64: false });
+  const { file } = await makePdf(html, name);
+  const uri = file.uri;
 
   if (!(await Sharing.isAvailableAsync())) {
     // Rare — some Android builds have no share target at all. The file is

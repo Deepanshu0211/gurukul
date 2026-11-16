@@ -145,7 +145,13 @@ function RoleTabs({ role }) {
 
   return (
     <Tab.Navigator
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        // Screens ease in from the side the tab sits on, with a cross-fade,
+        // instead of swapping in a single frame. Native-driven, so it does
+        // not compete with the tab bar's sliding pill.
+        animation: "shift",
+      }}
       tabBar={(props) => <AppTabBar {...props} />}
     >
       {tabs.map((t) => (

@@ -1,13 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Easing,
-  PanResponder,
-} from "react-native";
+import { View, Text, Pressable, StyleSheet, Animated, PanResponder } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts, spacing, layout, shadow } from "../theme/theme";
@@ -119,6 +111,33 @@ export default function AppTabBar({ state, descriptors, navigation }) {
   // Effective highlighted index: hover index if actively dragging, else state.index
   const currentHighlightIndex = activeHoverIndex !== null ? activeHoverIndex : state.index;
 
+  // ONE highlight pill that slides between tabs, rather than each tab fading
+  // its own background. Driven by transform on the native thread, so it stays
+  // smooth while the next screen is mounting on the JS thread.
+  const [rowWidth, setRowWidth] = useState(0);
+  const tabWidth = totalTabs > 0 ? rowWidth / totalTabs : 0;
+  const pillX = useRef(new Animated.Value(0)).current;
+  const placed = useRef(false);
+
+  useEffect(() => {
+    if (!tabWidth) return;
+    const to = currentHighlightIndex * tabWidth;
+    // First layout: put it in place without a slide from the left edge.
+    if (!placed.current) {
+      pillX.setValue(to);
+      placed.current = true;
+      return;
+    }
+    Animated.spring(pillX, {
+      toValue: to,
+      useNativeDriver: true,
+      // Quick and settled: arrives in ~250ms with the faintest overshoot.
+      stiffness: 420,
+      damping: 34,
+      mass: 0.9,
+    }).start();
+  }, [currentHighlightIndex, tabWidth, pillX]);
+
   if (hidden) return null;
 
   return (
@@ -133,6 +152,16 @@ export default function AppTabBar({ state, descriptors, navigation }) {
         {...panResponder.panHandlers}
         style={styles.bar}
       >
+        <View
+          style={styles.row}
+          onLayout={(evt) => setRowWidth(evt.nativeEvent.layout.width)}
+        >
+          {tabWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.pill, { width: tabWidth, transform: [{ translateX: pillX }] }]}
+            />
+          )}
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const label = options.tabBarLabel ?? options.title ?? route.name;
@@ -162,47 +191,31 @@ export default function AppTabBar({ state, descriptors, navigation }) {
             />
           );
         })}
+        </View>
       </View>
     </View>
   );
 }
 
 function TabButton({ label, icon, focused, onPress, onLongPress }) {
-  const t = useRef(new Animated.Value(focused ? 1 : 0)).current;
-
-  useEffect(() => {
-    const anim = Animated.timing(t, {
-      toValue: focused ? 1 : 0,
-      duration: 140,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    });
-    anim.start();
-    return () => anim.stop();
-  }, [focused, t]);
+  // Press feedback: a small native-driven squash and spring back, instead of
+  // the opacity flash, which read as the whole bar flickering.
+  const press = useRef(new Animated.Value(1)).current;
+  const springTo = (v) =>
+    Animated.spring(press, { toValue: v, useNativeDriver: true, stiffness: 600, damping: 30 }).start();
 
   return (
-    <TouchableOpacity
+    <Pressable
       accessibilityRole="tab"
       accessibilityState={{ selected: focused }}
       accessibilityLabel={label}
       onPress={onPress}
       onLongPress={onLongPress}
-      activeOpacity={0.7}
+      onPressIn={() => springTo(0.92)}
+      onPressOut={() => springTo(1)}
       style={styles.tab}
     >
-      <Animated.View
-        style={[
-          styles.tabInner,
-          {
-            backgroundColor: t.interpolate({
-              inputRange: [0, 1],
-              outputRange: [TAB_BG_OFF, colors.primary],
-            }),
-            transform: [{ scale: t.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }],
-          },
-        ]}
-      >
+      <Animated.View style={[styles.tabInner, { transform: [{ scale: press }] }]}>
         <Ionicons
           name={focused ? icon.on : icon.off}
           size={22}
@@ -215,13 +228,9 @@ function TabButton({ label, icon, focused, onPress, onLongPress }) {
           {label}
         </Text>
       </Animated.View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
-
-// The inactive end of the background interpolation. Fully transparent teal, so
-// the colour ramp stays in the same hue instead of passing through grey.
-const TAB_BG_OFF = "rgba(3, 83, 82, 0)";
 
 const styles = StyleSheet.create({
   container: {
@@ -245,6 +254,17 @@ const styles = StyleSheet.create({
     borderTopColor: colors.hairlineTop,
     borderBottomColor: colors.hairlineBottom,
     ...shadow.lg,
+  },
+  // The tabs and the sliding pill share this row, so the pill's x and width
+  // are measured against exactly the space the tabs divide between them.
+  row: { flex: 1, flexDirection: "row" },
+  pill: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
   },
   tab: { flex: 1 },
   tabInner: {

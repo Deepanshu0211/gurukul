@@ -5,7 +5,7 @@ import { fetchStudents } from "../lib/students";
 import { fetchStaff } from "../lib/staff";
 import {
   fetchDuties,
-  fetchAttendance,
+  fetchAttendanceForDuties,
   resolveGroup,
   submitDuty as submitDutyToDb,
   saveDutyRemark,
@@ -19,6 +19,15 @@ import {
   signStudentIn as signStudentInInDb,
 } from "../lib/leave";
 import { todayISO } from "../utils/format";
+import { useAuth } from "./AuthContext";
+import { readCache, writeCache, pruneDays, clearCache } from "../lib/cache";
+
+// A tab switch within this long of the last load does not load again. Pull to
+// refresh, and every write the app makes, still reload at once.
+const SOFT_REFRESH_MS = 20 * 1000;
+// The register and the staff list change a few times a term. A quiet refresh
+// re-reads them at most this often; a pull to refresh always does.
+const CORE_TTL_MS = 10 * 60 * 1000;
 
 /**
  * One source of truth for students, duties and attendance.
@@ -32,6 +41,15 @@ import { todayISO } from "../utils/format";
 const SchoolDataContext = createContext(null);
 
 export function SchoolDataProvider({ children }) {
+  const { user } = useAuth();
+  const staffId = user?.id || null;
+  // What is already on screen, so a refresh can tell "show a spinner" (there
+  // is nothing yet) from "update quietly underneath" (there is).
+  const hasCore = useRef(false);
+  const hasDayData = useRef(false);
+  const coreAt = useRef(0);
+  const lastLoadAt = useRef(0);
+
   const [students, setStudents] = useState([]);
   const [staff, setStaff] = useState([]);
   const [duties, setDuties] = useState([]);
@@ -70,6 +88,8 @@ export function SchoolDataProvider({ children }) {
       setRecords({});
       setHoliday(null);
       setLoading(true);
+      hasDayData.current = false;
+      lastLoadAt.current = 0;
     }
     setSelectedDay(target);
   }, []);
@@ -91,30 +111,46 @@ export function SchoolDataProvider({ children }) {
   }, [setDay]);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async () => {
+  /**
+   * @param opts.soft  true for "the screen came back into view": skipped if the
+   *                   data is under SOFT_REFRESH_MS old, and the register and
+   *                   staff list are only re-read once CORE_TTL_MS has passed.
+   *                   Anything else (pull to refresh, after a write) is a full
+   *                   reload. Screens that pass `refresh` straight to an
+   *                   onPress get an event object here, which is not soft.
+   */
+  const load = useCallback(async (opts) => {
     // A foreground event can arrive between midnight's setDay and its render.
     if (day !== selectedDayRef.current) return;
+    // Nobody signed in: row-level security would return nothing anyway.
+    if (!staffId) return;
+    const soft = opts?.soft === true;
+    if (soft && hasDayData.current && Date.now() - lastLoadAt.current < SOFT_REFRESH_MS) return;
+
     const version = ++loadVersion.current;
-    setLoading(true);
+    // A spinner only when there is nothing to show. With data (or a cached
+    // copy) on screen, the refresh happens underneath it.
+    if (!hasDayData.current) setLoading(true);
     setError(null);
     try {
-      const [studentRows, staffRows, dutyRows, holidayRow, leaveMap, settingsResult] = await Promise.all([
-        fetchStudents(),
-        fetchStaff(),
+      const coreFresh = soft && hasCore.current && Date.now() - coreAt.current < CORE_TTL_MS;
+      const [core, dutyRows, holidayRow, leaveMap, settingsResult] = await Promise.all([
+        coreFresh ? null : Promise.all([fetchStudents(), fetchStaff()]),
         fetchDuties(day),
         fetchHoliday(day),
         fetchOpenLeaves(),
         supabase.from("app_env").select("key,value").in("key", ["trial_start", "trial_end", "attendance_mode", "attendance_scope"]),
       ]);
       const settings = Object.fromEntries((settingsResult.data || []).map((row) => [row.key, row.value]));
-      // Pull attendance only for duties already submitted — there is nothing
-      // to fetch for pending ones, and it keeps the initial load small.
+      // Marks only for duties already submitted — there is nothing to fetch
+      // for pending ones — and all of them in one request.
       const submitted = dutyRows.filter((d) => d.state === "submitted");
-      const entries = await Promise.all(
-        submitted.map(async (d) => [
+      const marks = await fetchAttendanceForDuties(submitted.map((d) => d.id));
+      const recordMap = Object.fromEntries(
+        submitted.map((d) => [
           d.id,
           {
-            statuses: await fetchAttendance(d.id),
+            statuses: marks[d.id] || {},
             submittedBy: d.submittedBy,
             submittedAt: d.submittedAt,
             correctedBy: d.correctedBy,
@@ -125,19 +161,91 @@ export function SchoolDataProvider({ children }) {
       if (version !== loadVersion.current) return;
       // Publish duties with their saved marks. A correction screen must never
       // see "submitted" before the absences have arrived.
-      setRecords(Object.fromEntries(entries));
+      setRecords(recordMap);
       setTrialSettings(settings);
-      setStudents(studentRows);
-      setStaff(staffRows);
+      if (core) {
+        setStudents(core[0]);
+        setStaff(core[1]);
+        hasCore.current = true;
+        coreAt.current = Date.now();
+        writeCache(staffId, "core", { students: core[0], staff: core[1] });
+      }
       setDuties(dutyRows);
       setHoliday(holidayRow);
       setOpenLeaves(leaveMap);
+      hasDayData.current = true;
+      lastLoadAt.current = Date.now();
+      writeCache(staffId, `day:${day}`, {
+        duties: dutyRows,
+        records: recordMap,
+        holiday: holidayRow,
+        openLeaves: leaveMap,
+        settings,
+      });
+      pruneDays(staffId, day);
     } catch (e) {
       if (version === loadVersion.current) setError(e.message || "Could not load school data");
     } finally {
       if (version === loadVersion.current) setLoading(false);
     }
-  }, [day]);
+  }, [day, staffId]);
+
+  // INSTANT OPEN: put the last copy this phone saw on screen straight away,
+  // then let `load` replace it. Skipped for anything the network has already
+  // delivered, so a slow storage read can never overwrite fresher data.
+  useEffect(() => {
+    if (!staffId) return undefined;
+    let cancelled = false;
+    (async () => {
+      const [core, cached] = await Promise.all([
+        readCache(staffId, "core"),
+        readCache(staffId, `day:${day}`),
+      ]);
+      if (cancelled || day !== selectedDayRef.current) return;
+      if (core?.value && !hasCore.current) {
+        setStudents(core.value.students || []);
+        setStaff(core.value.staff || []);
+        hasCore.current = true;
+        coreAt.current = core.at || 0;
+      }
+      if (cached?.value && !hasDayData.current) {
+        const v = cached.value;
+        setDuties(v.duties || []);
+        setRecords(v.records || {});
+        setHoliday(v.holiday || null);
+        setOpenLeaves(v.openLeaves || {});
+        setTrialSettings(v.settings || {});
+        hasDayData.current = true;
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [staffId, day]);
+
+  // A different person (or nobody) is now signed in: drop everything the last
+  // one could see. On sign-out the saved copy is deleted from the phone too.
+  const lastStaffId = useRef(staffId);
+  useEffect(() => {
+    if (lastStaffId.current === staffId) return;
+    const signedOut = !staffId && !!lastStaffId.current;
+    lastStaffId.current = staffId;
+    loadVersion.current += 1;
+    hasCore.current = false;
+    hasDayData.current = false;
+    coreAt.current = 0;
+    lastLoadAt.current = 0;
+    setStudents([]);
+    setStaff([]);
+    setDuties([]);
+    setRecords({});
+    setHoliday(null);
+    setOpenLeaves({});
+    setTrialSettings({});
+    setLoading(true);
+    if (signedOut) clearCache();
+  }, [staffId]);
 
   useEffect(() => {
     load();
@@ -147,7 +255,7 @@ export function SchoolDataProvider({ children }) {
   // Screen focus does not change when the same screen returns from background.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") load();
+      if (state === "active") load({ soft: true });
     });
     return () => subscription.remove();
   }, [load]);

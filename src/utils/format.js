@@ -7,7 +7,7 @@ export const plural = (n, word, pluralForm) =>
 
 /** Minutes-from-midnight (the schema's start_min/end_min) -> "7:42 AM" */
 export const fmtTime = (minutes) => {
-  if (minutes == null || Number.isNaN(minutes)) return "—";
+  if (minutes == null || Number.isNaN(minutes)) return "-";
   const h24 = Math.floor(minutes / 60) % 24;
   const mm = String(Math.abs(minutes) % 60).padStart(2, "0");
   const h12 = ((h24 + 11) % 12) + 1;
@@ -79,21 +79,24 @@ const parseDay = (iso) => {
 };
 
 const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// Short names for dates shown in lists and tables, where "Wednesday, 18 Nov"
+// is cut off to "Wednesday, 1…" and the date — the part that matters — is lost.
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** Today's weekday, e.g. "Friday". Screens used to hardcode this next to the
  *  time, so every day of the week read as Friday. */
 export const weekdayName = () => WEEKDAY[new Date().getDay()];
 
-/** "2026-08-11" -> "Tuesday, 11 Aug". Today and yesterday get named instead. */
+/** "2026-08-11" -> "Tue, 11 Aug". Today and yesterday get named instead. */
 export const fmtDay = (iso) => {
   const d = parseDay(iso);
-  if (!d) return "—";
+  if (!d) return "-";
   if (iso === todayISO()) return "Today";
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return `${WEEKDAY[d.getDay()]}, ${d.getDate()} ${MONTH[d.getMonth()]}`;
+  return `${WEEKDAY_SHORT[d.getDay()]}, ${d.getDate()} ${MONTH[d.getMonth()]}`;
 };
 
 /**
@@ -104,7 +107,7 @@ export const fmtDay = (iso) => {
  */
 export const fmtDayCompact = (iso) => {
   const named = fmtDay(iso);
-  if (named === "Today" || named === "Yesterday" || named === "—") return named;
+  if (named === "Today" || named === "Yesterday" || named === "-") return named;
   const d = parseDay(iso);
   return `${d.getDate()} ${MONTH[d.getMonth()]}`;
 };
@@ -112,7 +115,7 @@ export const fmtDayCompact = (iso) => {
 /** The full weekday, from a date rather than from "now": "Saturday". */
 export const weekdayOf = (iso) => {
   const d = parseDay(iso);
-  return d ? WEEKDAY[d.getDay()] : "—";
+  return d ? WEEKDAY[d.getDay()] : "-";
 };
 
 /** Whether a "YYYY-MM-DD" falls on a Saturday. The Saturday assembly sheet is
@@ -125,7 +128,7 @@ export const isSaturday = (iso) => weekdayOf(iso) === "Saturday";
  *  replacing or nobody trusts it. */
 export const fmtDayNumeric = (iso) => {
   const d = parseDay(iso);
-  if (!d) return "—";
+  if (!d) return "-";
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${String(d.getFullYear()).slice(2)}`;
 };
@@ -133,7 +136,7 @@ export const fmtDayNumeric = (iso) => {
 /** Two short lines for a date chip: { top: "FRI", bottom: "8 Aug" }. */
 export const fmtDayChip = (iso) => {
   const d = parseDay(iso);
-  if (!d) return { top: "—", bottom: "" };
+  if (!d) return { top: "-", bottom: "" };
   return {
     top: iso === todayISO() ? "TODAY" : WEEKDAY[d.getDay()].slice(0, 3).toUpperCase(),
     bottom: `${d.getDate()} ${MONTH[d.getMonth()]}`,

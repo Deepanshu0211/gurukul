@@ -80,7 +80,7 @@ export function describeAlert(alert) {
  * phone. Free text stays available for anything else.
  */
 export const QUICK_REASONS = [
-  { id: "found", icon: "checkmark-circle-outline", label: "Found — safe now" },
+  { id: "found", icon: "checkmark-circle-outline", label: "Found, safe now" },
   { id: "sickbay", icon: "medkit-outline", label: "In the sick bay" },
   { id: "home", icon: "home-outline", label: "Gone home" },
   { id: "teacher", icon: "person-outline", label: "With another teacher" },

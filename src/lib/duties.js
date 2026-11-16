@@ -149,6 +149,36 @@ export async function fetchAttendance(dutyId) {
 }
 
 /**
+ * Every exception mark for many duties in ONE request, as
+ * { [dutyId]: { admissionNo: status } }.
+ *
+ * Replaces calling `fetchAttendance` once per submitted duty, which by the
+ * evening was seventy-odd round trips every time the app loaded. Present is a
+ * NULL status, so only the exceptions travel: a few dozen rows, not thousands.
+ */
+export async function fetchAttendanceForDuties(dutyIds) {
+  const out = Object.fromEntries(dutyIds.map((id) => [id, {}]));
+  if (!dutyIds.length) return out;
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("attendance")
+      .select("duty_id, admission_no, status")
+      .in("duty_id", dutyIds)
+      .not("status", "is", null)
+      .order("duty_id")
+      .order("admission_no")
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    (data || []).forEach((r) => {
+      if (!out[r.duty_id]) out[r.duty_id] = {};
+      out[r.duty_id][r.admission_no] = r.status;
+    });
+    if (!data || data.length < PAGE) return out;
+  }
+}
+
+/**
  * Save a submission and lock the duty â€” one atomic call (migrations/010).
  *
  * This used to be two statements from the app: upsert the marks, then flip the

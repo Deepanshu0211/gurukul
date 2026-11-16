@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet, Platform } from "react-native";
 import BottomSheet, { SheetOption } from "./BottomSheet";
 import CalendarSheet from "./CalendarSheet";
 import { PrimaryButton } from "./ui";
 import { useDialog } from "./Dialog";
+import { useToast } from "./Toast";
 import { useAuth } from "../context/AuthContext";
 import {
   buildReport,
   printReport,
+  savePdf,
+  forgetSaveFolder,
   weekStart,
   addDays,
   lastSaturday,
@@ -48,6 +51,7 @@ export default function PrintSheets({
 }) {
   const { user } = useAuth();
   const dialog = useDialog();
+  const toast = useToast();
 
   // Where in the flow we are: "export" (the three choices) | "range" (two
   // dates and a button) | "from" | "to" (the calendar). Stacking a calendar
@@ -75,7 +79,9 @@ export default function PrintSheets({
   // sheet is a different document from the one this sheet is otherwise
   // printing, offered from the same list because it answers the same question
   // — "give me the printed record" — from the same place.
-  const runExport = async (from, to, fmt = format) => {
+  // `paper` = the old way, through the phone's print screen. Everything else
+  // saves the PDF straight to a folder (see savePdf in lib/report.js).
+  const runExport = async (from, to, fmt = format, paper = false) => {
     if (exporting) return;
     setExporting(true);
     try {
@@ -102,12 +108,27 @@ export default function PrintSheets({
         });
         return;
       }
-      await printReport(report.html);
+      if (paper) {
+        await printReport(report.html);
+        onClose();
+        return;
+      }
+      const { where } = await savePdf(report.html, report.name);
       onClose();
+      if (where) toast.show(`PDF saved to ${where}`, { tone: "success" });
     } catch (e) {
+      // Backing out of the folder picker is a choice, not an error.
+      if (e?.cancelled) return;
       const shown = describeError(
         e,
-        { title: "Could not create the PDF", message: "Something went wrong building the report." },
+        {
+          title: "Could not create the PDF",
+          // The cause, not just the fact: "something went wrong" left nobody
+          // able to tell a missing permission from a broken report.
+          message:
+            "Something went wrong building the report." +
+            (e?.message ? `\n\nDetails: ${e.message}` : ""),
+        },
         null
       );
       // `shown.title` already falls back to the one passed above for failures
@@ -152,7 +173,7 @@ export default function PrintSheets({
       <BottomSheet
         visible={visible && step === "export"}
         onClose={close}
-        title="Print attendance"
+        title="Save attendance PDF"
         subtitle={
           subtitle ||
           (format === REPORT_FORMAT.HEADCOUNT
@@ -166,9 +187,9 @@ export default function PrintSheets({
         ) : (
           <>
             {/* Each row says the dates it will use, so nothing depends on
-                remembering what the screen behind the sheet is set to. The
-                print dialog is also where "Save as PDF" lives, so one verb
-                covers printing and saving. */}
+                remembering what the screen behind the sheet is set to. These
+                save straight to a folder; "Print on paper" is the one that
+                opens the phone's print screen. */}
             {showSaturday && (
               <SheetOption
                 icon="ribbon-outline"
@@ -181,13 +202,13 @@ export default function PrintSheets({
             )}
             <SheetOption
               icon="today-outline"
-              label="Print this day"
+              label="This day"
               hint={fmtDay(day)}
               onPress={() => runExport(day, day)}
             />
             <SheetOption
               icon="calendar-outline"
-              label="Print this week"
+              label="This week"
               hint={`${fmtDayCompact(thisWeek.from)} to ${fmtDayCompact(thisWeek.to)}`}
               onPress={() => runExport(thisWeek.from, thisWeek.to)}
             />
@@ -197,6 +218,23 @@ export default function PrintSheets({
               hint="Any two days"
               onPress={() => setStep("range")}
             />
+            <SheetOption
+              icon="print-outline"
+              label="Print on paper"
+              hint={`${fmtDay(day)} · opens the phone's print screen`}
+              onPress={() => runExport(day, day, format, true)}
+            />
+            {Platform.OS === "android" && (
+              <SheetOption
+                icon="folder-open-outline"
+                label="Change save folder"
+                hint="The next PDF asks where to go"
+                onPress={async () => {
+                  await forgetSaveFolder();
+                  toast.show("The next PDF will ask for a folder");
+                }}
+              />
+            )}
           </>
         )}
       </BottomSheet>
@@ -228,8 +266,8 @@ export default function PrintSheets({
               onPress={() => setStep("to")}
             />
             <PrimaryButton
-              title="Print"
-              icon="print-outline"
+              title="Save PDF"
+              icon="download-outline"
               onPress={() => runExport(range.from || day, range.to || day)}
               style={{ marginTop: spacing.md }}
             />

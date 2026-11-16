@@ -63,7 +63,7 @@ const REMINDER_HINT = {
   null: "A notification 10 minutes before each checkpoint you are down to mark, and again 10 minutes before it closes if it is still unmarked. Only your own checkpoints, and only on this phone.",
   web: "Available in the phone app. A browser cannot schedule notifications.",
   "expo-go":
-    "Not available in Expo Go — it has no notification support on Android. Install the development build of this app to use reminders.",
+    "Not available in Expo Go. It has no notification support on Android. Install the development build of this app to use reminders.",
 };
 
 const ICON = 18;
@@ -75,13 +75,13 @@ const SERVER = (() => {
   if (url.includes("qpwfmdddvpmnqlwqrzke")) return "Pilot (school data)";
   return url ? "Custom server" : "Not configured";
 })();
-const VERSION = appConfig?.expo?.version || "—";
+const VERSION = appConfig?.expo?.version || "-";
 
 /** The short "how do I…" guide, per role. Kept to what the app actually does. */
 const GUIDE = {
   marking: [
     ["checkmark-done-outline", "Everyone starts Present", "Open a duty and tap only the children who are not there. Present is the default."],
-    ["swap-horizontal-outline", "Absent vs accounted", "Absent means nobody knows where the child is — it raises a safety alert. Home, Sick, Outing and Activity are accounted for."],
+    ["swap-horizontal-outline", "Absent vs accounted", "Absent means nobody knows where the child is. It raises a safety alert. Home, Sick, Outing and Activity are accounted for."],
     ["lock-closed-outline", "Submitting locks it", "After you submit, the register is read-only for you. A coordinator or the MOD can correct it."],
     ["notifications-outline", "Reminders", "Turn on Duty reminders above to be nudged 10 minutes before each of your checkpoints closes."],
   ],
@@ -117,7 +117,10 @@ export default function AccountScreen({ navigation }) {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState(null);
-  const [supportSheet, setSupportSheet] = useState(null); // "contact" | "guide" | "about"
+  // Which password fields are shown in plain text. Per field, so revealing the
+  // new one to check a typo does not also put the current one on screen.
+  const [pwShown, setPwShown] = useState({});
+  const [supportSheet, setSupportSheet] = useState(null); // "contact" | "guide"
   // Teachers have no Roster tab, so this is their way to add a new child.
   const [addingStudent, setAddingStudent] = useState(false);
 
@@ -157,7 +160,7 @@ export default function AccountScreen({ navigation }) {
     const to = helpdesk.find((m) => m.email)?.email || "";
     const subject = encodeURIComponent("BG-SAAR · problem report");
     const body = encodeURIComponent(
-      `What happened:\n\n\nWhat I expected:\n\n\n— \nApp ${VERSION} · ${Platform.OS} · ${SERVER}\n${user.name} (${roleLabel(user.role)})`
+      `What happened:\n\n\nWhat I expected:\n\n\n-- \nApp ${VERSION} · ${Platform.OS} · ${SERVER}\n${user.name} (${roleLabel(user.role)})`
     );
     open(`mailto:${to}?subject=${subject}&body=${body}`);
   };
@@ -397,11 +400,11 @@ export default function AccountScreen({ navigation }) {
 
         <SectionLabel>Your record</SectionLabel>
         <View style={styles.statsRow}>
-          <Stat value={totals.loading || totals.error ? "—" : totals.taken} label="Checkpoints taken" inverted />
+          <Stat value={totals.loading || totals.error ? "-" : totals.taken} label="Checkpoints taken" inverted />
           <View style={styles.statDivider} />
-          <Stat value={totals.loading || totals.error ? "—" : totals.marked} label="Students marked" inverted />
+          <Stat value={totals.loading || totals.error ? "-" : totals.marked} label="Students marked" inverted />
           <View style={styles.statDivider} />
-          <Stat value={totals.loading || totals.error ? "—" : totals.absent} label="Absences found" inverted />
+          <Stat value={totals.loading || totals.error ? "-" : totals.absent} label="Absences found" inverted />
         </View>
 
         <SectionLabel>Your details</SectionLabel>
@@ -510,7 +513,7 @@ export default function AccountScreen({ navigation }) {
               {canWorkGate(user?.role) && (
                 <ActionRow
                   icon="exit-outline"
-                  label="Gate — sign students in and out"
+                  label="Gate: sign students in and out"
                   onPress={() => navigation.navigate("Gate")}
                 />
               )}
@@ -524,7 +527,8 @@ export default function AccountScreen({ navigation }) {
             <>
               <ActionRow
                 icon="notifications-outline"
-                label="Notifications — gate sign-outs & sign-ins"
+                label="Notifications"
+                hint="Gate sign-outs & sign-ins"
                 badge={notices.unread}
                 onPress={() => navigation.navigate("Notifications")}
               />
@@ -546,6 +550,7 @@ export default function AccountScreen({ navigation }) {
             onPress={() => {
               setPw({ current: "", next: "", confirm: "" });
               setPwError(null);
+              setPwShown({});
               setPwSheet(true);
             }}
           />
@@ -562,12 +567,6 @@ export default function AccountScreen({ navigation }) {
           <ActionRow icon="book-outline" label="Quick guide" onPress={() => setSupportSheet("guide")} />
           <Divider inset={ROW_INSET} />
           <ActionRow icon="bug-outline" label="Report a problem" onPress={reportProblem} />
-          <Divider inset={ROW_INSET} />
-          <ActionRow
-            icon="information-circle-outline"
-            label="About this app"
-            onPress={() => setSupportSheet("about")}
-          />
         </View>
 
         <TouchableOpacity
@@ -653,19 +652,33 @@ export default function AccountScreen({ navigation }) {
           ["next", "New password", "newPassword"],
           ["confirm", "New password again", "newPassword"],
         ].map(([key, label, content]) => (
-          <TextInput
-            key={key}
-            value={pw[key]}
-            onChangeText={(v) => setPw((p) => ({ ...p, [key]: v }))}
-            placeholder={label}
-            placeholderTextColor={colors.textMuted}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType={content}
-            style={[styles.sheetInput, { marginBottom: spacing.sm }]}
-            accessibilityLabel={label}
-          />
+          <View key={key} style={styles.pwField}>
+            <TextInput
+              value={pw[key]}
+              onChangeText={(v) => setPw((p) => ({ ...p, [key]: v }))}
+              placeholder={label}
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry={!pwShown[key]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType={content}
+              style={[styles.sheetInput, styles.pwInput]}
+              accessibilityLabel={label}
+            />
+            <TouchableOpacity
+              style={styles.pwEye}
+              onPress={() => setPwShown((s) => ({ ...s, [key]: !s[key] }))}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={pwShown[key] ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+            >
+              <Ionicons
+                name={pwShown[key] ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color={colors.textMuted}
+              />
+            </TouchableOpacity>
+          </View>
         ))}
         {!!(pwError || (pw.next && pwIssue)) && (
           <Text style={styles.pwError}>{pwError || pwIssue}</Text>
@@ -727,7 +740,7 @@ export default function AccountScreen({ navigation }) {
           <Text style={typography.caption}>Contact the school office for help with your account.</Text>
         )}
         <Text style={styles.note}>
-          A child missing right now? Do not wait for the app — call the MOD or the coordinator on duty.
+          A child missing right now? Do not wait for the app. Call the MOD or the coordinator on duty.
         </Text>
       </BottomSheet>
 
@@ -749,18 +762,6 @@ export default function AccountScreen({ navigation }) {
             </View>
           </View>
         ))}
-      </BottomSheet>
-
-      <BottomSheet
-        visible={supportSheet === "about"}
-        onClose={() => setSupportSheet(null)}
-        title="BG-SAAR"
-        subtitle="Attendance & Student Safety · Bhaktivedanta Gurukula & International School"
-        showClose
-      >
-        <SheetOption icon="pricetag-outline" label={`Version ${VERSION}`} hint={`${Platform.OS} build`} />
-        <SheetOption icon="server-outline" label={SERVER} hint="The database this build reads and writes" />
-        <SheetOption icon="person-outline" label={user.email} hint={roleLabel(user.role)} />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -790,7 +791,7 @@ function DetailRow({ icon, label, value, locked, onEdit }) {
   );
 }
 
-function ActionRow({ icon, label, onPress, badge }) {
+function ActionRow({ icon, label, hint, onPress, badge }) {
   return (
     <TouchableOpacity
       style={styles.row}
@@ -801,7 +802,14 @@ function ActionRow({ icon, label, onPress, badge }) {
     >
       <Ionicons name={icon} size={ICON} color={colors.textMuted} />
       <View style={styles.rowMain}>
-        <Text style={styles.rowValue}>{label}</Text>
+        <Text style={styles.rowValue} numberOfLines={1}>
+          {label}
+        </Text>
+        {!!hint && (
+          <Text style={styles.rowHint} numberOfLines={1}>
+            {hint}
+          </Text>
+        )}
       </View>
       {!!badge && (
         <View style={styles.badge}>
@@ -932,6 +940,20 @@ const styles = StyleSheet.create({
   },
   logoutText: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 20, color: colors.danger },
 
+  pwField: {
+    marginBottom: spacing.sm,
+    justifyContent: "center",
+  },
+  // Room on the right so typed text never runs under the eye.
+  pwInput: {
+    paddingRight: spacing.md + 2 + 32,
+  },
+  pwEye: {
+    position: "absolute",
+    right: spacing.md,
+    height: "100%",
+    justifyContent: "center",
+  },
   sheetInput: {
     minHeight: layout.touch + 4,
     borderWidth: 1.5,

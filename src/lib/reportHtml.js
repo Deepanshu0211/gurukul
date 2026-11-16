@@ -58,7 +58,7 @@ const clip = (s, n = 34) => {
  * grey; only the exceptions are set in black.
  */
 const markCell = (mark) => {
-  if (!mark) return { text: "—", cls: "none" };
+  if (!mark) return { text: "-", cls: "none" };
   if (mark.present) return { text: "P", cls: "present" };
   if (mark.status === "A") return { text: "A", cls: "absent" };
   return { text: esc(mark.status), cls: "other" };
@@ -330,8 +330,8 @@ function registerTable(students, checkpoints) {
 const LEGEND = `<div class="legend key">
   <b>P</b> present &nbsp;&nbsp; <b>A</b> absent &nbsp;&nbsp; <b>H</b> home &nbsp;&nbsp;
   <b>S</b> sick &nbsp;&nbsp; <b>O</b> outing &nbsp;&nbsp; <b>G</b> Gita Nagari &nbsp;&nbsp;
-  <b>V</b> activity &nbsp;&nbsp; <b>Y</b> self study &nbsp;&nbsp;
-  <b>—</b> not in that checkpoint's group
+  <b>V</b> activity &nbsp;&nbsp; <b>Y</b> self study &nbsp;&nbsp; <b>D</b> YDIV &nbsp;&nbsp;
+  <b>-</b> not in that checkpoint's group
 </div>`;
 
 /** One day: the checkpoint key, who was not present, then the full register. */
@@ -462,7 +462,7 @@ export function rangeReportHtml(
       </table>`
     : `<div class="none-row">Every student was present at every checkpoint in this period.</div>`;
 
-  const pct = totalMarks ? (100 - (100 * exceptions.length) / totalMarks).toFixed(1) : "—";
+  const pct = totalMarks ? (100 - (100 * exceptions.length) / totalMarks).toFixed(1) : "-";
 
   return page(
     `${header(
@@ -530,17 +530,17 @@ export function headcountReportHtml(
         ${multiDay ? `<td>${esc(fmtDay(c.day))}</td>` : `<td class="c"><b>${i + 1}</b></td>`}
         ${multiActivity ? `<td class="class-cell">${esc(c.name)}</td>` : ""}
         <td class="class-cell"><i>Yet to submit</i></td>
-        <td class="class-cell">—</td>
+        <td class="class-cell">-</td>
         <td class="class-cell">${esc(c.group)}</td>
-        <td class="num">—</td>
-        <td class="num">—</td>
-        <td class="num">—</td>
-        <td class="num">—</td>
+        <td class="num">-</td>
+        <td class="num">-</td>
+        <td class="num">-</td>
+        <td class="num">-</td>
       </tr>` : `<tr>
         ${multiDay ? `<td>${esc(fmtDay(c.day))}</td>` : `<td class="c"><b>${i + 1}</b></td>`}
         ${multiActivity ? `<td class="class-cell">${esc(c.name)}</td>` : ""}
         <td class="class-cell">${esc(c.takenBy || "Not submitted")}</td>
-        <td class="class-cell">${esc((c.submittedTimes?.length ? c.submittedTimes : c.submittedAt ? [c.submittedAt] : []).map(time => new Date(time).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" })).join(" / ") || "—")}</td>
+        <td class="class-cell">${esc((c.submittedTimes?.length ? c.submittedTimes : c.submittedAt ? [c.submittedAt] : []).map(time => new Date(time).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" })).join(" / ") || "-")}</td>
         <td class="class-cell">${esc(c.group)}</td>
         <td class="num">${c.strength}</td>
         <td class="num">${c.present}</td>
@@ -654,10 +654,10 @@ export function saturdayReportHtml(
 ) {
   // A dash, exactly as the paper form is filled in. A grid of noughts is
   // harder to read across than a grid with gaps in it.
-  const n = (v) => (v ? String(v) : "—");
+  const n = (v) => (v ? String(v) : "-");
 
   const rowHtml = (r) => {
-    const label = r.house ? `${r.band} ${r.house}` : `${r.band} — no house set`;
+    const label = r.house ? `${r.band} ${r.house}` : `${r.band} (no house set)`;
     return `<tr class="${r.house ? "" : "unassigned"}">
       <td class="row-label">${esc(label)}</td>
       <td>${n(r.res)}</td>
@@ -702,7 +702,7 @@ export function saturdayReportHtml(
   if (totals.onDuty) {
     notes.push(
       `<div class="note">${totals.onDuty} of the students counted present
-       ${totals.onDuty === 1 ? "was" : "were"} marked Activity or Self study — on duty
+       ${totals.onDuty === 1 ? "was" : "were"} marked Activity or Self study, on duty
        elsewhere on campus, not at the assembly.</div>`
     );
   }

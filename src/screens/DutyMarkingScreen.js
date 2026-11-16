@@ -68,7 +68,7 @@ const getItemLayout = (_, index) => ({
 // mockData because it describes the choice to a teacher, not the record.
 const STATUS_HINT = {
   H: "Signed out to family",
-  S: "Unwell — sick bay or home",
+  S: "Unwell, in sick bay or at home",
   V: "At a school activity",
   O: "On an approved outing",
   G: "At Gita Nagari",
@@ -221,7 +221,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
         title: `${student.name} is signed out`,
         message:
           `Reception signed ${student.name} out on ${fmtDay(leave.outDay)}` +
-          `${leave.reason ? ` — ${leave.reason}` : ""}. ` +
+          `${leave.reason ? ` (${leave.reason})` : ""}. ` +
           `Every checkpoint records them as ${what} until they are signed back in at the gate. ` +
           `You can mark them present again as soon as reception does that.`,
       });
@@ -405,7 +405,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
       // walked a line of forty students must not have to start again.
       const shown = describeError(
         e,
-        { title: "Not submitted", message: "Something went wrong saving this. Your marks are still here — try again." },
+        { title: "Not submitted", message: "Something went wrong saving this. Your marks are still here. Try again." },
         "Your marks are still here. Try again when you have signal."
       );
       dialog.alert({
@@ -649,7 +649,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
         />
         <SheetOption
           label="Absent"
-          hint="Whereabouts unknown — raises a safety alert"
+          hint="Whereabouts unknown. Raises a safety alert"
           danger
           active={sheetFor && statuses[sheetFor.id] === "A"}
           onPress={() => setStatus(sheetFor.id, "A")}
@@ -661,7 +661,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
           <SheetOption
             icon="exit-outline"
             label="Sign out at the gate"
-            hint="Going home or leaving campus — carries to every later checkpoint, coordinators are notified"
+            hint="Going home or leaving campus. Carries to every later checkpoint, and coordinators are notified"
             trailing={<Ionicons name="chevron-forward" size={18} color={colors.icon} />}
             onPress={() => {
               const adm = sheetFor.id;
@@ -693,7 +693,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
           <View style={[styles.sheetNote, styles.sheetNoteDanger]}>
             <Ionicons name="warning-outline" size={16} color={colors.danger} />
             <Text style={[styles.sheetNoteText, { color: colors.danger }]}>
-              {plural(absent, "student")} marked absent — unaccounted for. This raises a safety alert to the Principal.
+              {plural(absent, "student")} marked absent and unaccounted for. This raises a safety alert to the Principal.
             </Text>
           </View>
         )}
@@ -734,7 +734,7 @@ export default function DutyMarkingScreen({ route, navigation }) {
         <SheetOption label="Present" hint="Clear every mark" onPress={() => applyAll("P")} />
         <SheetOption
           label="Absent"
-          hint="Whole group unaccounted — raises safety alerts on submit"
+          hint="Whole group unaccounted. Raises safety alerts on submit"
           danger
           onPress={() => applyAll("A")}
         />
@@ -823,7 +823,7 @@ const StudentRow = React.memo(function StudentRow({
         <Text style={typography.caption} numberOfLines={1}>
           {gated
             ? `Signed out ${fmtDay(leave.outDay)}${leave.reason ? ` · ${leave.reason}` : ""}`
-            : `Roll ${student.roll ?? "—"}${classDescription ? ` · ${classDescription}` : ""} · ${student.type === "D" ? "Day scholar" : "Residential"}`}
+            : `Roll ${student.roll ?? "-"}${classDescription ? ` · ${classDescription}` : ""} · ${student.type === "D" ? "Day scholar" : "Residential"}`}
         </Text>
       </Row>
 
@@ -836,7 +836,7 @@ const StudentRow = React.memo(function StudentRow({
           activeOpacity={0.7}
           style={[styles.elsewhereChip, styles.gatedChip]}
           accessibilityRole="button"
-          accessibilityLabel={`${student.name} is ${label} — signed out at the gate. Why?`}
+          accessibilityLabel={`${student.name} is ${label}, signed out at the gate. Why?`}
         >
           <Ionicons name="lock-closed" size={11} color={colors.textMuted} />
           <Text style={styles.elsewhereText} numberOfLines={1}>

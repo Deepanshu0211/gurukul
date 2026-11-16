@@ -38,7 +38,26 @@ const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 const pad = (n) => String(n).padStart(2, "0");
 const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
 
-export default function CalendarSheet({ visible, selected, onSelect, onClose, maxDay }) {
+/**
+ * Optional, for pickers that look FORWARD (the holiday calendar):
+ *   minDay   earliest pickable day; earlier days are greyed out
+ *   title / subtitle  replace the attendance wording
+ *   marks    false = no attendance dots and no fetch for them
+ *   range    { from, to } — shades the days between, so picking the last day
+ *            of a break shows the whole break
+ */
+export default function CalendarSheet({
+  visible,
+  selected,
+  onSelect,
+  onClose,
+  maxDay,
+  minDay,
+  title = "Choose a date",
+  subtitle = "Days with a dot have attendance recorded.",
+  marks = true,
+  range,
+}) {
   // Which month the grid is showing. Opens on the selected day's month so the
   // current choice is always the first thing visible.
   const [cursor, setCursor] = useState(() => {
@@ -57,7 +76,7 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose, ma
   }, [visible, selected]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !marks) return;
     let cancelled = false;
     setLoading(true);
     fetchMarkedDaysInMonth(cursor.year, cursor.month)
@@ -69,7 +88,7 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose, ma
     return () => {
       cancelled = true;
     };
-  }, [visible, cursor.year, cursor.month]);
+  }, [visible, marks, cursor.year, cursor.month]);
 
   const today = todayISO();
   const latest = maxDay || today;
@@ -115,26 +134,36 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose, ma
   // History defaults to today; Duties may also preview scheduled trial dates.
   const atCurrentMonth =
     cursor.year === Number(latest.slice(0, 4)) && cursor.month === Number(latest.slice(5, 7)) - 1;
+  const atFirstMonth =
+    !!minDay &&
+    cursor.year === Number(minDay.slice(0, 4)) &&
+    cursor.month === Number(minDay.slice(5, 7)) - 1;
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title="Choose a date"
-      subtitle="Days with a dot have attendance recorded."
+      title={title}
+      subtitle={subtitle}
       scroll={false}
       showClose
     >
       <View style={styles.monthBar}>
         <TouchableOpacity
           onPress={() => step(-1)}
+          disabled={atFirstMonth}
           hitSlop={layout.hitSlop}
           activeOpacity={0.6}
-          style={styles.monthBtn}
+          style={[styles.monthBtn, atFirstMonth && styles.monthBtnOff]}
           accessibilityRole="button"
           accessibilityLabel="Previous month"
+          accessibilityState={{ disabled: atFirstMonth }}
         >
-          <Ionicons name="chevron-back" size={20} color={colors.primary} />
+          <Ionicons
+            name="chevron-back"
+            size={20}
+            color={atFirstMonth ? colors.border : colors.primary}
+          />
         </TouchableOpacity>
 
         <View style={styles.monthLabelWrap}>
@@ -181,8 +210,11 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose, ma
             const value = iso(cursor.year, cursor.month, d);
             const isSelected = value === selected;
             const isToday = value === today;
-            const isFuture = value > latest;
-            const hasData = markedDays.has(value);
+            // Named for the original use; it now means "outside the window".
+            const isFuture = value > latest || (!!minDay && value < minDay);
+            const hasData = marks && markedDays.has(value);
+            const inRange =
+              !!range && !isSelected && value >= range.from && value <= range.to;
 
             return (
               <TouchableOpacity
@@ -203,6 +235,7 @@ export default function CalendarSheet({ visible, selected, onSelect, onClose, ma
                 <View
                   style={[
                     styles.day,
+                    inRange && styles.dayInRange,
                     isToday && styles.dayToday,
                     isSelected && styles.daySelected,
                   ]}
@@ -300,6 +333,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  dayInRange: { backgroundColor: colors.primarySoft },
   dayToday: { borderWidth: 1.5, borderColor: colors.primary },
   daySelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   dayText: {

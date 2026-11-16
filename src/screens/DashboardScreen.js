@@ -110,6 +110,11 @@ export default function DashboardScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
+      // Always a full reload, never the 20-second soft skip the other tabs
+      // use. Until the alert emails exist this screen is the only place a
+      // coordinator sees "present earlier, absent now", and that must not
+      // be up to 20 seconds old. The cached copy still shows instantly while
+      // this runs; it just never skips the fresh check.
       refresh();
       if (mayApprove) reloadRequests();
     }, [refresh, mayApprove, reloadRequests])
@@ -517,7 +522,7 @@ function AlertCard({ alert, onResolve }) {
         )}
       </View>
       <Text style={typography.caption}>
-        Class {alert.student.label} · Roll {alert.student.roll || "—"}
+        Class {alert.student.label} · Roll {alert.student.roll || "-"}
       </Text>
       <Text style={styles.alertBody}>{describeAlert(alert)}</Text>
 
@@ -610,7 +615,10 @@ const styles = StyleSheet.create({
   },
   alertCardUrgent: { borderColor: colors.danger, borderWidth: 1.5, backgroundColor: colors.dangerBg },
   alertTop: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: 2 },
-  alertName: { ...typography.h1, fontSize: 16, lineHeight: 21, flexShrink: 1 },
+  // `flex: 1` so the name takes the row and the WENT MISSING tag sits at the
+  // right edge, where it reads as the card's status rather than part of the
+  // name. A long name still truncates instead of pushing the tag off.
+  alertName: { ...typography.h1, fontSize: 16, lineHeight: 21, flex: 1 },
   urgentTag: {
     backgroundColor: colors.danger,
     borderRadius: radius.pill,

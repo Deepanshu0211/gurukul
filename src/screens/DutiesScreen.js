@@ -79,7 +79,7 @@ export default function DutiesScreen({ navigation }) {
   // returns to this tab, rather than only after an app restart.
   useFocusEffect(
     useCallback(() => {
-      refresh();
+      refresh({ soft: true });
     }, [refresh])
   );
 
@@ -265,7 +265,7 @@ export default function DutiesScreen({ navigation }) {
               title={holiday.label}
               body={
                 campusClosed
-                  ? `No attendance is taken on ${fmtDay(day)} — the campus is closed. Nothing is expected of you.`
+                  ? `No attendance is taken on ${fmtDay(day)}. The campus is closed. Nothing is expected of you.`
                   : `Classes are off on ${fmtDay(day)}. The residential checkpoints still run, so anything rostered to you appears here.`
               }
             />

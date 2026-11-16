@@ -65,7 +65,7 @@ export function NotificationsProvider({ children }) {
         return { title: `${name}${cls} is back on campus`, body: `Signed in by ${by}` };
       }
       const status = STATUS_META[n.status]?.label || n.status || "Away";
-      const reason = n.reason ? ` — ${n.reason}` : "";
+      const reason = n.reason ? ` · ${n.reason}` : "";
       return { title: `${name}${cls} signed out · ${status}`, body: `Signed out by ${by}${reason}` };
     },
     [studentsByAdm, staffName, me]
@@ -75,6 +75,9 @@ export function NotificationsProvider({ children }) {
   // without resubscribing every time the register reloads.
   const describeRef = useRef(describe);
   describeRef.current = describe;
+  // What the list held before a refetch, so only genuinely new notices ring.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
@@ -96,18 +99,38 @@ export function NotificationsProvider({ children }) {
     }
     refresh();
 
-    const unsubscribe = subscribeNotifications((row) => {
+    const announce = (n) => {
+      const d = describeRef.current(n);
+      toast.show(d.title, { tone: n.kind === "student_out" ? "info" : "success" });
+      showNoticeNow({ title: d.title, body: d.body });
+    };
+
+    const unsubscribe = subscribeNotifications(async (row) => {
+      // Keep the Gate screen and marking locks in step with the new leave.
+      refreshLeaves?.();
+
+      // Realtime sends an empty or partial row when it could not check the
+      // read policy for this socket. Announcing that produced "undefined
+      // signed out · Away — Signed out by unknown". The table is the source
+      // of truth, so in that case ask it which notices are new.
+      if (!row?.id || !row?.admission_no) {
+        let fresh;
+        try {
+          fresh = await fetchNotifications(me);
+        } catch {
+          return;
+        }
+        const seen = new Set(itemsRef.current.map((p) => p.id));
+        setItems(fresh);
+        fresh.filter((n) => !seen.has(n.id) && !n.read).forEach(announce);
+        return;
+      }
+
       const n = fromRow(row, me);
       // The person who did it was already marked read by the trigger.
       if (n.actor && n.actor === me) n.read = true;
       setItems((prev) => (prev.some((p) => p.id === n.id) ? prev : [n, ...prev]));
-      if (!n.read) {
-        const d = describeRef.current(n);
-        toast.show(d.title, { tone: n.kind === "student_out" ? "info" : "success" });
-        showNoticeNow({ title: d.title, body: d.body });
-      }
-      // Keep the Gate screen and marking locks in step with the new leave.
-      refreshLeaves?.();
+      if (!n.read) announce(n);
     });
 
     const sub = AppState.addEventListener("change", (state) => {

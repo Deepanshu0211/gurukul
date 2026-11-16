@@ -18,6 +18,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "C:/Users/Deepanshu/Desktop/bgis-web", "run", "dev"],
       "port": 5180
+    },
+    {
+      "name": "udaan-game",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5199", "--directory", "C:/Users/Deepanshu/Desktop/udaan-bounce-back"],
+      "port": 5199
     }
   ]
 }

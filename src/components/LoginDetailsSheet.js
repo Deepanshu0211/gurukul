@@ -39,7 +39,7 @@ export async function copyOrShare(text, toast) {
       } catch {
         // Fall through.
       }
-      toast?.show("Could not copy — select the text above instead", { tone: "danger" });
+      toast?.show("Could not copy. Select the text above instead", { tone: "danger" });
       return;
     }
   }
@@ -47,7 +47,7 @@ export async function copyOrShare(text, toast) {
     // The phone's share sheet has "Copy" in it, plus WhatsApp and SMS.
     await Share.share({ message: text });
   } catch {
-    toast?.show("Could not open sharing — select the text instead", { tone: "danger" });
+    toast?.show("Could not open sharing. Select the text instead", { tone: "danger" });
   }
 }
 
@@ -76,7 +76,7 @@ export default function LoginDetailsSheet({ details, onClose, title = "Login det
             </Text>
           </View>
           <Text style={[typography.caption, styles.note]}>
-            This password works until they replace it. After that nobody — you included — can see
+            This password works until they replace it. After that nobody, you included, can see
             their password; you can only give them a new temporary one.
           </Text>
           <PrimaryButton

@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius, spacing, layout, loginFonts } from "../theme/theme";
@@ -80,7 +89,17 @@ export default function SetPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.sheet} keyboardShouldPersistTaps="handled">
+      {/* Same pattern as the sign-in screen: without it the keyboard opens over
+          the fields and the person cannot see what they are typing. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+      <ScrollView
+        contentContainerStyle={styles.sheet}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.form}>
           <View style={styles.icon}>
             <Ionicons name="key-outline" size={28} color={colors.primary} />
@@ -88,7 +107,7 @@ export default function SetPasswordScreen() {
           <Text style={styles.title}>Choose your password</Text>
           <Text style={styles.body}>
             Welcome{user?.name ? `, ${user.name}` : ""}. You signed in with a temporary password from your
-            coordinator. Choose your own now — after this, only you will know it.
+            coordinator. Choose your own now. After this, only you will know it.
           </Text>
 
           {field("NEW PASSWORD", pw, setPw, "New password")}
@@ -115,6 +134,7 @@ export default function SetPasswordScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -46,7 +46,7 @@ export default class ErrorBoundary extends React.Component {
           <Text style={styles.title}>Something went wrong</Text>
           <Text style={styles.body}>
             The app hit a problem it could not recover from on its own. Nothing you had already
-            submitted has been lost — attendance is saved on the school server the moment you
+            submitted has been lost. Attendance is saved on the school server the moment you
             press Submit.
           </Text>
           <Text style={styles.body}>

@@ -127,6 +127,11 @@ revoke all on all functions in schema public from public,anon;
 grant execute on all functions in schema public to authenticated,service_role;
 revoke all on function reset_school_day(date) from authenticated,anon,public;
 grant execute on function duty_health() to anon;
+-- The blanket revoke above also strips the two functions the sign-in screens
+-- call before anyone has a token. Without these, "Request access" fails with
+-- "permission denied" and a reset code cannot be redeemed.
+grant execute on function submit_access_request(text, text, text) to anon;
+grant execute on function redeem_password_reset(text, text, text) to anon;
 insert into app_env(key,value) values('environment','school-pilot') on conflict(key) do update set value=excluded.value;
 select cron.unschedule(jobid) from cron.job where jobname in ('reset-day-for-testing','generate-duties-testing');
 select cron.alter_job(jobid,schedule=>'30 18 * * *',command=>'select generate_duties_ahead();')

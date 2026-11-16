@@ -130,7 +130,7 @@ export default function ClassDayScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!isPast) refresh();
+      if (!isPast) refresh({ soft: true });
     }, [refresh, isPast])
   );
 
@@ -631,7 +631,7 @@ function StatStrip({ totals }) {
 function StripCell({ value, label, tone, loading }) {
   return (
     <View style={styles.stripCell}>
-      <Text style={[styles.stripValue, !!tone && { color: tone }]}>{loading ? "—" : value}</Text>
+      <Text style={[styles.stripValue, !!tone && { color: tone }]}>{loading ? "-" : value}</Text>
       <Text style={styles.stripLabel} numberOfLines={2}>
         {label}
       </Text>

@@ -189,7 +189,7 @@ export default function PendingScreen() {
                 {request.decisionNote ? ` They wrote: “${request.decisionNote}”` : ""}
               </Text>
               <Text style={styles.bodyMuted}>
-                If you think this was a mistake, speak to the school office — then ask again below.
+                If you think this was a mistake, speak to the school office, then ask again below.
               </Text>
               <PrimaryButton
                 title="Ask again"

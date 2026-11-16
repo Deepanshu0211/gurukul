@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius, typography, fonts, layout, surface } from "../theme/theme";
 import ScreenHeader from "../components/ScreenHeader";
-import BottomSheet, { SheetOption } from "../components/BottomSheet";
+import CalendarSheet from "../components/CalendarSheet";
 import { EmptyState, ErrorState, PrimaryButton, Pill, Row, SectionLabel } from "../components/ui";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
@@ -159,7 +159,7 @@ export default function HolidaysScreen({ navigation }) {
         ". Mangalarati, prasadam and night attendance still run, so the boarders are still counted."
       : "No attendance at all will be taken on " +
         (span.length === 1 ? "that day" : "those days") +
-        " — including Mangalarati, prasadam and night attendance. Declare this only if the hostel is empty.";
+        ", including Mangalarati, prasadam and night attendance. Declare this only if the hostel is empty.";
 
     haptics.warn();
     dialog.confirm({
@@ -194,7 +194,11 @@ export default function HolidaysScreen({ navigation }) {
         e,
         {
           title: "Not declared",
-          message: "Something went wrong writing to the school calendar. Nothing was changed.",
+          // The server's own words are kept: without them a failure here
+          // cannot be told apart from any other, and nobody can fix it.
+          message:
+            "Something went wrong writing to the school calendar. Nothing was changed." +
+            (e?.message ? `\n\nServer said: ${e.message}` : ""),
         },
         "Nothing was changed. Try again when you have signal."
       );
@@ -239,7 +243,9 @@ export default function HolidaysScreen({ navigation }) {
             e,
             {
               title: "Not cancelled",
-              message: "Something went wrong writing to the school calendar.",
+              message:
+                "Something went wrong writing to the school calendar." +
+                (e?.message ? `\n\nServer said: ${e.message}` : ""),
             },
             "Nothing was changed. Try again when you have signal."
           );
@@ -291,8 +297,12 @@ export default function HolidaysScreen({ navigation }) {
               <TextInput
                 value={label}
                 onChangeText={setLabel}
-                placeholder="Diwali break, Exam days, Founder's day…"
+                // Short on purpose: a placeholder wider than the box wraps on
+                // Android and both lines get clipped by the fixed height.
+                placeholder="e.g. Diwali break"
                 placeholderTextColor={colors.icon}
+                numberOfLines={1}
+                multiline={false}
                 style={styles.input}
                 maxLength={60}
                 accessibilityLabel="Name of the holiday"
@@ -392,23 +402,24 @@ export default function HolidaysScreen({ navigation }) {
         }}
       />
 
-      <BottomSheet
+      <CalendarSheet
         visible={!!picking}
         onClose={() => setPicking(null)}
         title={picking === "to" ? "Last day" : "First day"}
-        subtitle="Holidays are declared ahead. The next 90 days."
-        showClose
-      >
-        {days.map((iso) => (
-          <SheetOption
-            key={iso}
-            label={fmtDay(iso)}
-            hint={weekdayOf(iso)}
-            active={iso === (picking === "to" ? to : from)}
-            onPress={() => pickDay(iso)}
-          />
-        ))}
-      </BottomSheet>
+        subtitle={
+          picking === "to"
+            ? "The shaded days are the holiday. Up to 90 days ahead."
+            : "Holidays are declared ahead. Up to 90 days ahead."
+        }
+        selected={picking === "to" ? to : from}
+        // The last day can never be before the first, so those are greyed out
+        // instead of silently corrected after the tap.
+        minDay={picking === "to" ? from : days[0]}
+        maxDay={days[days.length - 1]}
+        marks={false}
+        range={{ from, to }}
+        onSelect={pickDay}
+      />
     </SafeAreaView>
   );
 }
@@ -474,9 +485,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md - 2,
     minHeight: layout.touch,
+    paddingVertical: spacing.sm,
     fontFamily: fonts.regular,
     fontSize: 15,
+    lineHeight: 20,
     color: colors.text,
+    textAlignVertical: "center",
+    includeFontPadding: false,
     marginBottom: spacing.md,
   },
 

@@ -122,7 +122,7 @@ export default function RosterScreen({ navigation, route }) {
   // app restart.
   useFocusEffect(
     useCallback(() => {
-      refresh();
+      refresh({ soft: true });
     }, [refresh])
   );
 
@@ -227,7 +227,7 @@ export default function RosterScreen({ navigation, route }) {
         title="Reassign duty"
         subtitle={`${reassigning?.checkpoint ?? ""} · ${
           reassigning?.group ?? ""
-        }. Applies to today only — the weekly default is unchanged.`}
+        }. Applies to today only. The weekly default is unchanged.`}
       >
         {STAFF.map((s) => (
           <SheetOption
@@ -377,7 +377,7 @@ function DutiesTab({
             {overdue && (
               <View style={styles.warnRow}>
                 <Ionicons name="alert-circle" size={14} color={colors.danger} />
-                <Text style={styles.warnText}>Overdue — escalation sent</Text>
+                <Text style={styles.warnText}>Overdue · escalation sent</Text>
               </View>
             )}
           </View>
@@ -514,7 +514,7 @@ function StaffTab({
       title: `Reset ${member.name}'s password?`,
       message:
         "You get a one-time code to give them in person or by phone. They enter it on the sign-in screen " +
-        "under “Forgot password?” and choose a new password themselves — you never see it. " +
+        "under “Forgot password?” and choose a new password themselves. You never see it. " +
         "The code works once and expires in 30 minutes. They are signed out everywhere when it is used.",
       confirmLabel: "Get code",
       onConfirm: async () => {
@@ -939,7 +939,7 @@ They keep their sign-in but see nothing, and can ask again.`,
                 <SheetOption
                   icon="key-outline"
                   label={`Password: ${login.tempPassword}`}
-                  hint="Temporary — they have not changed it yet. Tap to copy login details"
+                  hint="Temporary. They have not changed it yet. Tap to copy login details"
                   onPress={() => {
                     const s = selected;
                     setSelected(null);
@@ -953,7 +953,7 @@ They keep their sign-in but see nothing, and can ask again.`,
               <SheetOption
                 icon="shield-checkmark-outline"
                 label="Has set their own password"
-                hint="Private to them — reset it below if they forget it"
+                hint="Private to them. Reset it below if they forget it"
               />
             );
           })()}
@@ -1103,7 +1103,7 @@ They keep their sign-in but see nothing, and can ask again.`,
           key={c.key}
           icon="school-outline"
           label={c.label}
-          hint={c.teacher ? `Currently ${c.teacher} — they would lose it` : plural(c.students, "student")}
+          hint={c.teacher ? `Currently ${c.teacher}, who would lose it` : plural(c.students, "student")}
           active={adding?.classKey === c.key}
           onPress={() => setAdding((a) => ({ ...a, classKey: c.key, pickingClass: false }))}
         />
@@ -1149,7 +1149,7 @@ They keep their sign-in but see nothing, and can ask again.`,
       visible={!!resetCode}
       onClose={() => setResetCode(null)}
       title="One-time reset code"
-      subtitle={resetCode ? `For ${resetCode.name}. Give it to them yourself — do not post it in a group.` : ""}
+      subtitle={resetCode ? `For ${resetCode.name}. Give it to them yourself. Do not post it in a group.` : ""}
       showClose
     >
       {!!resetCode && (
@@ -1278,7 +1278,7 @@ function StudentsTab({ bottomInset, query, onScroll, mayAdd }) {
         // The house is on the printed Saturday assembly sheet, so it has to be
         // checkable from inside the app — an office correcting a house on the
         // signed page needs to see the same value the sheet was built from.
-        message: `Admission no. ${s.adm}\nClass ${s.label} · Roll ${s.roll || "—"}\n${
+        message: `Admission no. ${s.adm}\nClass ${s.label} · Roll ${s.roll || "-"}\n${
           TYPE_LABEL[s.type]
         }\nHouse: ${s.house || "not assigned"}${s.remedial ? "\nRemedial batch" : ""}`,
       }),

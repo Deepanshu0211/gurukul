@@ -20,14 +20,32 @@ import { isCombinedClass, scopeAttendanceQuery, isVedicStudent } from "../domain
 
 const PAGE = 1000;
 
+// Pages fetched at once after the first. A whole-school day is four or five
+// pages; asked for one at a time on school wi-fi that was most of the wait.
+const PARALLEL_PAGES = 4;
+
+const page = async (build, n) => {
+  const { data, error } = await build().range(n * PAGE, n * PAGE + PAGE - 1);
+  if (error) throw new Error(error.message);
+  return data || [];
+};
+
 /** Pages through a query until it stops returning full pages. */
 async function fetchAll(build) {
-  const out = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    out.push(...(data || []));
-    if (!data || data.length < PAGE) return out;
+  const first = await page(build, 0);
+  // The common case — one class, or a week of exceptions — is one request.
+  if (first.length < PAGE) return first;
+
+  const out = [...first];
+  for (let next = 1; ; next += PARALLEL_PAGES) {
+    const batch = await Promise.all(
+      Array.from({ length: PARALLEL_PAGES }, (_, i) => page(build, next + i))
+    );
+    for (const rows of batch) {
+      out.push(...rows);
+      // A short page is the end; anything after it in the batch is empty.
+      if (rows.length < PAGE) return out;
+    }
     // A register that grows past this is a different problem than a report.
     if (out.length >= 50000) return out;
   }
@@ -69,13 +87,15 @@ async function staffNames() {
  * single pilot class.
  */
 export async function fetchDayReport(day, classKey = null) {
-  const rows = await fetchAll(() => {
-    let q = detail().eq("day", day);
-    q = scopeAttendanceQuery(q, classKey);
-    return q.order("start_min").order("roll_no");
-  });
-
-  const { byId, teacherOfClass } = await staffNames();
+  // Independent requests, so they go together rather than one after another.
+  const [rows, { byId, teacherOfClass }] = await Promise.all([
+    fetchAll(() => {
+      let q = detail().eq("day", day);
+      q = scopeAttendanceQuery(q, classKey);
+      return q.order("start_min").order("roll_no");
+    }),
+    staffNames(),
+  ]);
 
   // ONE COLUMN PER CHECKPOINT, NOT PER DUTY.
   //
@@ -179,23 +199,39 @@ export async function fetchDayReport(day, classKey = null) {
  */
 /** @param classKey '8|BALRAM' to print one class, or null for the school. */
 export async function fetchRangeReport(from, to, classKey = null) {
-  const rows = await fetchAll(() => {
-    let q = detail().gte("day", from).lte("day", to).not("status", "is", null);
-    q = scopeAttendanceQuery(q, classKey);
-    return q.order("day").order("start_min");
-  });
+  // The denominator for a percentage: every mark in the range, including
+  // the days nobody was away. Scoped the same way or the percentage would
+  // be one class's absences over the whole school's marks. `head: true` asks
+  // for the count without the rows.
+  let countQuery = supabase
+    .from("attendance_detail")
+    .select("*", { count: "exact", head: true })
+    .gte("day", from)
+    .lte("day", to);
+  countQuery = scopeAttendanceQuery(countQuery, classKey);
 
-  // Credit the submissions that contain this category's actual saved marks.
-  // Old source duties can include several categories; their group key alone
-  // cannot identify who marked the Vedic portion of the register.
-  const taken = await fetchAll(() => {
-    let q = supabase.from("attendance_detail")
-      .select("day, duty_id, admission_no, duty_class_key, rostered_to, submitted_by")
-      .gte("day", from).lte("day", to).not("submitted_at", "is", null);
-    q = scopeAttendanceQuery(q, classKey);
-    return q.order("day").order("duty_id").order("admission_no");
-  });
-  const { byId, teacherOfClass } = await staffNames();
+  // Four independent requests, sent together rather than one after another.
+  const [rows, taken, { byId, teacherOfClass }, counted] = await Promise.all([
+    fetchAll(() => {
+      let q = detail().gte("day", from).lte("day", to).not("status", "is", null);
+      q = scopeAttendanceQuery(q, classKey);
+      return q.order("day").order("start_min");
+    }),
+    // Credit the submissions that contain this category's actual saved marks.
+    // Old source duties can include several categories; their group key alone
+    // cannot identify who marked the Vedic portion of the register.
+    fetchAll(() => {
+      let q = supabase.from("attendance_detail")
+        .select("day, duty_id, admission_no, duty_class_key, rostered_to, submitted_by")
+        .gte("day", from).lte("day", to).not("submitted_at", "is", null);
+      q = scopeAttendanceQuery(q, classKey);
+      return q.order("day").order("duty_id").order("admission_no");
+    }),
+    staffNames(),
+    countQuery,
+  ]);
+  if (counted.error) throw new Error(counted.error.message);
+  const totalMarks = counted.count;
 
   // day -> the distinct people who submitted anything that day.
   const takenByDay = new Map();
@@ -203,7 +239,7 @@ export async function fetchRangeReport(from, to, classKey = null) {
     if (!d.submitted_by) return;
     if (!takenByDay.has(d.day)) takenByDay.set(d.day, new Map());
     takenByDay.get(d.day).set(d.submitted_by, {
-      name: byId.get(d.submitted_by) || "—",
+      name: byId.get(d.submitted_by) || "-",
       // Source duty ownership, never the student's academic class.
       cover:
         !!d.duty_class_key &&
@@ -212,20 +248,6 @@ export async function fetchRangeReport(from, to, classKey = null) {
           : teacherOfClass.has(d.duty_class_key) && teacherOfClass.get(d.duty_class_key) !== d.submitted_by),
     });
   });
-
-  // Marks per day, so a percentage has a denominator. `head: true` asks for
-  // the count without the rows.
-  // The denominator for a percentage: every mark in the range, including
-  // the days nobody was away. Scoped the same way or the percentage would
-  // be one class's absences over the whole school's marks.
-  let countQuery = supabase
-    .from("attendance_detail")
-    .select("*", { count: "exact", head: true })
-    .gte("day", from)
-    .lte("day", to);
-  countQuery = scopeAttendanceQuery(countQuery, classKey);
-  const { count: totalMarks, error } = await countQuery;
-  if (error) throw new Error(error.message);
 
   const byDay = new Map();
   const byStudent = new Map();
@@ -284,9 +306,25 @@ export async function fetchRangeReport(from, to, classKey = null) {
  * reads by name, and there are a few dozen of them in a week.
  */
 export async function fetchHeadcountReport(from, to) {
-  const data = await fetchAll(() => supabase.from("attendance_report_groups")
-    .select("*").gte("day", from).lte("day", to)
-    .order("day").order("start_min").order("duty_id"));
+  // Three independent requests, sent together rather than one after another.
+  const [data, pending, exceptions] = await Promise.all([
+    fetchAll(() => supabase.from("attendance_report_groups")
+      .select("*").gte("day", from).lte("day", to)
+      .order("day").order("start_min").order("duty_id")),
+    fetchAll(() => supabase.from("duties")
+      .select("id, day, group_label, checkpoints(name, start_min)")
+      .gte("day", from).lte("day", to).eq("state", "pending")
+      .order("day").order("id")),
+    fetchAll(() =>
+      detail()
+        .gte("day", from)
+        .lte("day", to)
+        .not("status", "is", null)
+        .order("day")
+        .order("start_min")
+        .order("roll_no")
+    ),
+  ]);
 
   // PostgREST serialises bigint counts as JSON numbers, but a driver that ever
   // hands them back as strings would turn every total into concatenation.
@@ -309,10 +347,6 @@ export async function fetchHeadcountReport(from, to) {
   // rows in it at all. The office asked for every class on the sheet either
   // way, so the still-pending duties are added as "yet to submit" rows with no
   // numbers — a blank there is the point, not a zero.
-  const pending = await fetchAll(() => supabase.from("duties")
-    .select("id, day, group_label, checkpoints(name, start_min)")
-    .gte("day", from).lte("day", to).eq("state", "pending")
-    .order("day").order("id"));
   for (const d of pending || []) {
     checkpoints.push({
       day: d.day,
@@ -330,16 +364,6 @@ export async function fetchHeadcountReport(from, to) {
       elsewhere: null,
     });
   }
-
-  const exceptions = await fetchAll(() =>
-    detail()
-      .gte("day", from)
-      .lte("day", to)
-      .not("status", "is", null)
-      .order("day")
-      .order("start_min")
-      .order("roll_no")
-  );
 
   const totals = checkpoints.filter((c) => !c.pending).reduce(
     (t, c) => ({
@@ -391,10 +415,15 @@ export const SATURDAY_CHECKPOINT = "morning";
  * than print a page of zeros that reads like an empty school.
  */
 export async function fetchSaturdayReport(day, checkpointId = SATURDAY_CHECKPOINT) {
-  const { data, error } = await supabase.rpc("saturday_report", {
-    p_day: day,
-    p_checkpoint: checkpointId,
-  });
+  // Two independent requests, sent together rather than one after another.
+  const [{ data, error }, { data: duties, error: dutyErr }] = await Promise.all([
+    supabase.rpc("saturday_report", { p_day: day, p_checkpoint: checkpointId }),
+    supabase
+      .from("duties")
+      .select("state, submitted_at, checkpoints(name, start_min)")
+      .eq("day", day)
+      .eq("checkpoint_id", checkpointId),
+  ]);
   if (error) throw new Error(error.message);
 
   // Same guard as the headcount: bigint counts arrive as JSON numbers today,
@@ -442,11 +471,6 @@ export async function fetchSaturdayReport(day, checkpointId = SATURDAY_CHECKPOIN
   // Was the checkpoint marked at all? A Saturday whose duty nobody submitted
   // still prints — with the class strengths and empty count columns — which
   // is exactly the blank form somebody would otherwise have gone looking for.
-  const { data: duties, error: dutyErr } = await supabase
-    .from("duties")
-    .select("state, submitted_at, checkpoints(name, start_min)")
-    .eq("day", day)
-    .eq("checkpoint_id", checkpointId);
   if (dutyErr) throw new Error(dutyErr.message);
 
   const list = duties || [];

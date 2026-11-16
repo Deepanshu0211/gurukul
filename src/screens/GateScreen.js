@@ -44,7 +44,7 @@ import { fmtClock, fmtDay, plural, todayISO } from "../utils/format";
 const LEAVE_REASONS = [
   { code: "H", hint: "Collected by family" },
   { code: "O", hint: "Approved outing" },
-  { code: "S", hint: "Unwell — sent home or to hospital" },
+  { code: "S", hint: "Unwell, sent home or to hospital" },
   { code: "G", hint: "Travelling to Gita Nagari" },
 ];
 
@@ -176,7 +176,7 @@ export default function GateScreen({ route, navigation }) {
         e,
         {
           title: "Not signed out",
-          message: "Something went wrong at the gate register. Nothing was recorded — try again.",
+          message: "Something went wrong at the gate register. Nothing was recorded. Try again.",
         },
         "Nothing was recorded. Try again when you have signal."
       );
@@ -316,7 +316,7 @@ export default function GateScreen({ route, navigation }) {
                 <EmptyState
                   icon="search-outline"
                   title="No match"
-                  body={`Nobody on campus matches “${query.trim()}”. A student who is already signed out will not appear here — check the other tab.`}
+                  body={`Nobody on campus matches “${query.trim()}”. A student who is already signed out will not appear here. Check the other tab.`}
                   compact
                 />
               ) : (
@@ -456,6 +456,8 @@ export default function GateScreen({ route, navigation }) {
           placeholderTextColor={colors.icon}
           style={styles.input}
           maxLength={120}
+          numberOfLines={1}
+          multiline={false}
           accessibilityLabel="Note about this sign-out"
         />
 
@@ -539,10 +541,16 @@ const styles = StyleSheet.create({
     ...surface.card,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md - 2,
+    // Explicit, so Android's own font padding does not make the box taller
+    // than the chips around it and push the text off-centre.
+    paddingVertical: spacing.sm,
     minHeight: layout.touch,
     fontFamily: fonts.regular,
     fontSize: 15,
+    lineHeight: 20,
     color: colors.text,
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
 
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs + 2 },

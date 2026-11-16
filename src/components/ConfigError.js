@@ -21,7 +21,7 @@ export default function ConfigError({ detail }) {
         <Text style={styles.title}>This app is not set up yet</Text>
         <Text style={styles.body}>
           It was built without the address of the school server, so it cannot sign anybody in or
-          load any attendance. Nothing is wrong with this phone — the app itself has to be built
+          load any attendance. Nothing is wrong with this phone. The app itself has to be built
           again.
         </Text>
 
@@ -29,8 +29,8 @@ export default function ConfigError({ detail }) {
         <Text style={styles.body}>
           {detail} {detail && detail.includes("and") ? "were" : "was"} missing at build time.
           These come from `.env` on a developer machine, which is gitignored and therefore absent
-          on a build server. Set them for the build instead — the `env` block in `eas.json`, or
-          EAS environment variables — then build again.
+          on a build server. Set them for the build instead (the `env` block in `eas.json`, or
+          EAS environment variables), then build again.
         </Text>
         <Text style={styles.code} selectable>
           EXPO_PUBLIC_SUPABASE_URL{"\n"}EXPO_PUBLIC_SUPABASE_ANON_KEY

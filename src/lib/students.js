@@ -13,7 +13,7 @@ const TYPE_CODE = {
 
 // Show the school's section names in full while retaining database keys.
 const sectionLabel = (sec) => {
-  if (!sec) return "—";
+  if (!sec) return "-";
   return { KRISHNA: "Krishna", BALRAM: "Balram", VEDIC: "Vedic" }[sec.toUpperCase()] || sec;
 };
 
