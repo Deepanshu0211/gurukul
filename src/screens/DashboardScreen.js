@@ -202,9 +202,9 @@ export default function DashboardScreen({ navigation }) {
                 activeOpacity={0.7}
                 style={styles.printBtn}
                 accessibilityRole="button"
-                accessibilityLabel="Print attendance headcount"
+                accessibilityLabel="Open the attendance report"
               >
-                <Ionicons name="print-outline" size={20} color={colors.primary} />
+                <Ionicons name="document-text-outline" size={20} color={colors.primary} />
               </TouchableOpacity>
             ) : null
           }

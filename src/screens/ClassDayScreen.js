@@ -327,9 +327,9 @@ export default function ClassDayScreen() {
             activeOpacity={0.7}
             style={styles.printBtn}
             accessibilityRole="button"
-            accessibilityLabel="Print or share attendance"
+            accessibilityLabel="Open the attendance report"
           >
-            <Ionicons name="print-outline" size={20} color={colors.primary} />
+            <Ionicons name="document-text-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
         }
       />

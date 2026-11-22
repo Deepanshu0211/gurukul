@@ -32,6 +32,7 @@ staging copy, or recovery if the current one is lost.
 | `migrations/037_staff_add_students.sql` | `add_student()` — any teacher, coordinator, management or admin adds a student into an existing class; only coordinator/admin can start a new class. Every addition is in the activity log |
 | `migrations/047_gate_notifications.sql` | Every gate sign-out/sign-in writes a `notifications` row (trigger on `student_leave`) for coordinator, MOD and admin; per-person read marks; realtime. Verified by `tests/gate-notifications.test.cjs` |
 | `migrations/048_staff_temporary_passwords.sql` | Coordinator adds staff WITH a login: temporary password `Initial@123` or random, readable by the coordinator only until the person replaces it on first sign-in (`staff.must_change_password`). Verified by `tests/staff-temp-passwords.test.cjs` |
+| `migrations/051_duty_without_marker.sql` | A register built with no marker (a class with no teacher) goes to a coordinator instead of aborting. Fixes "null value in column staff_id" when cancelling a holiday |
 | `seed-checkpoints-mock.sql` | MOCK only: default groups for the four new checkpoints |
 | `seed.sql` | Status types, checkpoints, staff, pilot duties |
 | `seed-mock-school.sql` | The school as its own register draws it: 18 classes, 411 students, 18 class teachers, today's duties |

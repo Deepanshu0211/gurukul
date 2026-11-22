@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet, Platform } from "react-nativ
 import BottomSheet, { SheetOption } from "./BottomSheet";
 import CalendarSheet from "./CalendarSheet";
 import { PrimaryButton } from "./ui";
+import ReportPreview from "./ReportPreview";
 import { useDialog } from "./Dialog";
 import { useToast } from "./Toast";
 import { useAuth } from "../context/AuthContext";
@@ -10,6 +11,7 @@ import {
   buildReport,
   printReport,
   savePdf,
+  shareReport,
   forgetSaveFolder,
   weekStart,
   addDays,
@@ -36,6 +38,12 @@ import { colors, spacing, typography } from "../theme/theme";
  * @param day     the day the screen is showing, as "YYYY-MM-DD" — the default
  * @param format  REPORT_FORMAT.REGISTER | REPORT_FORMAT.HEADCOUNT
  */
+const TITLES = {
+  [REPORT_FORMAT.REGISTER]: "Attendance register",
+  [REPORT_FORMAT.HEADCOUNT]: "Headcount report",
+  [REPORT_FORMAT.SATURDAY]: "Saturday assembly sheet",
+};
+
 export default function PrintSheets({
   visible,
   onClose,
@@ -60,6 +68,8 @@ export default function PrintSheets({
   const [step, setStep] = useState("export");
   const [exporting, setExporting] = useState(false);
   const [range, setRange] = useState({ from: null, to: null });
+  // The report on screen: { state, title, subtitle, report, emptyMessage }.
+  const [preview, setPreview] = useState(null);
 
   // Reopening always starts at the first choice. Without this, a flow closed
   // half way through the date pickers reopens on the calendar with no memory
@@ -75,15 +85,69 @@ export default function PrintSheets({
     if (!exporting) onClose();
   };
 
+  // What the buttons under the report do. Each one reports its own failure,
+  // and leaves the report open so the reader can try another way.
+  const failed = (e, title) => {
+    if (e?.cancelled) return; // backing out of a picker is a choice
+    const shown = describeError(
+      e,
+      { title, message: e?.message ? `Details: ${e.message}` : "Please try again." },
+      null
+    );
+    dialog.alert({
+      icon: shown.offline ? "cloud-offline-outline" : "alert-circle-outline",
+      title: shown.title,
+      message: shown.message,
+      destructive: !shown.offline,
+    });
+  };
+  const report = preview?.report;
+  const onShare = async () => {
+    try {
+      await shareReport(report.html, report.name);
+    } catch (e) {
+      failed(e, "Could not send the report");
+    }
+  };
+  const onPrint = async () => {
+    try {
+      await printReport(report.html);
+    } catch (e) {
+      failed(e, "Could not print the report");
+    }
+  };
+  const onSave = async () => {
+    try {
+      const { where } = await savePdf(report.html, report.name);
+      if (where) toast.show(`Saved to ${where}`, { tone: "success" });
+    } catch (e) {
+      failed(e, "Could not save the report");
+    }
+  };
+
   // `fmt` overrides the screen's format for one export. The Saturday assembly
   // sheet is a different document from the one this sheet is otherwise
   // printing, offered from the same list because it answers the same question
   // — "give me the printed record" — from the same place.
   // `paper` = the old way, through the phone's print screen. Everything else
   // saves the PDF straight to a folder (see savePdf in lib/report.js).
-  const runExport = async (from, to, fmt = format, paper = false) => {
+  // Opens the report inside the app. The old flow went straight to a PDF in a
+  // folder, which left the reader to go and find it; now the sheet appears on
+  // screen and sending, printing and saving are buttons under it.
+  const runExport = async (from, to, fmt = format) => {
     if (exporting) return;
     setExporting(true);
+    setPreview({
+      state: "loading",
+      title: TITLES[fmt] || "Attendance report",
+      subtitle: from === to ? fmtDay(from) : `${fmtDayCompact(from)} to ${fmtDayCompact(to)}`,
+      report: null,
+      emptyMessage:
+        from === to
+          ? "No checkpoint was submitted on this day."
+          : "No checkpoint was submitted between these dates.",
+    });
+    setStep("preview");
     try {
       const report = await buildReport({
         from,
@@ -96,29 +160,9 @@ export default function PrintSheets({
         classKey: fmt === REPORT_FORMAT.REGISTER ? classKey : null,
         classLabel: fmt === REPORT_FORMAT.REGISTER ? classLabel : null,
       });
-      if (report.empty) {
-        onClose();
-        dialog.alert({
-          icon: "document-outline",
-          title: "Nothing to print",
-          message:
-            from === to
-              ? "No checkpoint was submitted on this day."
-              : "No checkpoint was submitted between these dates.",
-        });
-        return;
-      }
-      if (paper) {
-        await printReport(report.html);
-        onClose();
-        return;
-      }
-      const { where } = await savePdf(report.html, report.name);
-      onClose();
-      if (where) toast.show(`PDF saved to ${where}`, { tone: "success" });
+      setPreview((p) => ({ ...p, report, state: report.empty ? "empty" : "ready" }));
     } catch (e) {
-      // Backing out of the folder picker is a choice, not an error.
-      if (e?.cancelled) return;
+      onClose();
       const shown = describeError(
         e,
         {
@@ -173,12 +217,12 @@ export default function PrintSheets({
       <BottomSheet
         visible={visible && step === "export"}
         onClose={close}
-        title="Save attendance PDF"
+        title="Attendance report"
         subtitle={
           subtitle ||
           (format === REPORT_FORMAT.HEADCOUNT
-            ? "A4 · counts, then who was not present"
-            : "A4 · one row per student")
+            ? "Pick the days. It opens right here."
+            : "Pick the days. It opens right here, one row per student.")
         }
         showClose
       >
@@ -187,9 +231,9 @@ export default function PrintSheets({
         ) : (
           <>
             {/* Each row says the dates it will use, so nothing depends on
-                remembering what the screen behind the sheet is set to. These
-                save straight to a folder; "Print on paper" is the one that
-                opens the phone's print screen. */}
+                remembering what the screen behind the sheet is set to. Every
+                row opens the report on screen; printing, sending and saving
+                are buttons under it there. */}
             {showSaturday && (
               <SheetOption
                 icon="ribbon-outline"
@@ -218,17 +262,11 @@ export default function PrintSheets({
               hint="Any two days"
               onPress={() => setStep("range")}
             />
-            <SheetOption
-              icon="print-outline"
-              label="Print on paper"
-              hint={`${fmtDay(day)} · opens the phone's print screen`}
-              onPress={() => runExport(day, day, format, true)}
-            />
             {Platform.OS === "android" && (
               <SheetOption
                 icon="folder-open-outline"
                 label="Change save folder"
-                hint="The next PDF asks where to go"
+                hint="Where “Save” puts the report next time"
                 onPress={async () => {
                   await forgetSaveFolder();
                   toast.show("The next PDF will ask for a folder");
@@ -266,8 +304,8 @@ export default function PrintSheets({
               onPress={() => setStep("to")}
             />
             <PrimaryButton
-              title="Save PDF"
-              icon="download-outline"
+              title="Show report"
+              icon="document-text-outline"
               onPress={() => runExport(range.from || day, range.to || day)}
               style={{ marginTop: spacing.md }}
             />
@@ -283,6 +321,23 @@ export default function PrintSheets({
           setStep("range");
         }}
         onClose={() => setStep("range")}
+      />
+
+      <ReportPreview
+        visible={visible && step === "preview"}
+        state={preview?.state}
+        title={preview?.title}
+        subtitle={preview?.subtitle}
+        html={preview?.report?.html}
+        emptyMessage={preview?.emptyMessage}
+        // Always closable, even while it is still loading: waiting on a slow
+        // connection should never trap anyone on this screen.
+        onClose={onClose}
+        onShare={onShare}
+        onPrint={onPrint}
+        // iOS's share sheet already has "Save to Files", and the web has no
+        // folder to save into, so Save is offered only where it adds a path.
+        onSave={Platform.OS === "android" ? onSave : undefined}
       />
     </>
   );

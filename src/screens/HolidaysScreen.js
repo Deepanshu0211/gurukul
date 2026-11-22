@@ -8,7 +8,7 @@ import CalendarSheet from "../components/CalendarSheet";
 import { EmptyState, ErrorState, PrimaryButton, Pill, Row, SectionLabel } from "../components/ui";
 import { useDialog } from "../components/Dialog";
 import { useToast } from "../components/Toast";
-import { useScreenTopInset } from "../navigation/tabBarInset";
+import { useScreenTopInset, useTabContentInset } from "../navigation/tabBarInset";
 import { useAuth } from "../context/AuthContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 import { canDeclareHoliday } from "../domain/roles";
@@ -76,6 +76,10 @@ export default function HolidaysScreen({ navigation }) {
   const dialog = useDialog();
   const toast = useToast();
   const topInset = useScreenTopInset();
+  // The floating tab bar covers the bottom of the screen. Without this the
+  // newest declared holiday (always the last card) sat behind it and the list
+  // could not scroll far enough to show it.
+  const bottomInset = useTabContentInset();
 
   const allowed = canDeclareHoliday(user?.role);
 
@@ -280,7 +284,7 @@ export default function HolidaysScreen({ navigation }) {
       <FlatList
         data={spans}
         keyExtractor={(h) => h.from}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
