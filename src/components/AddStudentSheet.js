@@ -85,8 +85,8 @@ export default function AddStudentSheet({ visible, onClose, onAdded }) {
             ? "New class: grade 1 to 12"
             : creating && !section
               ? "New class: enter the section"
-              : f.roll && !(Number(f.roll) >= 1 && Number(f.roll) <= 999)
-                ? "Roll number must be 1–999, or leave it blank"
+              : f.roll && !(Number(f.roll) >= 1 && Number(f.roll) <= 9999)
+                ? "Roll number must be 1–9999, or leave it blank"
                 : null;
 
   const nextRoll = cls
@@ -227,7 +227,7 @@ export default function AddStudentSheet({ visible, onClose, onAdded }) {
           placeholder={`Leave blank for ${nextRoll}`}
           placeholderTextColor={colors.icon}
           keyboardType="number-pad"
-          maxLength={3}
+          maxLength={4}
           style={styles.input}
           accessibilityLabel="Roll number"
         />

@@ -23,6 +23,7 @@ import SetPasswordScreen from "../screens/SetPasswordScreen";
 import HolidaysScreen from "../screens/HolidaysScreen";
 import CheckpointsScreen from "../screens/CheckpointsScreen";
 import GroupEditorScreen from "../screens/GroupEditorScreen";
+import BulkAddStudentsScreen from "../screens/BulkAddStudentsScreen";
 
 const navTheme = {
   ...DefaultTheme,
@@ -83,6 +84,37 @@ function AccountStack() {
           admin already have four tabs, and this is set up occasionally. */}
       <Stack.Screen name="Checkpoints" component={CheckpointsScreen} />
       <Stack.Screen name="GroupEditor" component={GroupEditorScreen} />
+      {/* Adding a class's worth of students from a spreadsheet (052). Opened
+          from Account → Bulk add students and from the Roster's "+ Add". */}
+      <Stack.Screen name="BulkAddStudents" component={BulkAddStudentsScreen} />
+    </Stack.Navigator>
+  );
+}
+
+/**
+ * The Roster's own stack, so what it opens — bulk add, checkpoints & groups —
+ * sits ON TOP of the Roster and Back returns to it exactly as it was: same
+ * tab (Duties / Staff / Students), same search, same scroll. These used to be
+ * opened inside the Account stack, so Back dropped the coordinator on the
+ * Account page instead of where they had been working.
+ *
+ * The same screens stay registered in AccountStack for the Account entry
+ * points; each only uses relative navigation (`goBack`, `navigate` to a
+ * sibling), so it works in whichever stack opened it.
+ */
+function RosterStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: "transparent" },
+        animation: "slide_from_right",
+      }}
+    >
+      <Stack.Screen name="RosterHome" component={RosterScreen} />
+      <Stack.Screen name="BulkAddStudents" component={BulkAddStudentsScreen} />
+      <Stack.Screen name="Checkpoints" component={CheckpointsScreen} />
+      <Stack.Screen name="GroupEditor" component={GroupEditorScreen} />
     </Stack.Navigator>
   );
 }
@@ -91,7 +123,7 @@ function AccountStack() {
  * Marking is a focused task with its own sticky footer, so the tab bar is
  * hidden there — it would otherwise sit on top of the Submit button.
  */
-const hideTabBarOn = ["DutyMarking", "GroupEditor"];
+const hideTabBarOn = ["DutyMarking", "GroupEditor", "BulkAddStudents"];
 
 function RoleTabs({ role }) {
   const tabsByRole = {
@@ -107,7 +139,7 @@ function RoleTabs({ role }) {
     ],
     coordinator: [
       { name: "Duties", component: DutiesStack },
-      { name: "Roster", component: RosterScreen },
+      { name: "Roster", component: RosterStack },
       { name: "Dashboard", component: DashboardScreen },
       { name: "Account", component: AccountStack },
     ],
@@ -117,13 +149,13 @@ function RoleTabs({ role }) {
     management: [
       { name: "Dashboard", component: DashboardScreen },
       { name: "Duties", component: DutiesStack },
-      { name: "Roster", component: RosterScreen },
+      { name: "Roster", component: RosterStack },
       { name: "Account", component: AccountStack },
     ],
     admin: [
       { name: "Dashboard", component: DashboardScreen },
       { name: "Duties", component: DutiesStack },
-      { name: "Roster", component: RosterScreen },
+      { name: "Roster", component: RosterStack },
       { name: "Account", component: AccountStack },
     ],
     nurse: [

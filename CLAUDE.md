@@ -107,6 +107,7 @@ duplicate them under a different name.
 | Checkpoints a coordinator manages | `checkpoints.active`, `mandatory_escalation` + `save_checkpoint` / `set_checkpoint_active` / `remove_checkpoint` | Account → Checkpoints & groups (`CheckpointsScreen`, `GroupEditorScreen`). Remove = delete if never used, else switch off |
 | Adding / deactivating staff | `add_staff_member`, `set_staff_active`, `list_inactive_staff` in `lib/staff.js` | deactivate = `active=false` + `left_on`, pending duties move to a replacement. `my_role()` etc. ignore inactive rows, so access ends at once |
 | Password reset by a coordinator | `issue_password_reset` → one-time code; `redeem_password_reset` on the sign-in screen (`lib/passwords.js`) | coordinator never sees the new password; code hashed, 30 min, 5 tries |
+| Adding many students from a spreadsheet | `add_students(rows jsonb)` (052) via `addStudents` in `lib/students.js`; screen `BulkAddStudentsScreen` (Account stack, and the Roster's own `RosterStack` from Students → Bulk add, so Back returns to the Roster as it was left) | row rules in `domain/studentImport.js`, files + batching in `lib/studentImport.js`, .xlsx/.csv in `utils/xlsx.js` / `utils/csv.js`. Same rules as `add_student` — never a second copy |
 | Is this student away right now? | `leaveFor(admissionNo)` from `useSchoolData()` | null when they are on campus. The marking screen locks the row and pre-fills the status when it is not |
 
 ## 4. Roles and navigation (already wired — don't restructure without reason)

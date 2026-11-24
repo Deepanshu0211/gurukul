@@ -1,5 +1,6 @@
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as MailComposer from "expo-mail-composer";
 import { Directory, File, Paths } from "expo-file-system";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
@@ -274,7 +275,7 @@ async function saveIntoFolder(base64, name) {
     // No extension: the provider adds ".pdf" from the mime type, and a name
     // that is already taken gets " (1)" rather than overwriting a report.
     const out = dir.createFile(name, "application/pdf");
-    out.write(base64, { encoding: "base64" });
+    out.writeSync(base64, { encoding: "base64" });
   };
 
   let dir = await readFolder();
@@ -308,7 +309,9 @@ async function makePdf(html, name) {
   const file = new File(Paths.cache, `${safe}.pdf`);
   if (file.exists) file.delete();
   file.create();
-  file.write(base64, { encoding: "base64" });
+  // writeSync: since SDK 58 `write` returns before the bytes are on disk, and
+  // the PDF is shared or attached on the very next line.
+  file.writeSync(base64, { encoding: "base64" });
   return { file, base64 };
 }
 
@@ -329,6 +332,47 @@ export async function shareReport(html, name) {
     UTI: "com.adobe.pdf",
   });
   return uri;
+}
+
+/**
+ * Email the report to one named member of staff.
+ *
+ * "Send report" hands the PDF to the share sheet, which is right for
+ * WhatsApp or Drive but leaves the person to find a colleague's address
+ * themselves. This opens the phone's own mail app with the recipient, the
+ * subject and the PDF already in place: the sender reads it, can add a line,
+ * and presses Send. Nothing leaves the phone until they do — the app sends no
+ * email of its own (there is no mail service behind it yet, CLAUDE.md §5.1).
+ *
+ * The web build can only open a `mailto:` link, which cannot carry a file, so
+ * there the email opens without the PDF and the caller says so.
+ *
+ * @returns {{ attached: boolean, status: string }} status is the mail app's
+ *          answer where the platform gives one ("sent", "saved", "cancelled");
+ *          Android does not report it.
+ */
+export async function emailReport(html, name, { to, subject, body }) {
+  if (Platform.OS === "web") {
+    const res = await MailComposer.composeAsync({ recipients: [to], subject, body });
+    return { attached: false, status: res?.status };
+  }
+  if (!(await MailComposer.isAvailableAsync())) {
+    // Worded for the person, and coded so `describeError` keeps the words.
+    throw Object.assign(
+      new Error(
+        "There is no email app set up on this phone. Use “Send report” to share it another way, or sign in to Gmail first."
+      ),
+      { code: "22023" }
+    );
+  }
+  const { file } = await makePdf(html, name);
+  const res = await MailComposer.composeAsync({
+    recipients: [to],
+    subject,
+    body,
+    attachments: [file.uri],
+  });
+  return { attached: true, status: res?.status };
 }
 
 /** iOS names the shared file from its temporary path, so a readable name has

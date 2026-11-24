@@ -345,7 +345,8 @@ export default function DashboardScreen({ navigation }) {
           <Card style={[styles.statusCard, styles.requestCard]}>
             <TouchableOpacity
               style={styles.statusRow}
-              onPress={() => navigation?.navigate("Roster", { tab: "staff" })}
+              // Roster is a stack now: the tab param goes to its home screen.
+              onPress={() => navigation?.navigate("Roster", { screen: "RosterHome", params: { tab: "staff" } })}
               accessibilityRole="button"
               accessibilityLabel={`${plural(requests.length, "staff account request")} waiting. Review`}
             >

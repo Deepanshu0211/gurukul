@@ -102,16 +102,21 @@ export function useStudents() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = () => {
-    setLoading(true);
+  // `quiet` refetches behind the list already on screen instead of swapping
+  // it for a spinner — for a refresh the person did not ask for.
+  const load = (opts) => {
+    const quiet = opts?.quiet === true;
+    if (!quiet) setLoading(true);
     setError(null);
     fetchStudents()
       .then(setStudents)
-      .catch((e) => setError(e.message || "Could not load students"))
+      .catch((e) => {
+        if (!quiet) setError(e.message || "Could not load students");
+      })
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, []);
+  useEffect(() => load(), []);
 
   return { students, loading, error, reload: load };
 }
@@ -141,4 +146,47 @@ export async function addStudent({ admissionNo, name, grade, section, stype, hou
   });
   if (error) throw error;
   return fromRow(Array.isArray(data) ? data[0] : data);
+}
+
+/**
+ * Which of these admission numbers the database already has — INCLUDING
+ * students who have left, whom the register screens never load. An admission
+ * number belongs to one child for ever, so the bulk import has to know about
+ * leavers before it promises a teacher that a row is ready.
+ *
+ * @returns {Map<string, {name, label, active}>} keyed by upper-case number
+ */
+export async function findAdmissionNumbers(numbers) {
+  const wanted = [...new Set(numbers.filter(Boolean).map((n) => String(n).toUpperCase()))];
+  const out = new Map();
+  // Chunked so the request URL stays well under proxy limits.
+  for (let i = 0; i < wanted.length; i += 150) {
+    const { data, error } = await supabase
+      .from("students")
+      .select("admission_no,name,grade,section,active")
+      .in("admission_no", wanted.slice(i, i + 150));
+    if (error) throw error;
+    for (const r of data || []) {
+      out.set(String(r.admission_no).toUpperCase(), {
+        name: r.name,
+        label: `${r.grade} ${sectionLabel(r.section)}`,
+        active: !!r.active,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Add up to 200 students in one request (migration 052). Each row is checked
+ * by the same rules as `addStudent` and succeeds or fails on its own.
+ *
+ * @param rows  [{ ref, admission_no, name, grade, section, stype, house, roll_no }]
+ * @returns {{ results: [{ ref, ok, admission_no?, roll_no?, grade?, section?, code?, message? }],
+ *             dutiesError: string | null }}
+ */
+export async function addStudents(rows) {
+  const { data, error } = await supabase.rpc("add_students", { p_rows: rows });
+  if (error) throw error;
+  return { results: data?.results || [], dutiesError: data?.duties_error || null };
 }

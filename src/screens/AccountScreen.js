@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, typography, radius, fonts, layout, surface } from "../theme/theme";
 import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset";
+import { useScrollMemory } from "../navigation/useScrollMemory";
 import ScreenHeader from "../components/ScreenHeader";
 import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import BottomSheet, { SheetOption } from "../components/BottomSheet";
@@ -105,6 +106,8 @@ export default function AccountScreen({ navigation }) {
   const tabInset = useTabContentInset();
   const topInset = useScreenTopInset();
   const { scrolled, onScroll } = useScrolled();
+  // Back from Holidays, Bulk add, Checkpoints… lands where you left the page.
+  const memory = useScrollMemory();
 
   const [editing, setEditing] = useState(false);
   const [draftPhone, setDraftPhone] = useState(user.phone || "");
@@ -357,7 +360,8 @@ export default function AccountScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: topInset, paddingBottom: tabInset }]}
         showsVerticalScrollIndicator={false}
-        onScroll={onScroll}
+        ref={memory.ref}
+        onScroll={memory.onScroll(onScroll)}
         scrollEventThrottle={16}
       >
         <ScreenHeader title="Account" />
@@ -487,6 +491,12 @@ export default function AccountScreen({ navigation }) {
                     icon="person-add-outline"
                     label="Add a student"
                     onPress={() => setAddingStudent(true)}
+                  />
+                  <Divider inset={ROW_INSET} />
+                  <ActionRow
+                    icon="people-outline"
+                    label="Bulk add students"
+                    onPress={() => navigation.navigate("BulkAddStudents")}
                   />
                   {(canManageRoster(user?.role) || canDeclareHoliday(user?.role) || canWorkGate(user?.role)) && (
                     <Divider inset={ROW_INSET} />

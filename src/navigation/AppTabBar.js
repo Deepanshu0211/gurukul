@@ -120,6 +120,14 @@ export default function AppTabBar({ state, descriptors, navigation }) {
   const placed = useRef(false);
 
   useEffect(() => {
+    // While a full-screen page hides the bar the pill is not drawn, so a
+    // spring started now has no view to drive and never lands — the bar came
+    // back with the pill still on the old tab (Roster lit while on Account).
+    // Forget the position instead, and place it outright when the bar returns.
+    if (hidden) {
+      placed.current = false;
+      return;
+    }
     if (!tabWidth) return;
     const to = currentHighlightIndex * tabWidth;
     // First layout: put it in place without a slide from the left edge.
@@ -136,7 +144,7 @@ export default function AppTabBar({ state, descriptors, navigation }) {
       damping: 34,
       mass: 0.9,
     }).start();
-  }, [currentHighlightIndex, tabWidth, pillX]);
+  }, [currentHighlightIndex, tabWidth, pillX, hidden]);
 
   if (hidden) return null;
 

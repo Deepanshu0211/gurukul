@@ -12,6 +12,7 @@ import {
   printReport,
   savePdf,
   shareReport,
+  emailReport,
   forgetSaveFolder,
   weekStart,
   addDays,
@@ -19,7 +20,9 @@ import {
   REPORT_FORMAT,
 } from "../lib/report";
 import { describeError } from "../lib/errors";
-import { fmtDay, fmtDayCompact, isSaturday } from "../utils/format";
+import { fmtDay, fmtDayCompact, isSaturday, givenName } from "../utils/format";
+import { MailComposerStatus } from "expo-mail-composer";
+import { useSchoolData } from "../context/SchoolDataContext";
 import { colors, spacing, typography } from "../theme/theme";
 
 /**
@@ -58,6 +61,7 @@ export default function PrintSheets({
   classLabel = null,
 }) {
   const { user } = useAuth();
+  const { staff } = useSchoolData();
   const dialog = useDialog();
   const toast = useToast();
 
@@ -119,9 +123,34 @@ export default function PrintSheets({
   const onSave = async () => {
     try {
       const { where } = await savePdf(report.html, report.name);
-      if (where) toast.show(`Saved to ${where}`, { tone: "success" });
+      // Returned, not toasted: the report screen covers the app's toasts and
+      // shows this line itself.
+      if (where) return `Saved to ${where}`;
     } catch (e) {
       failed(e, "Could not save the report");
+    }
+  };
+  // Opens the phone's mail app addressed to one colleague, PDF attached.
+  const onEmail = async (person) => {
+    const what = preview?.title || "Attendance report";
+    const when = preview?.subtitle ? ` — ${preview.subtitle}` : "";
+    try {
+      const { attached, status } = await emailReport(report.html, report.name, {
+        to: person.email,
+        subject: `${what}${when}`,
+        body:
+          `Dear ${givenName(person.name) || person.name},\n\n` +
+          `Please find the ${what.toLowerCase()}${preview?.subtitle ? ` for ${preview.subtitle}` : ""} attached.\n\n` +
+          `Regards,\n${user?.name || ""}`,
+      });
+      // Shown on the report screen itself (see ReportPreview's notice).
+      if (!attached) {
+        return `Email to ${person.name} opened. A browser cannot attach files: use Print → Save as PDF, then attach it.`;
+      }
+      if (status === MailComposerStatus.SENT) return `Report emailed to ${person.name}`;
+      if (status === MailComposerStatus.SAVED) return "Saved as a draft in your email app";
+    } catch (e) {
+      failed(e, "Could not open the email");
     }
   };
 
@@ -334,6 +363,11 @@ export default function PrintSheets({
         // connection should never trap anyone on this screen.
         onClose={onClose}
         onShare={onShare}
+        onEmail={onEmail}
+        // Everyone on the staff list with an address, the sender included —
+        // emailing it to yourself is a common way to get it onto a computer.
+        recipients={staff}
+        meId={user?.id}
         onPrint={onPrint}
         // iOS's share sheet already has "Save to Files", and the web has no
         // folder to save into, so Save is offered only where it adds a path.

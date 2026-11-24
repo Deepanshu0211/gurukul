@@ -14,6 +14,9 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { Ionicons } from "@expo/vector-icons";
 import { colors, spacing, radius, fonts, layout, typography } from "../theme/theme";
 import { EmptyState } from "./ui";
+import BottomSheet, { SheetOption } from "./BottomSheet";
+import SearchField from "./SearchField";
+import { roleLabel } from "../domain/roles";
 
 /**
  * The report, opened inside the app.
@@ -93,20 +96,38 @@ function PreviewBody({
   emptyMessage,
   onClose,
   onShare,
+  onEmail,
+  recipients,
+  meId,
   onPrint,
   onSave,
 }) {
   const insets = useSafeAreaInsets();
+  // The "Email a teacher" staff picker.
+  const [picking, setPicking] = useState(false);
   // Which action is running, so its button shows a spinner and the others
   // cannot be pressed on top of it.
   const [running, setRunning] = useState(null);
   const screenHtml = useMemo(() => (html ? forScreen(html) : ""), [html]);
 
+  // A line of confirmation shown above the buttons. The app's toasts are drawn
+  // in the main window, which this full-screen report covers, so "Saved to
+  // Downloads" and "Email opened" were being said where nobody could see them.
+  // An action that has something to say returns it as a string.
+  const [notice, setNotice] = useState(null);
+  useEffect(() => {
+    if (!notice) return undefined;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const run = (key, fn) => async () => {
     if (running || !fn) return;
     setRunning(key);
+    setNotice(null);
     try {
-      await fn();
+      const said = await fn();
+      if (typeof said === "string" && said) setNotice(said);
     } finally {
       setRunning(null);
     }
@@ -200,6 +221,14 @@ function PreviewBody({
             { paddingBottom: Math.max(insets.bottom, spacing.sm) + spacing.sm },
           ]}
         >
+          {!!notice && (
+            <View style={styles.notice} accessibilityLiveRegion="polite" accessibilityRole="alert">
+              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+              <Text style={styles.noticeText} numberOfLines={3}>
+                {notice}
+              </Text>
+            </View>
+          )}
           <TouchableOpacity
             onPress={run("share", onShare)}
             disabled={!!running}
@@ -223,6 +252,31 @@ function PreviewBody({
             <Ionicons name="chevron-forward" size={20} color={colors.white} />
           </TouchableOpacity>
 
+          {!!onEmail && (
+            <TouchableOpacity
+              onPress={() => setPicking(true)}
+              disabled={!!running}
+              activeOpacity={0.7}
+              style={[styles.email, running && running !== "email" && styles.dim]}
+              accessibilityRole="button"
+              accessibilityLabel="Email the report to a teacher"
+              accessibilityState={{ disabled: !!running, busy: running === "email" }}
+            >
+              <View style={styles.emailIcon}>
+                {running === "email" ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Ionicons name="mail-outline" size={20} color={colors.primary} />
+                )}
+              </View>
+              <View style={styles.sendText}>
+                <Text style={styles.emailLabel}>Email a teacher</Text>
+                <Text style={styles.emailCaption}>Pick anyone on the staff list</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+
           <View style={styles.secondaryRow}>
             <Secondary
               icon="print-outline"
@@ -243,7 +297,94 @@ function PreviewBody({
           </View>
         </View>
       )}
+
+      {!!onEmail && (
+        <RecipientSheet
+          visible={picking}
+          people={recipients}
+          meId={meId}
+          onClose={() => setPicking(false)}
+          onPick={(person) => {
+            setPicking(false);
+            run("email", () => onEmail(person))();
+          }}
+        />
+      )}
     </View>
+  );
+}
+
+/**
+ * Who to email the report to: the staff list, searchable by name, role, class
+ * or address. Only people with an email address are offered — there is nothing
+ * to open a mail to otherwise. The sender is listed last, as "(you)", because
+ * emailing it to yourself is how a report gets onto the office computer.
+ */
+// The stored label is usually "Class 10 Balram" already; never "Class Class …".
+const classText = (label) => (!label ? null : /^class\b/i.test(label) ? label : `Class ${label}`);
+
+function RecipientSheet({ visible, onClose, people, meId, onPick }) {
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    if (visible) setQuery("");
+  }, [visible]);
+
+  const withEmail = useMemo(
+    () =>
+      (people || [])
+        .filter((p) => p.email && p.active !== false)
+        .sort((a, b) => (a.id === meId) - (b.id === meId) || a.name.localeCompare(b.name)),
+    [people, meId]
+  );
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return withEmail;
+    return withEmail.filter((p) =>
+      [p.name, p.email, roleLabel(p.role), p.classLabel, p.classKey]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [withEmail, query]);
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title="Email the report to…"
+      subtitle="Your email app opens with the report attached. Nothing is sent until you press Send."
+      showClose
+    >
+      <SearchField
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search name, role or class"
+        hint={query ? `${shown.length} of ${withEmail.length}` : undefined}
+        accessibilityLabel="Search the staff list"
+        style={styles.search}
+      />
+      {shown.length === 0 ? (
+        <EmptyState
+          icon="search-outline"
+          title={withEmail.length ? "No one found" : "No email addresses yet"}
+          body={
+            withEmail.length
+              ? `Nobody on the staff list matches “${query.trim()}”.`
+              : "Staff email addresses are added in Roster → Staff."
+          }
+          compact
+        />
+      ) : (
+        shown.map((p) => (
+          <SheetOption
+            key={p.id}
+            icon="person-circle-outline"
+            label={p.id === meId ? `${p.name} (you)` : p.name}
+            hint={[roleLabel(p.role), classText(p.classLabel), p.email].filter(Boolean).join(" · ")}
+            onPress={() => onPick(p)}
+          />
+        ))
+      )}
+    </BottomSheet>
   );
 }
 
@@ -406,6 +547,40 @@ const styles = StyleSheet.create({
   sendText: { flex: 1, minWidth: 0 },
   sendLabel: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 21, color: colors.white, includeFontPadding: false },
   sendCaption: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 16, color: colors.white, opacity: 0.85, includeFontPadding: false },
+
+  // The second way to send: outlined, so "Send report" stays the obvious one.
+  email: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.card,
+  },
+  emailIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emailLabel: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 20, color: colors.primary, includeFontPadding: false },
+  emailCaption: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 16, color: colors.textMuted, includeFontPadding: false },
+  search: { marginBottom: spacing.sm },
+  notice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    backgroundColor: colors.successBg,
+  },
+  noticeText: { ...typography.body, flex: 1, color: colors.success },
 
   secondaryRow: { flexDirection: "row", gap: spacing.sm },
   secondary: {

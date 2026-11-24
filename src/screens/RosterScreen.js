@@ -22,6 +22,7 @@ import {
   numeric,
 } from "../theme/theme";
 import { useTabContentInset, useScreenTopInset } from "../navigation/tabBarInset";
+import { useScrollMemory } from "../navigation/useScrollMemory";
 import ScreenHeader from "../components/ScreenHeader";
 import EdgeFade, { useScrolled } from "../components/EdgeFade";
 import SearchField from "../components/SearchField";
@@ -188,7 +189,7 @@ export default function RosterScreen({ navigation, route }) {
           onReassign={mayReassign ? setReassigning : null}
           onManage={
             canManageRoster(user?.role)
-              ? () => navigation.navigate("Account", { screen: "Checkpoints", initial: false })
+              ? () => navigation.navigate("Checkpoints")
               : null
           }
           bottomInset={tabInset}
@@ -216,6 +217,9 @@ export default function RosterScreen({ navigation, route }) {
           query={query}
           onScroll={onScroll}
           mayAdd={canAddStudent(user?.role)}
+          // Pushed onto the Roster's own stack, so Back returns to this tab
+          // as it was left (RootNavigator → RosterStack).
+          onBulkAdd={() => navigation.navigate("BulkAddStudents")}
         />
       )}
 
@@ -254,6 +258,7 @@ function DutiesTab({
   query,
   onScroll,
 }) {
+  const memory = useScrollMemory();
   const q = query.trim().toLowerCase();
   const now = useNow();
   const withStatus = duties
@@ -282,7 +287,8 @@ function DutiesTab({
       stickySectionHeadersEnabled={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      onScroll={onScroll}
+      ref={memory.ref}
+      onScroll={memory.onScroll(onScroll)}
       scrollEventThrottle={16}
       ListHeaderComponent={
         onManage ? (
@@ -400,6 +406,7 @@ function StaffTab({
   query,
   onScroll,
 }) {
+  const memory = useScrollMemory();
   const dialog = useDialog();
   const toast = useToast();
   const dutiesFor = (id) => duties.filter((d) => d.staffId === id).length;
@@ -706,7 +713,8 @@ They keep their sign-in but see nothing, and can ask again.`,
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      onScroll={onScroll}
+      ref={memory.ref}
+      onScroll={memory.onScroll(onScroll)}
       scrollEventThrottle={16}
       ListEmptyComponent={
         <EmptyState icon="search-outline" title="No match" body={`No staff member matches “${query}”.`} compact />
@@ -1238,10 +1246,29 @@ const TYPE_LABEL = {
   B: "Day boarding",
 };
 
-function StudentsTab({ bottomInset, query, onScroll, mayAdd }) {
+function StudentsTab({ bottomInset, query, onScroll, mayAdd, onBulkAdd }) {
+  const memory = useScrollMemory();
   const dialog = useDialog();
   const { students, loading, error, reload } = useStudents();
   const [adding, setAdding] = useState(false);
+  const notAllowed = () =>
+    dialog.alert({
+      icon: "person-add-outline",
+      title: "Add student",
+      message: "Students are added by teachers and coordinators.",
+    });
+
+  // This tab keeps its own copy of the register. When the shared one is
+  // refetched — a bulk import calls `refresh()` when it lands — follow it
+  // quietly, or the children just imported are missing from this list until
+  // the app restarts.
+  const { students: shared } = useSchoolData();
+  const seenShared = React.useRef(shared);
+  useEffect(() => {
+    if (seenShared.current === shared) return;
+    seenShared.current = shared;
+    reload({ quiet: true });
+  }, [shared]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Which way the register is cut. Not persisted: it is a way of looking,
   // not a setting, and a list that comes back grouped differently from how
@@ -1370,7 +1397,8 @@ function StudentsTab({ bottomInset, query, onScroll, mayAdd }) {
       stickySectionHeadersEnabled={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      onScroll={onScroll}
+      ref={memory.ref}
+      onScroll={memory.onScroll(onScroll)}
       scrollEventThrottle={16}
       initialNumToRender={20}
       windowSize={11}
@@ -1379,19 +1407,24 @@ function StudentsTab({ bottomInset, query, onScroll, mayAdd }) {
         <SectionLabel
           style={styles.countHead}
           action={
-            <TextAction
-              label="+ Add"
-              accessibilityLabel="Add student"
-              onPress={() =>
-                mayAdd
-                  ? setAdding(true)
-                  : dialog.alert({
-                      icon: "person-add-outline",
-                      title: "Add student",
-                      message: "Students are added by teachers and coordinators.",
-                    })
-              }
-            />
+            // Two buttons rather than one that asks: adding one child is the
+            // common case and stays a single tap; a whole class from a
+            // spreadsheet is the other button.
+            <View style={styles.addActions}>
+              <AddButton
+                icon="cloud-upload-outline"
+                label="Bulk add"
+                accessibilityLabel="Bulk add students from a spreadsheet"
+                onPress={() => (mayAdd ? onBulkAdd?.() : notAllowed())}
+              />
+              <AddButton
+                primary
+                icon="person-add-outline"
+                label="Add student"
+                accessibilityLabel="Add one student"
+                onPress={() => (mayAdd ? setAdding(true) : notAllowed())}
+              />
+            </View>
           }
         >
           {query ? `${filtered.length} of ${students.length}` : `${students.length} students`}
@@ -1470,6 +1503,27 @@ function StudentsTab({ bottomInset, query, onScroll, mayAdd }) {
     />
     <AddStudentSheet visible={adding} onClose={() => setAdding(false)} onAdded={reload} />
     </>
+  );
+}
+
+/** A compact pill for the register's two add actions. Filled for the everyday
+ *  one (a single child), outlined for the spreadsheet import. 36pt tall to sit
+ *  on the section label's line; hitSlop makes up the 48pt touch target. */
+function AddButton({ icon, label, primary, onPress, accessibilityLabel }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.75}
+      hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+      style={[styles.addBtn, primary ? styles.addBtnPrimary : styles.addBtnSecondary]}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+    >
+      <Ionicons name={icon} size={15} color={primary ? colors.onDark : colors.primary} />
+      <Text style={[styles.addBtnText, primary && styles.addBtnTextPrimary]} numberOfLines={1}>
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -1617,6 +1671,20 @@ const styles = StyleSheet.create({
   // and only carry a count and an action, so the default opened a band of
   // empty background between the field and the first row.
   countHead: { marginTop: spacing.sm },
+  addActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  addBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs + 2,
+    height: 36,
+    paddingHorizontal: spacing.md - 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  addBtnPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  addBtnSecondary: { backgroundColor: colors.primarySoft, borderColor: colors.border },
+  addBtnText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18, color: colors.primary },
+  addBtnTextPrimary: { color: colors.onDark },
 
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 64, gap: spacing.sm },
   centeredText: { ...typography.caption, fontSize: 13, textAlign: "center" },

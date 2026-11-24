@@ -126,6 +126,8 @@ sleeping children is a real problem.
 | Supabase client and session config | `lib/supabase.js` |
 | Haptic feedback + its on/off preference | `lib/haptics.js` |
 | Student register queries | `lib/students.js` |
+| Bulk student import: row rules / files + batches / screen | `domain/studentImport.js`, `lib/studentImport.js`, `screens/BulkAddStudentsScreen.js` |
+| Reading and writing .xlsx and .csv | `utils/xlsx.js` (on `fflate`), `utils/csv.js` |
 | Staff row mapping + profile updates | `lib/staff.js` |
 | Profile photo pick / upload / remove | `lib/avatars.js` |
 | Styled dialogs (replaces `Alert.alert`) | `components/Dialog.js` |

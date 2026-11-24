@@ -110,7 +110,12 @@ export default function App() {
         <SafeAreaProvider style={{ backgroundColor: "transparent" }}>
           <ImageBackground
             source={require("./src/assets/bg.png")}
-            style={{ flex: 1 }}
+            // On the web build ImageBackground sizes its image layer to the
+            // PNG's own pixels (852×1846), so on any screen narrower than that
+            // the layer stuck out, the page could scroll sideways and content
+            // slid off the left edge. Sized to the container and clipped.
+            style={{ flex: 1, overflow: "hidden" }}
+            imageStyle={{ width: "100%", height: "100%" }}
             resizeMode="cover"
           >
             <AuthProvider>
